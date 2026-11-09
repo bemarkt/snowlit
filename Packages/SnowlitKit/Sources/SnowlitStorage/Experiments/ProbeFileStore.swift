@@ -36,7 +36,7 @@ actor ProbeFileStore {
     private var temporary: URL { root.appendingPathComponent("staging", isDirectory: true) }
 
     init(root: URL, create: Bool, readOnly: Bool = false, digest: @escaping Digest) throws {
-        guard !create || !readOnly else { throw Failure.invalidStore }
+        guard root.isFileURL, !create || !readOnly else { throw Failure.invalidStore }
         let manager = FileManager.default
         let database = root.appendingPathComponent("catalog.sqlite")
         if create {
@@ -46,10 +46,8 @@ actor ProbeFileStore {
                 try manager.createDirectory(at: root.appendingPathComponent(name), withIntermediateDirectories: false)
             }
         } else {
-            guard manager.fileExists(atPath: database.path),
-                  (try root.appendingPathComponent("objects").resourceValues(forKeys: [.isDirectoryKey])).isDirectory == true,
-                  (try root.appendingPathComponent("staging").resourceValues(forKeys: [.isDirectoryKey])).isDirectory == true
-            else { throw Failure.missing }
+            guard manager.fileExists(atPath: database.path) else { throw Failure.missing }
+            try Self.validateLayout(root)
         }
         var configuration = Configuration()
         configuration.readonly = readOnly
@@ -121,24 +119,31 @@ actor ProbeFileStore {
         let committed = try records()
         for record in committed { _ = try verifiedData(record, directory: files) }
         let referenced = Set(committed.map(\.filename))
-        var removed = 0
+        var orphans: [URL] = []
         for (directory, suffix) in [(temporary, "tmp"), (files, "blob")] {
             for file in try FileManager.default.contentsOfDirectory(at: directory, includingPropertiesForKeys: nil) {
                 if Self.isGeneratedFilename(file.lastPathComponent, extension: suffix),
                    !referenced.contains(file.lastPathComponent) {
-                    try FileManager.default.removeItem(at: file)
-                    removed += 1
+                    try Self.requireItem(file, directory: false, failure: .invalidFilename)
+                    orphans.append(file)
                 }
             }
         }
-        return removed
+        // Preflight every candidate before deleting anything. A generated-looking name
+        // does not authorize recursive directory removal or following a link.
+        for file in orphans { try FileManager.default.removeItem(at: file) }
+        return orphans.count
     }
 
     /// A synchronous actor operation freezes this store's writes while copying an SQLite
     /// snapshot and its immutable referenced files. Credentials and unrelated files are absent.
     func backup(to destination: URL) throws {
         try requireOpen()
+        guard destination.isFileURL else { throw Failure.invalidStore }
         guard !FileManager.default.fileExists(atPath: destination.path) else { throw Failure.exists }
+        let sourcePath = root.resolvingSymlinksInPath().standardizedFileURL.pathComponents
+        let destinationParent = destination.deletingLastPathComponent().resolvingSymlinksInPath().standardizedFileURL.pathComponents
+        guard !destinationParent.starts(with: sourcePath) else { throw Failure.invalidStore }
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
         let destinationFiles = destination.appendingPathComponent("objects")
         try FileManager.default.createDirectory(at: destinationFiles, withIntermediateDirectories: false)
@@ -174,8 +179,7 @@ actor ProbeFileStore {
     private func verifiedData(_ record: Record, directory: URL) throws -> Data {
         guard Self.isGeneratedFilename(record.filename, extension: "blob") else { throw Failure.invalidFilename }
         let file = directory.appendingPathComponent(record.filename)
-        let attributes = try file.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey])
-        guard attributes.isRegularFile == true, attributes.isSymbolicLink != true else { throw Failure.invalidFilename }
+        try Self.requireItem(file, directory: false, failure: .invalidFilename)
         let data = try Data(contentsOf: file)
         guard data.count == record.count, try digest(data) == record.digest else { throw Failure.checksum }
         return data
@@ -188,11 +192,37 @@ actor ProbeFileStore {
 
     private func requireOpen() throws {
         guard !closed else { throw Failure.closed }
+        try Self.validateLayout(root)
     }
 
     private func requireWritable() throws {
         try requireOpen()
         guard !readOnly else { throw Failure.readOnly }
+    }
+
+    private static func validateLayout(_ root: URL) throws {
+        for directory in [root, root.appendingPathComponent("objects"), root.appendingPathComponent("staging")] {
+            try requireItem(directory, directory: true, failure: .invalidStore)
+        }
+        try requireItem(root.appendingPathComponent("catalog.sqlite"), directory: false, failure: .invalidStore)
+        let sidecars: Set<String> = ["catalog.sqlite-wal", "catalog.sqlite-shm", "catalog.sqlite-journal"]
+        for entry in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: nil)
+            where sidecars.contains(entry.lastPathComponent) {
+            try requireItem(entry, directory: false, failure: .invalidStore)
+        }
+    }
+
+    private static func requireItem(_ url: URL, directory: Bool, failure: Failure) throws {
+        let values = try url.resourceValues(forKeys: [.isDirectoryKey, .isRegularFileKey, .isSymbolicLinkKey])
+        guard (directory ? values.isDirectory : values.isRegularFile) == true,
+              values.isSymbolicLink != true else { throw failure }
+        // Directory junctions can report as ordinary directories. Resolve the item's
+        // own component while allowing trusted ancestors such as the system temp path.
+        let expected = url.deletingLastPathComponent().resolvingSymlinksInPath()
+            .appendingPathComponent(url.lastPathComponent).standardizedFileURL.path
+        guard url.resolvingSymlinksInPath().standardizedFileURL.path == expected else { throw failure }
+        // The experiment still requires exclusive ownership: no external path swaps
+        // between these checks and file access, and no cross-process cleanup.
     }
 
     private static func records(in queue: DatabaseQueue) throws -> [Record] {

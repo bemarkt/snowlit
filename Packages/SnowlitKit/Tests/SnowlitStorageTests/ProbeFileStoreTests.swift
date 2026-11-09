@@ -160,6 +160,146 @@ struct ProbeFileStoreTests {
         }
     }
 
+    @Test(arguments: ["objects", "staging"])
+    func orphanRecoveryRejectsDirectoriesBeforeRemovingAnyFiles(folder: String) async throws {
+        try await withDirectory { directory in
+            let root = directory.appendingPathComponent("store")
+            let store = try ProbeFileStore(root: root, create: true, digest: Self.sha256)
+            let content = Data("committed content".utf8)
+            try await store.save(key: "chapter", data: content)
+            try Data("ordinary orphan".utf8).write(to: root.appendingPathComponent("objects/\(UUID()).blob"))
+            try Data("unfinished".utf8).write(to: root.appendingPathComponent("staging/\(UUID()).tmp"))
+            let suffix = folder == "objects" ? "blob" : "tmp"
+            let disguised = root.appendingPathComponent("\(folder)/\(UUID()).\(suffix)")
+            try FileManager.default.createDirectory(at: disguised, withIntermediateDirectories: false)
+            try Data("must not recursively delete".utf8).write(to: disguised.appendingPathComponent("sentinel.txt"))
+            let before = try fileSnapshot(root)
+            await #expect(throws: ProbeFileStore.Failure.invalidFilename) { try await store.recoverOrphans() }
+            let after = try fileSnapshot(root)
+            let changedFiles = Set(before.keys).union(after.keys).filter { before[$0] != after[$0] }.sorted()
+            #expect(Set(before.keys) == Set(after.keys))
+            // Reading references can advance SQLite WAL reader marks in shared memory.
+            // All paths and every persistent file's bytes must remain unchanged.
+            #expect(changedFiles.allSatisfy { $0 == "catalog.sqlite-shm" })
+            #expect(try await store.load(key: "chapter") == content)
+            try await store.close()
+        }
+    }
+
+    @Test(arguments: ["root", "objects", "staging"])
+    func openingStoreRejectsRedirectedDirectories(component: String) async throws {
+        try await withDirectory { directory in
+            let root = directory.appendingPathComponent("store")
+            let store = try ProbeFileStore(root: root, create: true, digest: Self.sha256)
+            try await store.save(key: "chapter", data: Data("committed content".utf8))
+            try await store.close()
+            let original = component == "root" ? root : root.appendingPathComponent(component)
+            let detached = directory.appendingPathComponent("detached")
+            try FileManager.default.moveItem(at: original, to: detached)
+            try makeDirectoryLink(at: original, to: detached)
+            defer { removeTestLink(original) }
+            let before = try fileSnapshot(detached)
+            await #expect(throws: ProbeFileStore.Failure.invalidStore) {
+                let candidate = try ProbeFileStore(root: root, create: false, readOnly: true, digest: Self.sha256)
+                try await candidate.close()
+            }
+            #expect(try fileSnapshot(detached) == before)
+        }
+    }
+
+    @Test func readonlyBackupCannotBeWrittenInsideItsSource() async throws {
+        try await withDirectory { directory in
+            let root = directory.appendingPathComponent("candidate")
+            let writer = try ProbeFileStore(root: root, create: true, digest: Self.sha256)
+            try await writer.save(key: "chapter", data: Data("original".utf8))
+            try await writer.close()
+            let store = try ProbeFileStore(root: root, create: false, readOnly: true, digest: Self.sha256)
+            let alias = directory.appendingPathComponent("alias")
+            try makeDirectoryLink(at: alias, to: root.appendingPathComponent("objects"))
+            defer { removeTestLink(alias) }
+            let before = try fileSnapshot(root)
+            var destinations = [root.appendingPathComponent("nested-backup"), alias.appendingPathComponent("redirected-backup")]
+            let caseAlias = URL(fileURLWithPath: root.path.uppercased())
+            if FileManager.default.fileExists(atPath: caseAlias.path) {
+                destinations.append(caseAlias.appendingPathComponent("case-backup"))
+            }
+            for destination in destinations {
+                await #expect(throws: ProbeFileStore.Failure.invalidStore) { try await store.backup(to: destination) }
+                #expect(!FileManager.default.fileExists(atPath: destination.path))
+                #expect(try fileSnapshot(root) == before)
+            }
+            try await store.close()
+        }
+    }
+
+    @Test(arguments: ["objects", "staging"])
+    func redirectedDirectoriesAreRejectedAgainBeforeEveryOperation(folder: String) async throws {
+        try await withDirectory { directory in
+            let root = directory.appendingPathComponent("store")
+            let store = try ProbeFileStore(root: root, create: true, digest: Self.sha256)
+            try await store.save(key: "chapter", data: Data("committed content".utf8))
+            let original = root.appendingPathComponent(folder)
+            let detached = directory.appendingPathComponent("detached")
+            try FileManager.default.moveItem(at: original, to: detached)
+            try makeDirectoryLink(at: original, to: detached)
+            defer { removeTestLink(original) }
+            let before = try fileSnapshot(detached)
+            await #expect(throws: ProbeFileStore.Failure.invalidStore) { try await store.load(key: "chapter") }
+            await #expect(throws: ProbeFileStore.Failure.invalidStore) { try await store.validate() }
+            await #expect(throws: ProbeFileStore.Failure.invalidStore) { try await store.save(key: "chapter", data: Data("rejected".utf8)) }
+            await #expect(throws: ProbeFileStore.Failure.invalidStore) { try await store.recoverOrphans() }
+            let destination = directory.appendingPathComponent("backup")
+            await #expect(throws: ProbeFileStore.Failure.invalidStore) { try await store.backup(to: destination) }
+            #expect(!FileManager.default.fileExists(atPath: destination.path))
+            #expect(try fileSnapshot(detached) == before)
+            try await store.close()
+        }
+    }
+
+    @Test(arguments: ["catalog.sqlite-wal", "catalog.sqlite-shm", "catalog.sqlite-journal"])
+    func nonFileDatabaseSidecarsAreRejectedBeforeOpening(name: String) async throws {
+        try await withDirectory { directory in
+            let root = directory.appendingPathComponent("store")
+            let writer = try ProbeFileStore(root: root, create: true, digest: Self.sha256)
+            try await writer.save(key: "chapter", data: Data("committed content".utf8))
+            try await writer.close()
+            let sidecar = root.appendingPathComponent(name)
+            try FileManager.default.createDirectory(at: sidecar, withIntermediateDirectories: false)
+            try Data("must remain unchanged".utf8).write(to: sidecar.appendingPathComponent("sentinel.txt"))
+            let before = try fileSnapshot(root)
+            await #expect(throws: ProbeFileStore.Failure.invalidStore) {
+                let candidate = try ProbeFileStore(root: root, create: false, readOnly: true, digest: Self.sha256)
+                try await candidate.close()
+            }
+            #expect(try fileSnapshot(root) == before)
+        }
+    }
+
+    private func makeDirectoryLink(at link: URL, to target: URL) throws {
+        #if os(Windows)
+        // The portable runner supplies PowerShell. Junctions need no symlink privilege.
+        let executable = try #require(ProcessInfo.processInfo.environment["SNOWLIT_PROBE_POWERSHELL"])
+        let process = Process()
+        process.executableURL = URL(fileURLWithPath: executable)
+        process.arguments = ["-NoProfile", "-NonInteractive", "-Command",
+            "New-Item -ItemType Junction -Path $env:SNOWLIT_PROBE_LINK -Value $env:SNOWLIT_PROBE_TARGET -ErrorAction Stop | Out-Null"]
+        var environment = ProcessInfo.processInfo.environment
+        environment["SNOWLIT_PROBE_LINK"] = link.path
+        environment["SNOWLIT_PROBE_TARGET"] = target.path
+        process.environment = environment
+        try process.run()
+        process.waitUntilExit()
+        try #require(process.terminationStatus == 0)
+        #else
+        try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
+        #endif
+    }
+
+    private func removeTestLink(_ link: URL) {
+        do { try FileManager.default.removeItem(at: link) }
+        catch { Issue.record(error, "Unable to remove the isolated test link") }
+    }
+
     private func fileSnapshot(_ root: URL) throws -> [String: Data] {
         var snapshot: [String: Data] = [:]
         for entry in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey]) {
