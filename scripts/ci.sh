@@ -28,7 +28,11 @@ mkdir -p "$evidence"
 cat "$evidence/environment.txt"
 
 python3 scripts/check_structure.py | tee "$evidence/structure.log"
+core_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
+core_triple="$(uname -m)-apple-ios26.0-simulator"
+printf 'Target: %s\nSDK: %s\n' "$core_triple" "$core_sdk" > "$evidence/core-destination.txt"
 swift build --package-path Packages/SnowlitKit --target SnowlitCore \
+  --sdk "$core_sdk" --triple "$core_triple" \
   --scratch-path "$root/build/core-$kind" 2>&1 | tee "$evidence/core-build.log"
 
 simulator=""
