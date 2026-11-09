@@ -96,6 +96,84 @@ struct ProbeFileStoreTests {
         }
     }
 
+    @Test func readOnlySaveLeavesEveryCandidateFileUnchanged() async throws {
+        try await withDirectory { directory in
+            let root = directory.appendingPathComponent("candidate")
+            let writer = try ProbeFileStore(root: root, create: true, digest: Self.sha256)
+            let content = Data("original candidate".utf8)
+            try await writer.save(key: "chapter", data: content)
+            try await writer.close()
+            let candidate = try ProbeFileStore(root: root, create: false, readOnly: true, digest: Self.sha256)
+            let before = try fileSnapshot(root)
+            await #expect(throws: ProbeFileStore.Failure.readOnly) {
+                try await candidate.save(key: "chapter", data: Data("rejected update".utf8))
+            }
+            #expect(try fileSnapshot(root) == before)
+            #expect(try await candidate.load(key: "chapter") == content)
+            try await candidate.close()
+        }
+    }
+
+    @Test func readOnlyRecoveryLeavesOrphansUnchangedAndCanExport() async throws {
+        try await withDirectory { directory in
+            let root = directory.appendingPathComponent("candidate")
+            let writer = try ProbeFileStore(root: root, create: true, digest: Self.sha256)
+            let content = Data("original candidate".utf8)
+            try await writer.save(key: "chapter", data: content)
+            try await writer.close()
+            try Data("unfinished".utf8).write(to: root.appendingPathComponent("staging/\(UUID()).tmp"))
+            try Data("unreferenced".utf8).write(to: root.appendingPathComponent("objects/\(UUID()).blob"))
+            let candidate = try ProbeFileStore(root: root, create: false, readOnly: true, digest: Self.sha256)
+            let before = try fileSnapshot(root)
+            await #expect(throws: ProbeFileStore.Failure.readOnly) { try await candidate.recoverOrphans() }
+            #expect(try fileSnapshot(root) == before)
+            try await candidate.validate()
+            let exported = directory.appendingPathComponent("exported")
+            try await candidate.backup(to: exported)
+            #expect(try fileSnapshot(root) == before)
+            let restored = try ProbeFileStore(root: exported, create: false, digest: Self.sha256)
+            #expect(try await restored.load(key: "chapter") == content)
+            #expect(try await restored.recoverOrphans() == 0)
+            try await restored.close()
+            try await candidate.close()
+        }
+    }
+
+    @Test func closedStoreRejectsOperationsBeforeCreatingFiles() async throws {
+        try await withDirectory { directory in
+            let root = directory.appendingPathComponent("store")
+            let store = try ProbeFileStore(root: root, create: true, digest: Self.sha256)
+            try await store.save(key: "chapter", data: Data("original".utf8))
+            try await store.close()
+            let before = try fileSnapshot(root)
+            await #expect(throws: ProbeFileStore.Failure.closed) {
+                try await store.save(key: "chapter", data: Data("rejected update".utf8))
+            }
+            #expect(try fileSnapshot(root) == before)
+            let destination = directory.appendingPathComponent("exported")
+            await #expect(throws: ProbeFileStore.Failure.closed) { try await store.backup(to: destination) }
+            #expect(!FileManager.default.fileExists(atPath: destination.path))
+            await #expect(throws: ProbeFileStore.Failure.closed) { try await store.load(key: "chapter") }
+            await #expect(throws: ProbeFileStore.Failure.closed) { try await store.validate() }
+            await #expect(throws: ProbeFileStore.Failure.closed) { try await store.recoverOrphans() }
+            try await store.close()
+        }
+    }
+
+    private func fileSnapshot(_ root: URL) throws -> [String: Data] {
+        var snapshot: [String: Data] = [:]
+        for entry in try FileManager.default.contentsOfDirectory(at: root, includingPropertiesForKeys: [.isDirectoryKey]) {
+            if try entry.resourceValues(forKeys: [.isDirectoryKey]).isDirectory == true {
+                for (name, data) in try fileSnapshot(entry) {
+                    snapshot[entry.lastPathComponent + "/" + name] = data
+                }
+            } else {
+                snapshot[entry.lastPathComponent] = try Data(contentsOf: entry)
+            }
+        }
+        return snapshot
+    }
+
     static func sha256(_ data: Data) throws -> String {
         #if canImport(CryptoKit)
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()

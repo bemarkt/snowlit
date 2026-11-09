@@ -12,6 +12,8 @@ actor ProbeFileStore {
         case invalidStore
         case invalidFilename
         case checksum
+        case readOnly
+        case closed
         case injected(FaultPoint)
     }
     struct BackupFailure: Error {
@@ -28,6 +30,8 @@ actor ProbeFileStore {
     private let root: URL
     private let queue: DatabaseQueue
     private let digest: Digest
+    private let readOnly: Bool
+    private var closed = false
     private var files: URL { root.appendingPathComponent("objects", isDirectory: true) }
     private var temporary: URL { root.appendingPathComponent("staging", isDirectory: true) }
 
@@ -73,10 +77,12 @@ actor ProbeFileStore {
         self.root = root
         self.queue = queue
         self.digest = digest
+        self.readOnly = readOnly
     }
 
     func save(key: String, data: Data, failAt fault: FaultPoint? = nil,
               checkpoint: @Sendable (FaultPoint) throws -> Void = { _ in }) throws {
+        try requireWritable()
         let identifier = UUID().uuidString
         let temporaryURL = temporary.appendingPathComponent(identifier + ".tmp")
         let filename = identifier + ".blob"
@@ -111,6 +117,7 @@ actor ProbeFileStore {
     /// Validate all committed references before removing only generated, unreferenced files.
     /// The single owner must be quiescent; this is not cross-process cache coordination.
     func recoverOrphans() throws -> Int {
+        try requireWritable()
         let committed = try records()
         for record in committed { _ = try verifiedData(record, directory: files) }
         let referenced = Set(committed.map(\.filename))
@@ -130,6 +137,7 @@ actor ProbeFileStore {
     /// A synchronous actor operation freezes this store's writes while copying an SQLite
     /// snapshot and its immutable referenced files. Credentials and unrelated files are absent.
     func backup(to destination: URL) throws {
+        try requireOpen()
         guard !FileManager.default.fileExists(atPath: destination.path) else { throw Failure.exists }
         try FileManager.default.createDirectory(at: destination, withIntermediateDirectories: false)
         let destinationFiles = destination.appendingPathComponent("objects")
@@ -157,7 +165,11 @@ actor ProbeFileStore {
         for record in try records() { _ = try verifiedData(record, directory: files) }
     }
 
-    func close() throws { try queue.close() }
+    func close() throws {
+        // Reject all operations even if SQLite closing fails; a repeated close can retry.
+        closed = true
+        try queue.close()
+    }
 
     private func verifiedData(_ record: Record, directory: URL) throws -> Data {
         guard Self.isGeneratedFilename(record.filename, extension: "blob") else { throw Failure.invalidFilename }
@@ -169,7 +181,19 @@ actor ProbeFileStore {
         return data
     }
 
-    private func records() throws -> [Record] { try Self.records(in: queue) }
+    private func records() throws -> [Record] {
+        try requireOpen()
+        return try Self.records(in: queue)
+    }
+
+    private func requireOpen() throws {
+        guard !closed else { throw Failure.closed }
+    }
+
+    private func requireWritable() throws {
+        try requireOpen()
+        guard !readOnly else { throw Failure.readOnly }
+    }
 
     private static func records(in queue: DatabaseQueue) throws -> [Record] {
         try queue.read { db in
