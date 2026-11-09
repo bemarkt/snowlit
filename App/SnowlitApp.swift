@@ -2,13 +2,11 @@ import SwiftUI
 
 @main
 struct SnowlitApp: App {
+    @State private var startup = AppComposition.makeStartup()
+
     var body: some Scene {
         WindowGroup {
-            ContentUnavailableView(
-                "Snowlit",
-                systemImage: "book.closed",
-                description: Text("从一本好书开始")
-            )
+            StartupView(model: startup)
         }
     }
 }

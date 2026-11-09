@@ -7,6 +7,9 @@
 
 /* Begin PBXBuildFile section */
 		A10000000000000000000001 /* SnowlitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* SnowlitApp.swift */; };
+		A10000000000000000000002 /* AppComposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* AppComposition.swift */; };
+		A10000000000000000000003 /* StartupModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* StartupModel.swift */; };
+		A10000000000000000000004 /* StartupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* StartupView.swift */; };
 		A10000000000000000000011 /* SnowlitCore in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* SnowlitCore */; };
 		A10000000000000000000012 /* SnowlitStorage in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000002 /* SnowlitStorage */; };
 		A10000000000000000000013 /* YingxueKit in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000003 /* YingxueKit */; };
@@ -15,6 +18,9 @@
 
 /* Begin PBXFileReference section */
 		A20000000000000000000001 /* SnowlitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitApp.swift; sourceTree = "<group>"; };
+		A20000000000000000000002 /* AppComposition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Composition/AppComposition.swift; sourceTree = "<group>"; };
+		A20000000000000000000003 /* StartupModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Composition/StartupModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000004 /* StartupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Composition/StartupView.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* Snowlit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Snowlit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 /* End PBXFileReference section */
 
@@ -43,7 +49,12 @@
 		};
 		A40000000000000000000002 /* App */ = {
 			isa = PBXGroup;
-			children = (A20000000000000000000001 /* SnowlitApp.swift */,);
+			children = (
+				A20000000000000000000001 /* SnowlitApp.swift */,
+				A20000000000000000000002 /* AppComposition.swift */,
+				A20000000000000000000003 /* StartupModel.swift */,
+				A20000000000000000000004 /* StartupView.swift */,
+			);
 			path = App;
 			sourceTree = "<group>";
 		};
@@ -115,7 +126,12 @@
 		A30000000000000000000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
-			files = (A10000000000000000000001 /* SnowlitApp.swift in Sources */,);
+			files = (
+				A10000000000000000000001 /* SnowlitApp.swift in Sources */,
+				A10000000000000000000002 /* AppComposition.swift in Sources */,
+				A10000000000000000000003 /* StartupModel.swift in Sources */,
+				A10000000000000000000004 /* StartupView.swift in Sources */,
+			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
 /* End PBXSourcesBuildPhase section */
