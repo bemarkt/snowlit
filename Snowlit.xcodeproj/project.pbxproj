@@ -1,0 +1,237 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {};
+	objectVersion = 56;
+	objects = {
+
+/* Begin PBXBuildFile section */
+		A10000000000000000000001 /* SnowlitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* SnowlitApp.swift */; };
+		A10000000000000000000011 /* SnowlitCore in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* SnowlitCore */; };
+		A10000000000000000000012 /* SnowlitStorage in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000002 /* SnowlitStorage */; };
+		A10000000000000000000013 /* YingxueKit in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000003 /* YingxueKit */; };
+		A10000000000000000000014 /* SnowlitReader in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000004 /* SnowlitReader */; };
+/* End PBXBuildFile section */
+
+/* Begin PBXFileReference section */
+		A20000000000000000000001 /* SnowlitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitApp.swift; sourceTree = "<group>"; };
+		A20000000000000000000011 /* Snowlit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Snowlit.app; sourceTree = BUILT_PRODUCTS_DIR; };
+/* End PBXFileReference section */
+
+/* Begin PBXFrameworksBuildPhase section */
+		A30000000000000000000001 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000011 /* SnowlitCore in Frameworks */,
+				A10000000000000000000012 /* SnowlitStorage in Frameworks */,
+				A10000000000000000000013 /* YingxueKit in Frameworks */,
+				A10000000000000000000014 /* SnowlitReader in Frameworks */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXFrameworksBuildPhase section */
+
+/* Begin PBXGroup section */
+		A40000000000000000000001 = {
+			isa = PBXGroup;
+			children = (
+				A40000000000000000000002 /* App */,
+				A40000000000000000000003 /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		A40000000000000000000002 /* App */ = {
+			isa = PBXGroup;
+			children = (A20000000000000000000001 /* SnowlitApp.swift */,);
+			path = App;
+			sourceTree = "<group>";
+		};
+		A40000000000000000000003 /* Products */ = {
+			isa = PBXGroup;
+			children = (A20000000000000000000011 /* Snowlit.app */,);
+			name = Products;
+			sourceTree = "<group>";
+		};
+/* End PBXGroup section */
+
+/* Begin PBXNativeTarget section */
+		A50000000000000000000001 /* Snowlit */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = A80000000000000000000002 /* Build configuration list for PBXNativeTarget "Snowlit" */;
+			buildPhases = (
+				A30000000000000000000002 /* Sources */,
+				A30000000000000000000001 /* Frameworks */,
+				A30000000000000000000003 /* Resources */,
+			);
+			buildRules = ();
+			dependencies = ();
+			name = Snowlit;
+			packageProductDependencies = (
+				A90000000000000000000001 /* SnowlitCore */,
+				A90000000000000000000002 /* SnowlitStorage */,
+				A90000000000000000000003 /* YingxueKit */,
+				A90000000000000000000004 /* SnowlitReader */,
+			);
+			productName = Snowlit;
+			productReference = A20000000000000000000011 /* Snowlit.app */;
+			productType = "com.apple.product-type.application";
+		};
+/* End PBXNativeTarget section */
+
+/* Begin PBXProject section */
+		A60000000000000000000001 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = YES;
+				LastSwiftUpdateCheck = 2600;
+				LastUpgradeCheck = 2600;
+				TargetAttributes = {A50000000000000000000001 = {CreatedOnToolsVersion = 26.0; }; };
+			};
+			buildConfigurationList = A80000000000000000000001 /* Build configuration list for PBXProject "Snowlit" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = zh_Hans;
+			hasScannedForEncodings = 0;
+			knownRegions = (zh_Hans, en, Base,);
+			mainGroup = A40000000000000000000001;
+			packageReferences = (A90000000000000000000010 /* XCLocalSwiftPackageReference "Packages/SnowlitKit" */,);
+			productRefGroup = A40000000000000000000003 /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (A50000000000000000000001 /* Snowlit */,);
+		};
+/* End PBXProject section */
+
+/* Begin PBXResourcesBuildPhase section */
+		A30000000000000000000003 /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = ();
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXResourcesBuildPhase section */
+
+/* Begin PBXSourcesBuildPhase section */
+		A30000000000000000000002 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (A10000000000000000000001 /* SnowlitApp.swift in Sources */,);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+/* End PBXSourcesBuildPhase section */
+
+/* Begin XCBuildConfiguration section */
+		A70000000000000000000001 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_PREPROCESSOR_DEFINITIONS = ("DEBUG=1", "$(inherited)",);
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = "DEBUG $(inherited)";
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Debug;
+		};
+		A70000000000000000000002 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = "dwarf-with-dsym";
+				IPHONEOS_DEPLOYMENT_TARGET = 26.0;
+				SDKROOT = iphoneos;
+				SWIFT_COMPILATION_MODE = wholemodule;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
+				SWIFT_STRICT_CONCURRENCY = complete;
+				SWIFT_TREAT_WARNINGS_AS_ERRORS = YES;
+				SWIFT_VERSION = 6.0;
+			};
+			name = Release;
+		};
+		A70000000000000000000011 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Snowlit;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.bemarkt.snowlit;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A70000000000000000000012 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = YES;
+				INFOPLIST_KEY_CFBundleDisplayName = Snowlit;
+				INFOPLIST_KEY_LSApplicationCategoryType = "public.app-category.books";
+				INFOPLIST_KEY_UIApplicationSceneManifest_Generation = YES;
+				INFOPLIST_KEY_UIApplicationSupportsIndirectInputEvents = YES;
+				INFOPLIST_KEY_UILaunchScreen_Generation = YES;
+				INFOPLIST_KEY_UISupportedInterfaceOrientations = "UIInterfaceOrientationPortrait UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				INFOPLIST_KEY_UISupportedInterfaceOrientations_iPad = "UIInterfaceOrientationPortrait UIInterfaceOrientationPortraitUpsideDown UIInterfaceOrientationLandscapeLeft UIInterfaceOrientationLandscapeRight";
+				LD_RUNPATH_SEARCH_PATHS = ("$(inherited)", "@executable_path/Frameworks",);
+				MARKETING_VERSION = 0.1.0;
+				PRODUCT_BUNDLE_IDENTIFIER = io.github.bemarkt.snowlit;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SUPPORTS_MACCATALYST = NO;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+/* End XCBuildConfiguration section */
+
+/* Begin XCConfigurationList section */
+		A80000000000000000000001 /* Build configuration list for PBXProject "Snowlit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A70000000000000000000001 /* Debug */, A70000000000000000000002 /* Release */,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		A80000000000000000000002 /* Build configuration list for PBXNativeTarget "Snowlit" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (A70000000000000000000011 /* Debug */, A70000000000000000000012 /* Release */,);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End XCConfigurationList section */
+
+/* Begin XCLocalSwiftPackageReference section */
+		A90000000000000000000010 /* XCLocalSwiftPackageReference "Packages/SnowlitKit" */ = {
+			isa = XCLocalSwiftPackageReference;
+			relativePath = Packages/SnowlitKit;
+		};
+/* End XCLocalSwiftPackageReference section */
+
+/* Begin XCSwiftPackageProductDependency section */
+		A90000000000000000000001 /* SnowlitCore */ = {isa = XCSwiftPackageProductDependency; package = A90000000000000000000010 /* XCLocalSwiftPackageReference "Packages/SnowlitKit" */; productName = SnowlitCore; };
+		A90000000000000000000002 /* SnowlitStorage */ = {isa = XCSwiftPackageProductDependency; package = A90000000000000000000010 /* XCLocalSwiftPackageReference "Packages/SnowlitKit" */; productName = SnowlitStorage; };
+		A90000000000000000000003 /* YingxueKit */ = {isa = XCSwiftPackageProductDependency; package = A90000000000000000000010 /* XCLocalSwiftPackageReference "Packages/SnowlitKit" */; productName = YingxueKit; };
+		A90000000000000000000004 /* SnowlitReader */ = {isa = XCSwiftPackageProductDependency; package = A90000000000000000000010 /* XCLocalSwiftPackageReference "Packages/SnowlitKit" */; productName = SnowlitReader; };
+/* End XCSwiftPackageProductDependency section */
+	};
+	rootObject = A60000000000000000000001 /* Project object */;
+}
