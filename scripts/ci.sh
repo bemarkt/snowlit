@@ -65,7 +65,7 @@ PY
     xcodebuild test -scheme "$package_scheme" -destination "$destination" \
       -derivedDataPath "$root/build/package-tests" \
       -resultBundlePath "$evidence/StorageTests.xcresult" \
-      -only-testing:SnowlitCoreTests -only-testing:SnowlitStorageTests \
+      -only-testing:SnowlitCoreTests -only-testing:SnowlitStorageTests -only-testing:YingxueKitTests \
       -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
       2>&1 | tee "$evidence/storage-tests.log"
   )

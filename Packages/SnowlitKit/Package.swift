@@ -16,6 +16,9 @@ let package = Package(
         .target(name: "YingxueKit", dependencies: ["SnowlitCore"]),
         .target(name: "SnowlitReader", dependencies: ["SnowlitCore"]),
         .testTarget(name: "SnowlitCoreTests", dependencies: ["SnowlitCore"]),
+        .testTarget(name: "YingxueKitTests", dependencies: ["YingxueKit"]),
+        .testTarget(name: "YingxueWebKitTests", dependencies: ["YingxueKit"]),
+        .testTarget(name: "YingxueRecoveryTests", dependencies: ["YingxueKit"]),
         .testTarget(name: "SnowlitStorageTests", dependencies: ["SnowlitStorage"]),
     ],
     swiftLanguageModes: [.v6]
