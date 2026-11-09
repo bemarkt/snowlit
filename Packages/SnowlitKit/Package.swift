@@ -10,17 +10,20 @@ let package = Package(
         .library(name: "YingxueKit", targets: ["YingxueKit"]),
         .library(name: "SnowlitReader", targets: ["SnowlitReader"]),
     ],
+    dependencies: [
+        .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.12.0"),
+    ],
     targets: [
         .target(name: "SnowlitCore"),
-        .target(name: "SnowlitStorage", dependencies: ["SnowlitCore"]),
+        .target(name: "SnowlitStorage", dependencies: ["SnowlitCore", .product(name: "GRDB", package: "GRDB.swift")]),
         .target(name: "YingxueKit", dependencies: ["SnowlitCore"]),
         .target(name: "SnowlitReader", dependencies: ["SnowlitCore"]),
         .testTarget(name: "SnowlitCoreTests", dependencies: ["SnowlitCore"]),
+        .testTarget(name: "SnowlitReaderTests", dependencies: ["SnowlitCore", "SnowlitReader"]),
+        .testTarget(name: "SnowlitStorageTests", dependencies: ["SnowlitStorage", .product(name: "GRDB", package: "GRDB.swift")]),
         .testTarget(name: "YingxueKitTests", dependencies: ["YingxueKit"]),
         .testTarget(name: "YingxueWebKitTests", dependencies: ["YingxueKit"]),
         .testTarget(name: "YingxueRecoveryTests", dependencies: ["YingxueKit"]),
-        .testTarget(name: "SnowlitReaderTests", dependencies: ["SnowlitCore", "SnowlitReader"]),
-        .testTarget(name: "SnowlitStorageTests", dependencies: ["SnowlitStorage"]),
     ],
     swiftLanguageModes: [.v6]
 )

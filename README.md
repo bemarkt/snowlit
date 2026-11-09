@@ -17,9 +17,9 @@
 | YingxueKit | 映雪书源 |
 | SnowlitReader | 原生阅读呈现 |
 
-后三个模块仅依赖 SnowlitCore，App 链接四个产品。Package 源码由 SwiftPM 管理，不加入 App 的 Compile Sources。尚无业务消费者的模块只保留编译边界，不预设业务 API。
+后三个模块的内部依赖仅指向 SnowlitCore；SnowlitStorage 另使用 GRDB。App 链接四个产品，Package 源码由 SwiftPM 管理，不加入 App 的 Compile Sources。`Experiments/` 中的小样尚未接入业务入口，也不是已冻结的源协议或持久格式。
 
-采用 Swift 6 语言模式和严格并发检查。当前没有第三方包依赖，因此没有 Package.resolved；添加依赖时需要提交解析后的锁文件。
+采用 Swift 6 语言模式和严格并发检查。GRDB 精确锁定为 7.12.0，提交 `92a554cd0d5e8d67cb18993c6054e73fe42c066c`；SwiftPM 与 Xcode 锁文件记录相同版本，许可证在 `Licenses/GRDB.txt`。升级时需复核 Swift/SQLite 兼容性并重跑事务、文件和备份故障用例。
 
 ## 构建与验证
 
@@ -31,11 +31,18 @@ CI 固定使用 `macos-26`、Xcode 26.6 和 iOS 26.5 模拟器，Apple 平台验
 export DEVELOPER_DIR=/Applications/Xcode_26.6.app/Contents/Developer
 bash scripts/ci.sh phone
 bash scripts/ci.sh tablet
+bash scripts/probe_ios.sh phone
+bash scripts/probe_ios.sh tablet
+bash scripts/probe_ios.sh phone recovery
 ```
 
 脚本创建并清理专用模拟器。重复运行前，将上一次 `build/evidence/` 的结果移到其他目录，避免覆盖测试报告。
 
 验证包含模块/源码归属检查、Core 独立编译、Storage 文件系统测试、App 启动状态测试、iPhone/iPad 启动及失败重试 UI 测试，以及未签名的 Release 设备架构编译。
+
+实验脚本还需要 Node.js 22 或更高版本，通过 `127.0.0.1:18731` 提供独立的合成站点。它选择 WebKit/Reader 集成测试并记录脚本、源码与工具链身份；合成站点缺失会失败。`recovery` 模式仅在专用模拟器内观察无限循环和挂起 Promise，外层监督进程限制执行时间。等待超时、释放 Swift 对象或新操作成功都不等于底层 JavaScript/资源已停止。
+
+本地服务测试可用 `node --test scripts/probes/site.test.mjs`。该命令只验证站点行为，不证明浏览器 DOM、Cookie 或 iOS 可用性。Reader 小样验证 TextKit 2 属性文本、附件/标记和准备好的系统卷页页面；真实手势、长时资源与设备性能仍需单独验收。
 
 工作流只上传 `build/evidence/` 中的环境清单、日志、应用元数据和 xcresult，保留 14 天。它不产生发行 IPA。较高版本模拟器的成功不代表 iOS 26.0 最低运行时或真机验收通过。
 
