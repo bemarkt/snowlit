@@ -71,11 +71,12 @@ struct WebKitRuntimeProbeTests {
             try await otherSource.load(fixture.url("page"))
             #expect(try await responseCode(runtime, at: fixture.url("protected")) == "401")
             // Exercises an HTML form and cookie navigation, not a human touch/verification UI.
-            _ = try await login.evaluate("""
+            login.webView.evaluateJavaScript("""
                 document.querySelector('input').value = 'fixture-password';
-                setTimeout(() => document.querySelector('form').requestSubmit(), 0);
-                return 'submitted';
-                """)
+                document.querySelector('form').requestSubmit();
+                """, completionHandler: nil)
+            // Navigation may destroy the submitting JS context before its callback.
+            // The protected HTTP response is the observable success condition below.
             try await FixtureScenario.eventually {
                 try await responseCode(runtime, at: fixture.url("protected")) == "200"
             }
