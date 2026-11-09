@@ -11,7 +11,7 @@ case "$kind" in
   *) printf 'Usage: bash scripts/probe_ios.sh phone|tablet\n' >&2; exit 2 ;;
 esac
 case "$mode" in
-  integration) selection=(-only-testing:YingxueKitTests -only-testing:YingxueWebKitTests) ;;
+  integration) selection=(-only-testing:YingxueKitTests -only-testing:YingxueWebKitTests -only-testing:SnowlitReaderTests) ;;
   recovery) selection=(-only-testing:YingxueRecoveryTests) ;;
   *) printf 'Unknown probe mode: %s\n' "$mode" >&2; exit 2 ;;
 esac

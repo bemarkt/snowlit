@@ -19,6 +19,7 @@ let package = Package(
         .testTarget(name: "YingxueKitTests", dependencies: ["YingxueKit"]),
         .testTarget(name: "YingxueWebKitTests", dependencies: ["YingxueKit"]),
         .testTarget(name: "YingxueRecoveryTests", dependencies: ["YingxueKit"]),
+        .testTarget(name: "SnowlitReaderTests", dependencies: ["SnowlitCore", "SnowlitReader"]),
         .testTarget(name: "SnowlitStorageTests", dependencies: ["SnowlitStorage"]),
     ],
     swiftLanguageModes: [.v6]
