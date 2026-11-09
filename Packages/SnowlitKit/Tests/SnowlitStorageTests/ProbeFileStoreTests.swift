@@ -96,7 +96,7 @@ struct ProbeFileStoreTests {
         }
     }
 
-    private static func sha256(_ data: Data) throws -> String {
+    static func sha256(_ data: Data) throws -> String {
         #if canImport(CryptoKit)
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         #elseif os(Windows)

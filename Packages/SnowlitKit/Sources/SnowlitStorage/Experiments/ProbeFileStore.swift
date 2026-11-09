@@ -31,7 +31,8 @@ actor ProbeFileStore {
     private var files: URL { root.appendingPathComponent("objects", isDirectory: true) }
     private var temporary: URL { root.appendingPathComponent("staging", isDirectory: true) }
 
-    init(root: URL, create: Bool, digest: @escaping Digest) throws {
+    init(root: URL, create: Bool, readOnly: Bool = false, digest: @escaping Digest) throws {
+        guard !create || !readOnly else { throw Failure.invalidStore }
         let manager = FileManager.default
         let database = root.appendingPathComponent("catalog.sqlite")
         if create {
@@ -47,6 +48,7 @@ actor ProbeFileStore {
             else { throw Failure.missing }
         }
         var configuration = Configuration()
+        configuration.readonly = readOnly
         if create { configuration.journalMode = .wal }
         let queue = try DatabaseQueue(path: database.path, configuration: configuration)
         if create {
