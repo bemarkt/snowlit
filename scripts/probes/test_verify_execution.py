@@ -77,7 +77,7 @@ class VerifyExecutionTests(unittest.TestCase):
 
     def recovery_observations(self, root):
         log = ["Suite WebKitRecoveryTests passed", "Test run with 1 test in 1 suite passed"]
-        samples = [dict(kind="metadata", format=2)]
+        samples = [dict(kind="metadata", format=3)]
         for fault_index, fault in enumerate(["spin", "never"]):
             for repetition in range(1, 4):
                 baseline = 100 * (fault_index * 3 + repetition)
@@ -120,6 +120,28 @@ class VerifyExecutionTests(unittest.TestCase):
                     path.write_text("\n".join(json.dumps(row) for row in records))
                 with self.assertRaises(ValueError, msg=damage):
                     verify(root, "recovery")
+
+    def test_zero_webcontent_after_close_is_observed_data_but_missing_samples_are_not(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self.fixture(root)
+            self.recovery_observations(root)
+            path = root / "process-samples.jsonl"
+            records = [json.loads(row) for row in path.read_text().splitlines()]
+            for row in records[1:]:
+                stamp = datetime.fromisoformat(row["observedUTC"]).timestamp()
+                if 102.4 < stamp < 103:
+                    row["processes"] = [p for p in row["processes"] if p["pid"] == 50]
+            path.write_text("\n".join(json.dumps(row) for row in records))
+            result = verify(root, "recovery")
+            self.assertEqual(len(result["samplingCoverage"]["windows"]), 24)
+            for row in records[1:]:
+                stamp = datetime.fromisoformat(row["observedUTC"]).timestamp()
+                if 102.4 < stamp < 104.5:
+                    row["processes"] = []
+            path.write_text("\n".join(json.dumps(row) for row in records))
+            with self.assertRaises(ValueError):
+                verify(root, "recovery")
 
 
 if __name__ == "__main__":

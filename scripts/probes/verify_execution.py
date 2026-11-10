@@ -9,7 +9,7 @@ import re
 
 def verify_recovery_observations(evidence, log, expected_count):
     records = [json.loads(line) for line in (evidence / "process-samples.jsonl").read_text().splitlines()]
-    if not records or records[0].get("format") != 2:
+    if not records or records[0].get("format") != 3:
         raise ValueError("Native process observation metadata is missing")
     if any(row.get("kind") == "samplingError" for row in records):
         raise ValueError("Process observation contains sampling errors")
@@ -40,7 +40,8 @@ def verify_recovery_observations(evidence, log, expected_count):
         host_pid = pids.pop()
         for label, first, last in [("baseline", "baseline", "execution-requested"),
                                    ("fault", "fault-entered", "closed"),
-                                   ("post-close", "closed", "observation-ended")]:
+                                   ("post-close", "closed", "observation-ended"),
+                                   ("replacement", "replacement-ready", "observation-ended")]:
             start, end = stages[first][0], stages[last][0]
             measured = []
             for sample in samples:
@@ -53,7 +54,9 @@ def verify_recovery_observations(evidence, log, expected_count):
                            for process in processes)
                 web_content = any(process["executable"] in {"WebContent", "com.apple.WebKit.WebContent"}
                                   for process in processes)
-                if host and web_content:
+                # An observed absence after close is data, not missing sampling.
+                # Baseline, entered fault and ready replacement still need WebContent.
+                if host and (web_content or label == "post-close"):
                     measured.append(stamp)
             measured.sort()
             boundaries = [start, *measured, end]

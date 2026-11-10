@@ -8,6 +8,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <sys/proc_info.h>
+#include <time.h>
 #include <unistd.h>
 
 typedef struct {
@@ -46,9 +47,15 @@ static void print_string(const char *value) {
     putchar('"');
 }
 
-int main(int argc, char **argv) {
-    const bool include_self = argc == 2 && strcmp(argv[1], "--self") == 0;
-    if (argc != 1 && !include_self) return fail("arguments", 0, EINVAL);
+static double seconds(clockid_t clock) {
+    struct timespec time;
+    if (clock_gettime(clock, &time) != 0) return -1;
+    return (double)time.tv_sec + (double)time.tv_nsec / 1e9;
+}
+
+static int snapshot(bool include_self) {
+    const double started = seconds(CLOCK_MONOTONIC);
+    if (started < 0) return fail("clock", 0, errno);
     mach_timebase_info_data_t timebase;
     if (mach_timebase_info(&timebase) != KERN_SUCCESS || !timebase.denom)
         return fail("timebase", 0, EINVAL);
@@ -124,9 +131,13 @@ int main(int argc, char **argv) {
         observations[i].metrics = info.ptinfo;
         observations[i].measurement = "measured";
     }
+    const double query_seconds = seconds(CLOCK_MONOTONIC) - started;
+    const double epoch_seconds = seconds(CLOCK_REALTIME);
+    if (query_seconds < 0 || epoch_seconds < 0) return fail("clock", 0, errno);
     printf("{\"samplerPID\":%d,\"hostUID\":%u,\"exitedDuringDiscovery\":%d,"
+           "\"querySeconds\":%.9f,\"sampleEpochSeconds\":%.9f,"
            "\"timebaseNumerator\":%u,\"timebaseDenominator\":%u,\"processes\":[",
-           getpid(), getuid(), exited_during_discovery, timebase.numer, timebase.denom);
+           getpid(), getuid(), exited_during_discovery, query_seconds, epoch_seconds, timebase.numer, timebase.denom);
     bool comma = false;
     for (int i = 0; i < used; ++i) {
         const Observation *entry = &observations[i];
@@ -152,4 +163,19 @@ int main(int argc, char **argv) {
     free(observations);
     free(pids);
     return 0;
+}
+
+int main(int argc, char **argv) {
+    if (argc == 1) return snapshot(false);
+    if (argc == 2 && strcmp(argv[1], "--self") == 0) return snapshot(true);
+    if (argc != 2 || strcmp(argv[1], "--server") != 0) return fail("arguments", 0, EINVAL);
+    // The supervisor owns this process and sends one newline per snapshot.
+    // EOF closes it. There are no commands for acting on observed processes.
+    int request;
+    while ((request = getchar()) != EOF) {
+        if (request != '\n') return fail("arguments", 0, EINVAL);
+        if (snapshot(false) != 0) return 1;
+        if (fflush(stdout) != 0) return fail("output", 0, errno);
+    }
+    return ferror(stdin) ? fail("input", 0, errno) : 0;
 }

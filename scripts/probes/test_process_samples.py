@@ -6,6 +6,7 @@ from pathlib import Path
 import subprocess
 import sys
 import tempfile
+import time
 import unittest
 from unittest.mock import patch
 
@@ -62,6 +63,7 @@ class ProcessSampleTests(unittest.TestCase):
 class NativeSampleTests(unittest.TestCase):
     def snapshot(self):
         return dict(timebaseNumerator=125, timebaseDenominator=3, exitedDuringDiscovery=2,
+                    samplerPID=100, querySeconds=0.005, sampleEpochSeconds=1_794_268_801.5,
                     processes=[dict(pid=30, parentPID=20, startSeconds=1_794_268_800,
                                     startMicroseconds=123456, executable="com.apple.WebKit.WebContent",
                                     candidate=True, measurement="measured", rssBytes=8388608,
@@ -74,6 +76,7 @@ class NativeSampleTests(unittest.TestCase):
         self.assertEqual(process["cpuSeconds"], 3)
         self.assertTrue(process["startedUTC"].endswith(".123456+00:00"))
         self.assertEqual(result["exitedDuringDiscovery"], 2)
+        self.assertEqual(result["durationSeconds"], 0.005)
 
     def test_departed_candidates_and_ancestors_have_no_invented_metrics(self):
         for candidate, measurement in [(True, "exited-during-sample"),
@@ -112,14 +115,14 @@ class NativeSampleTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             destination = Path(folder) / "samples.jsonl"
             samples = ProcessSamples(destination, Path(folder) / "sampler")
-            with patch("process_samples.subprocess.run", side_effect=errors) as run:
+            with patch.object(samples, "read_snapshot", side_effect=errors):
                 samples.sample("test")
                 samples.sample("test")
             samples.close()
             self.assertEqual(samples.samples, 0)
             self.assertEqual(samples.errors, 2)
-            self.assertEqual(run.call_args.kwargs["timeout"], 2)
             records = [json.loads(row) for row in destination.read_text().splitlines()]
+            self.assertEqual(records[0]["queryTimeoutSeconds"], 2)
             self.assertEqual(records[1]["errorType"], "TimeoutExpired")
             self.assertEqual(records[2]["queryPhase"], "metrics")
             self.assertEqual(records[2]["pid"], 30)
@@ -136,6 +139,39 @@ class NativeSampleTests(unittest.TestCase):
         self.assertGreater(process["rssKiB"], 0)
         self.assertGreater(process["cpuSeconds"], 0)
         self.assertLess(process["cpuSeconds"], 2)
+
+    @unittest.skipUnless(sys.platform == "darwin", "Real libproc requires macOS")
+    def test_multiple_snapshots_reuse_one_owned_helper_and_close_it(self):
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "samples.jsonl"
+            samples = ProcessSamples(path, os.environ["SNOWLIT_PROCESS_SAMPLER"])
+            samples.sample("first")
+            process = samples.process
+            self.assertIsNotNone(process)
+            samples.sample("second")
+            samples.close()
+            self.assertEqual(process.poll(), 0)
+            self.assertEqual(samples.errors, 0)
+            records = [json.loads(row) for row in path.read_text().splitlines()][1:]
+            self.assertEqual([row["samplerPID"] for row in records], [process.pid, process.pid])
+            self.assertTrue(all(row["supervisorElapsedSeconds"] >= row["durationSeconds"] for row in records))
+
+    @unittest.skipUnless(sys.platform == "darwin", "Native pipe deadline requires macOS")
+    def test_blocked_helper_has_a_real_deadline_and_is_reaped(self):
+        with tempfile.TemporaryDirectory() as folder:
+            helper = Path(folder) / "blocked-helper"
+            helper.write_text("#!/usr/bin/env python3\nimport sys, time\nfor request in sys.stdin: time.sleep(30)\n")
+            helper.chmod(0o700)
+            path = Path(folder) / "samples.jsonl"
+            samples = ProcessSamples(path, helper)
+            started = time.monotonic()
+            samples.sample("blocked")
+            self.assertLess(time.monotonic() - started, 5)
+            self.assertIsNone(samples.process)
+            samples.close()
+            self.assertEqual(samples.samples, 0)
+            self.assertEqual(samples.errors, 1)
+            self.assertEqual(json.loads(path.read_text().splitlines()[1])["errorType"], "TimeoutExpired")
 
 
 if __name__ == "__main__":

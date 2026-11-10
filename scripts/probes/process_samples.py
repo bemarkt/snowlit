@@ -2,8 +2,10 @@
 
 from datetime import datetime, timedelta, timezone
 import json
+import math
 import os
 from pathlib import Path
+import select
 import subprocess
 import time
 
@@ -64,6 +66,11 @@ def parse_native_snapshot(output):
     denominator = unsigned(snapshot["timebaseDenominator"])
     if not numerator or not denominator:
         raise ValueError("Invalid CPU timebase")
+    query_duration = snapshot["querySeconds"]
+    observed_epoch = snapshot["sampleEpochSeconds"]
+    for number in [query_duration, observed_epoch]:
+        if type(number) not in (int, float) or not math.isfinite(number) or number < 0:
+            raise ValueError("Invalid native observation clock")
     identities = set()
     records = []
     for raw in snapshot["processes"]:
@@ -93,7 +100,10 @@ def parse_native_snapshot(output):
             record.update(rssKiB=unsigned(raw["rssBytes"]) / 1024,
                           cpuSeconds=cpu_ticks * numerator / denominator / 1_000_000_000)
         records.append(record)
-    return dict(processes=records, exitedDuringDiscovery=unsigned(snapshot["exitedDuringDiscovery"]),
+    return dict(processes=records, samplerPID=unsigned(snapshot["samplerPID"]),
+                observedUTC=datetime.fromtimestamp(observed_epoch, timezone.utc).isoformat(),
+                durationSeconds=query_duration,
+                exitedDuringDiscovery=unsigned(snapshot["exitedDuringDiscovery"]),
                 timebaseNumerator=numerator, timebaseDenominator=denominator)
 
 
@@ -101,19 +111,23 @@ class ProcessSamples:
     def __init__(self, path, sampler):
         self.path = Path(path)
         self.sampler = Path(sampler)
+        self.process = None
+        self.query_timeout = 2
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.output = self.path.open("w", encoding="utf-8")
         self.errors = 0
         self.samples = 0
         self.write({
-            "kind": "metadata", "format": 2, "hostCPUCount": os.cpu_count(),
+            "kind": "metadata", "format": 3, "hostCPUCount": os.cpu_count(),
             "scope": "Same-user host candidates and their same-user ancestors; no per-WebView attribution",
             "sampler": "macOS libproc; ancestors identity-only; no task ports or process signals",
             "rssUnit": "1024 bytes", "cpuSeconds": "Accumulated user + system ticks converted by mach_timebase_info",
+            "queryTimeoutSeconds": self.query_timeout,
+            "clock": "Native CLOCK_REALTIME and CLOCK_MONOTONIC; supervisor round-trip recorded separately",
         })
 
     def write(self, record):
-        record["observedUTC"] = datetime.now(timezone.utc).isoformat()
+        record.setdefault("observedUTC", datetime.now(timezone.utc).isoformat())
         record["monotonicSeconds"] = time.monotonic()
         self.output.write(json.dumps(record, ensure_ascii=True) + "\n")
         self.output.flush()
@@ -121,20 +135,17 @@ class ProcessSamples:
     def sample(self, stage):
         started = time.monotonic()
         try:
-            result = subprocess.run(
-                [str(self.sampler)], capture_output=True, text=True, encoding="utf-8",
-                timeout=2, check=True,
-            )
-            snapshot = parse_native_snapshot(result.stdout)
-            self.write(dict(kind="sample", stage=stage, durationSeconds=time.monotonic() - started, **snapshot))
+            snapshot = parse_native_snapshot(self.read_snapshot())
+            self.write(dict(kind="sample", stage=stage, supervisorElapsedSeconds=time.monotonic() - started, **snapshot))
             self.samples += 1
         except (OSError, subprocess.SubprocessError, UnicodeError, ValueError, KeyError, TypeError) as error:
+            self.stop_helper(force=True)
             self.errors += 1
             diagnostic = {}
             if isinstance(error, subprocess.CalledProcessError):
                 try:
                     native = json.loads(error.stderr)
-                    if native.get("phase") in {"arguments", "timebase", "list-size", "allocate", "list",
+                    if native.get("phase") in {"arguments", "timebase", "clock", "input", "output", "list-size", "allocate", "list",
                                                "list-truncated", "identity", "metrics"}:
                         diagnostic["queryPhase"] = native["phase"]
                         for field in ["pid", "errorCode"]:
@@ -145,5 +156,54 @@ class ProcessSamples:
             self.write(dict(kind="samplingError", stage=stage, errorType=type(error).__name__,
                             durationSeconds=time.monotonic() - started, **diagnostic))
 
+    def read_snapshot(self):
+        deadline = time.monotonic() + self.query_timeout
+        if self.process is None:
+            self.process = subprocess.Popen([str(self.sampler), "--server"], stdin=subprocess.PIPE,
+                                            stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+                                            bufsize=0, start_new_session=True)
+        process = self.process
+        process.stdin.write(b"\n")
+        received = bytearray()
+        while True:
+            remaining = deadline - time.monotonic()
+            if remaining <= 0 or not select.select([process.stdout], [], [], remaining)[0]:
+                raise subprocess.TimeoutExpired([str(self.sampler)], self.query_timeout)
+            chunk = os.read(process.stdout.fileno(), 65536)
+            if not chunk:
+                code = process.wait(timeout=max(0.001, deadline - time.monotonic()))
+                raise subprocess.CalledProcessError(code or 1, [str(self.sampler)],
+                                                    stderr=process.stderr.read().decode("utf-8"))
+            received.extend(chunk)
+            if len(received) > 4 * 1024 * 1024:
+                raise ValueError("Native observation exceeds bounded response size")
+            if b"\n" in received:
+                if not received.endswith(b"\n") or received.count(b"\n") != 1:
+                    raise ValueError("Unexpected native observation framing")
+                return received.decode("utf-8")
+
+    def stop_helper(self, *, force=False):
+        process, self.process = self.process, None
+        if process is None:
+            return True
+        clean = True
+        if force and process.poll() is None:
+            process.kill()  # Only this sampler child, never observed candidates.
+        process.stdin.close()
+        try:
+            code = process.wait(timeout=self.query_timeout)
+            clean = code == 0
+        except subprocess.TimeoutExpired:
+            clean = False
+            process.kill()
+            process.wait(timeout=self.query_timeout)
+        finally:
+            process.stdout.close()
+            process.stderr.close()
+        return clean
+
     def close(self):
+        if not self.stop_helper():
+            self.errors += 1
+            self.write(dict(kind="samplingError", stage="helper-shutdown", errorType="UncleanSamplerExit"))
         self.output.close()
