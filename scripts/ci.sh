@@ -6,7 +6,7 @@ root="$PWD"
 kind="$1"
 scope="${2:-full}"
 case "$scope" in
-  full|prepare) ;;
+  full|prepare|baseline) ;;
   *) printf 'Unknown verification scope: %s\n' "$scope" >&2; exit 2 ;;
 esac
 case "$kind" in
@@ -40,12 +40,18 @@ runtime_id="com.apple.CoreSimulator.SimRuntime.iOS-${runtime_version//./-}"
 
 python3 scripts/check_structure.py | tee "$evidence/structure.log"
 packages="$root/build/SourcePackages"
-if [ "$scope" = prepare ]; then
-  # Build this checkout's test host once without booting an unused baseline device.
+source "$root/scripts/simulator_signing.sh"
+prepare_simulator_signing
+if [ "$scope" != baseline ]; then
+  # Build the shared host before running any suites. In CI, the separate prepare
+  # step lets independent probes still run if a baseline behavior test fails.
   xcodebuild build-for-testing -project Snowlit.xcodeproj -scheme Snowlit \
     -configuration Debug -destination 'generic/platform=iOS Simulator' \
     -derivedDataPath "$root/build/app-$kind" -clonedSourcePackagesDirPath "$packages" \
-    CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$evidence/test-host-build.log"
+    "${simulator_signing[@]}" 2>&1 | tee "$evidence/test-host-build.log"
+  record_simulator_signing
+fi
+if [ "$scope" = prepare ]; then
   printf 'Test host prepared at %s; no baseline tests or Release build were run.\n' \
     "$(git rev-parse HEAD)" > "$evidence/preparation.txt"
   exit 0
@@ -102,14 +108,14 @@ test_selection=(-only-testing:SnowlitAppTests/StartupModelTests -only-testing:Sn
 if [ "$kind" = tablet ]; then
   test_selection=(-only-testing:SnowlitUITests/StartupUITests)
 fi
-xcodebuild test -project Snowlit.xcodeproj -scheme Snowlit \
+xcodebuild test-without-building -project Snowlit.xcodeproj -scheme Snowlit \
   -configuration Debug -destination "$destination" \
   -derivedDataPath "$root/build/app-$kind" \
   -clonedSourcePackagesDirPath "$packages" \
   -resultBundlePath "$evidence/AppTests.xcresult" \
   -parallel-testing-enabled NO -test-timeouts-enabled YES \
   -maximum-test-execution-time-allowance 120 \
-  "${test_selection[@]}" CODE_SIGNING_ALLOWED=NO \
+  "${test_selection[@]}" "${simulator_signing[@]}" \
   2>&1 | tee "$evidence/app-tests.log"
 
 app="$root/build/app-$kind/Build/Products/Debug-iphonesimulator/Snowlit.app"

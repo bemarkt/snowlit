@@ -49,25 +49,24 @@ jobs:
         with:
           path: build/SourcePackages
           key: spm-${{ runner.os }}-${{ runner.arch }}-xcode26.6-${{ hashFiles('Packages/SnowlitKit/Package.swift', 'Packages/SnowlitKit/Package.resolved', 'Snowlit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
-      - name: Build and test baseline
-        id: baseline
-        if: env.SNOWLIT_CI_TASK == 'verify'
-        run: bash scripts/ci.sh "${{ matrix.device }}"
-      - name: Prepare focused test host
-        id: focused
-        if: env.SNOWLIT_CI_TASK != 'verify'
+      - name: Prepare signed simulator test host
+        id: host
         run: bash scripts/ci.sh "${{ matrix.device }}" prepare
+      - name: Run baseline checks
+        id: baseline
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && env.SNOWLIT_CI_TASK == 'verify' }}
+        run: bash scripts/ci.sh "${{ matrix.device }}" baseline
       - name: Run isolated WebKit integration probes
-        if: ${{ !cancelled() && (steps.baseline.conclusion == 'success' || steps.focused.conclusion == 'success') && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'integration') }}
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'integration') }}
         run: bash scripts/probe_ios.sh "${{ matrix.device }}"
       - name: Observe recovery from uncooperative JavaScript
-        if: ${{ !cancelled() && matrix.device == 'phone' && (steps.baseline.conclusion == 'success' || steps.focused.conclusion == 'success') && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'recovery') }}
+        if: ${{ !cancelled() && matrix.device == 'phone' && steps.host.conclusion == 'success' && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'recovery') }}
         run: bash scripts/probe_ios.sh phone recovery
       - name: Observe system page curl gestures
-        if: ${{ !cancelled() && (steps.baseline.conclusion == 'success' || steps.focused.conclusion == 'success') && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'reader-ui') }}
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'reader-ui') }}
         run: bash scripts/probe_ios.sh "${{ matrix.device }}" reader-ui
       - name: Interrupt and reopen isolated storage
-        if: ${{ !cancelled() && (steps.baseline.conclusion == 'success' || steps.focused.conclusion == 'success') && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'storage') }}
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'storage') }}
         run: bash scripts/probe_storage.sh
       - name: Record verification scope
         if: always()

@@ -5,6 +5,8 @@ cd "$(dirname "$0")/.."
 root="$PWD"
 kind="${1:-}"
 mode="${2:-integration}"
+source "$root/scripts/simulator_signing.sh"
+prepare_simulator_signing
 runtime_version="${SNOWLIT_IOS_RUNTIME:-26.5}"
 case "$runtime_version" in
   26.0|26.5) runtime_id="com.apple.CoreSimulator.SimRuntime.iOS-${runtime_version//./-}" ;;
@@ -119,7 +121,7 @@ fi
   -clonedSourcePackagesDirPath "$root/build/SourcePackages" \
   "${selection[@]}" \
   -parallel-testing-enabled NO -test-timeouts-enabled YES \
-  -maximum-test-execution-time-allowance "$test_timeout" CODE_SIGNING_ALLOWED=NO
+  -maximum-test-execution-time-allowance "$test_timeout" "${simulator_signing[@]}"
 python3 "$root/scripts/probes/verify_execution.py" "$evidence" "$mode"
 printf 'Selected integration tests passed at %s\n' "$(git rev-parse HEAD)" > "$evidence/result.txt"
 probe_complete=true
