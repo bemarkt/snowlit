@@ -45,20 +45,25 @@ public struct SourceUpdateSnapshot: Equatable, Sendable {
     /// A previously used target state version may already have saved data.
     /// Reverting a version must not reset its revision or overwrite it blindly.
     public let targetState: SourcePublicState
+    public let referenceHistory: [SourceReferenceTransition]
 
     public init(installation: SourceInstallationSnapshot, candidate: SourceImportRecord,
                 candidateMetadata: SourceScriptMetadata, inventoryRevision: Int64,
                 books: [SourceUpdateBookSnapshot], currentState: SourcePublicState,
-                targetState: SourcePublicState) throws {
+                targetState: SourcePublicState, referenceHistory: [SourceReferenceTransition] = []) throws {
         guard candidateMetadata.sourceID.utf8.elementsEqual(installation.metadata.sourceID.utf8),
               inventoryRevision >= 0, Set(books.map(\.book.id)).count == books.count,
               books.allSatisfy({ $0.book.reference.installationID == installation.id }),
               currentState.stateVersion == installation.metadata.stateVersion,
-              targetState.stateVersion == candidateMetadata.stateVersion else {
+              targetState.stateVersion == candidateMetadata.stateVersion,
+              referenceHistory.allSatisfy({ $0.installationID == installation.id && $0.installationRevision <= installation.revision }),
+              referenceHistory.last.map({ $0.changes.targetVersion == installation.metadata.referenceVersion }) ?? true else {
             throw SourceUpdateFailure.invalidInventory
         }
         self.installation = installation; self.candidate = candidate; self.candidateMetadata = candidateMetadata
         self.inventoryRevision = inventoryRevision; self.books = books
         self.currentState = currentState; self.targetState = targetState
+        _ = try SourceReferenceHistory(referenceHistory)
+        self.referenceHistory = referenceHistory
     }
 }

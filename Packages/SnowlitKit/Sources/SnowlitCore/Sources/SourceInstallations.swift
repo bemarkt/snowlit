@@ -91,11 +91,13 @@ public protocol SourceInstallationStore: Sendable {
     /// Read-only preparation; candidate scripts receive adapted values, never
     /// these host-owned IDs or a live database access token.
     func captureSourceUpdate(importID: UUID, expected: SourceInstallationSnapshot) async throws -> SourceUpdateSnapshot
-    /// Adopts a prepared state migration while reference semantics are unchanged.
-    /// The migrated value is validated by the source adapter; nil means no change.
+    /// Adopts complete prepared migrations atomically with the active script.
+    /// A nil migration is permitted only when its version is unchanged.
     func updateSource(prepared: SourceUpdateSnapshot, migratedState: SourcePublicState?,
+                      referenceChanges: SourceReferenceChanges?,
                       configuration: [SourceSettingValue], consent: SourceCredentialReadConsent) async throws -> SourceInstallationSnapshot
     func restoreSource(confirmed prepared: SourceUpdateSnapshot, migratedState: SourcePublicState?,
+                       referenceChanges: SourceReferenceChanges?,
                        configuration: [SourceSettingValue], consent: SourceCredentialReadConsent) async throws -> SourceInstallationSnapshot
     func installSource(importID: UUID, id: SourceInstallationID, configuration: [SourceSettingValue],
                        consent: SourceCredentialReadConsent) async throws -> SourceInstallationSnapshot
@@ -111,4 +113,18 @@ public protocol SourceInstallationStore: Sendable {
     func signOutSource(expected: SourceInstallationSnapshot) async throws -> SourceInstallationSnapshot
     func finishSourceSessionCleanup(_ cleanup: SourceSessionCleanup, installationID: SourceInstallationID) async throws -> Bool
     func beginInstalledPublicStateAccess(expected: SourceInstallationSnapshot) async throws -> SourcePublicStateAccess
+}
+
+extension SourceInstallationStore {
+    public func updateSource(prepared: SourceUpdateSnapshot, migratedState: SourcePublicState?,
+                             configuration: [SourceSettingValue], consent: SourceCredentialReadConsent) async throws -> SourceInstallationSnapshot {
+        try await updateSource(prepared: prepared, migratedState: migratedState, referenceChanges: nil,
+                               configuration: configuration, consent: consent)
+    }
+
+    public func restoreSource(confirmed prepared: SourceUpdateSnapshot, migratedState: SourcePublicState?,
+                              configuration: [SourceSettingValue], consent: SourceCredentialReadConsent) async throws -> SourceInstallationSnapshot {
+        try await restoreSource(confirmed: prepared, migratedState: migratedState, referenceChanges: nil,
+                                configuration: configuration, consent: consent)
+    }
 }

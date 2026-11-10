@@ -4,24 +4,32 @@ import SnowlitCore
 
 extension LibraryDatabase {
     public func updateSource(prepared: SourceUpdateSnapshot, migratedState: SourcePublicState?,
+                             referenceChanges: SourceReferenceChanges? = nil,
                              configuration: [SourceSettingValue], consent: SourceCredentialReadConsent) throws -> SourceInstallationSnapshot {
-        try adoptSourceState(prepared, migratedState: migratedState, restoring: false, configuration: configuration, consent: consent)
+        try adoptSourceState(prepared, migratedState: migratedState, referenceChanges: referenceChanges,
+                             restoring: false, configuration: configuration, consent: consent)
     }
 
     public func restoreSource(confirmed prepared: SourceUpdateSnapshot, migratedState: SourcePublicState?,
+                              referenceChanges: SourceReferenceChanges? = nil,
                               configuration: [SourceSettingValue], consent: SourceCredentialReadConsent) throws -> SourceInstallationSnapshot {
-        try adoptSourceState(prepared, migratedState: migratedState, restoring: true, configuration: configuration, consent: consent)
+        try adoptSourceState(prepared, migratedState: migratedState, referenceChanges: referenceChanges,
+                             restoring: true, configuration: configuration, consent: consent)
     }
 
-    private func adoptSourceState(_ prepared: SourceUpdateSnapshot, migratedState: SourcePublicState?, restoring: Bool,
+    private func adoptSourceState(_ prepared: SourceUpdateSnapshot, migratedState: SourcePublicState?,
+                                  referenceChanges: SourceReferenceChanges?, restoring: Bool,
                                   configuration: [SourceSettingValue], consent: SourceCredentialReadConsent) throws -> SourceInstallationSnapshot {
         try SourceSettingValue.validate(configuration)
         return try changeSource(prepared.installation) { db, current in
             guard (current.state == .removed) == restoring else { throw SourceInstallationFailure.invalidState }
             let actual = try Self.sourceUpdateSnapshot(db, importID: prepared.candidate.id, expected: current)
             guard actual == prepared else { throw SourceUpdateFailure.staleInventory }
-            guard actual.candidateMetadata.referenceVersion == current.metadata.referenceVersion else {
-                throw SourceInstallationFailure.migrationRequired
+            if actual.candidateMetadata.referenceVersion != current.metadata.referenceVersion {
+                guard let referenceChanges else { throw SourceInstallationFailure.migrationRequired }
+                try Self.adoptReferenceChanges(db, plan: SourceReferenceAdoption(prepared: actual, changes: referenceChanges))
+            } else {
+                guard referenceChanges == nil else { throw SourceUpdateFailure.invalidMigration }
             }
             let stateChanges = actual.candidateMetadata.stateVersion != current.metadata.stateVersion
             if stateChanges {

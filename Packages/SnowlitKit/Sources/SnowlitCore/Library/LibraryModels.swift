@@ -5,12 +5,16 @@ public struct LibraryBook: Equatable, Sendable {
     public let reference: SourceBookReference
     public let title: String
     public let author: String?
+    public let referenceInvalidation: SourceReferenceInvalidation?
+    public var networkReference: SourceBookReference? { referenceInvalidation == nil ? reference : nil }
 
-    public init(id: LocalBookID, reference: SourceBookReference, title: String, author: String?) {
+    public init(id: LocalBookID, reference: SourceBookReference, title: String, author: String?,
+                referenceInvalidation: SourceReferenceInvalidation? = nil) {
         self.id = id
         self.reference = reference
         self.title = title
         self.author = author
+        self.referenceInvalidation = referenceInvalidation
     }
 }
 

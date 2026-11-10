@@ -47,12 +47,13 @@ public actor LibraryDatabase: LibraryStore {
                 try Self.migrateBookReferences(db)
                 try Self.migrateSourceInventoryRevision(db)
                 try Self.migrateChapterReferences(db)
+                try Self.migrateSourceReferenceHistory(db)
             }
         } else {
             let version = try queue.read { db in
                 let version = try Int.fetchOne(db, sql: "PRAGMA user_version")
                 guard try Int.fetchOne(db, sql: "PRAGMA application_id") == 0x534e4c54,
-                      let version, (1...7).contains(version) else {
+                      let version, (1...8).contains(version) else {
                     throw Failure.unsupportedSchema
                 }
                 guard try String.fetchOne(db, sql: "PRAGMA quick_check") == "ok",
@@ -81,12 +82,13 @@ public actor LibraryDatabase: LibraryStore {
                 }
                 if version >= 6 { try Self.validateSourceInventoryRevisionSchema(db) }
                 if version >= 7 { try Self.validateChapterReferenceSchema(db) }
+                if version >= 8 { try Self.validateSourceReferenceHistorySchema(db) }
                 return version
             }
-            if version != 7 {
+            if version != 8 {
                 guard !readOnly else { throw Failure.migrationRequired }
                 try queue.write { db in
-                    guard let current = try Int.fetchOne(db, sql: "PRAGMA user_version"), (1...7).contains(current) else {
+                    guard let current = try Int.fetchOne(db, sql: "PRAGMA user_version"), (1...8).contains(current) else {
                         throw Failure.unsupportedSchema
                     }
                     if current == 1 { try db.execute(sql: Self.publicStateSchema) }
@@ -95,6 +97,7 @@ public actor LibraryDatabase: LibraryStore {
                     if current < 5 { try Self.migrateBookReferences(db) }
                     if current < 6 { try Self.migrateSourceInventoryRevision(db) }
                     if current < 7 { try Self.migrateChapterReferences(db) }
+                    if current < 8 { try Self.migrateSourceReferenceHistory(db) }
                 }
             }
         }
@@ -134,6 +137,9 @@ public actor LibraryDatabase: LibraryStore {
         try checkOpen()
         let token = CatalogWriteToken(bookID: bookID, requestID: UUID())
         try queue.write { db in
+            guard try Self.decodeBook(Self.bookRow(db, bookID)).networkReference != nil else {
+                throw LibraryModelError.unavailableReference
+            }
             try db.execute(sql: "UPDATE library_book SET catalog_request=? WHERE id=?",
                            arguments: [token.requestID.uuidString, bookID.rawValue.uuidString])
             guard db.changesCount == 1 else { throw Failure.missingBook }
@@ -150,7 +156,7 @@ public actor LibraryDatabase: LibraryStore {
             let row = try Self.bookRow(db, token.bookID)
             let request: String? = row["catalog_request"]
             guard request == token.requestID.uuidString else { return false }
-            guard try Self.decodeBook(row).reference == catalog.book else {
+            guard try Self.decodeBook(row).networkReference == catalog.book else {
                 throw LibraryModelError.differentBook
             }
             let id = token.bookID.rawValue.uuidString
@@ -256,10 +262,14 @@ public actor LibraryDatabase: LibraryStore {
         guard let id = UUID(uuidString: rawID), let installation = UUID(uuidString: rawInstallation) else {
             throw Failure.inconsistentData
         }
+        // Earlier migrations decode books before schema 8 adds this column.
+        let rawInvalidation: String? = row.columnNames.contains("reference_invalidation") ? row["reference_invalidation"] : nil
+        let invalidation = rawInvalidation.flatMap(SourceReferenceInvalidation.init(rawValue:))
+        guard rawInvalidation == nil || invalidation != nil else { throw Failure.inconsistentData }
         return try LibraryBook(id: LocalBookID(id),
             reference: SourceBookReference(installationID: SourceInstallationID(installation),
                                            referenceVersion: row["reference_version"], key: row["remote_key"]),
-            title: row["title"], author: row["author"])
+            title: row["title"], author: row["author"], referenceInvalidation: invalidation)
     }
 
     private static let schema = """

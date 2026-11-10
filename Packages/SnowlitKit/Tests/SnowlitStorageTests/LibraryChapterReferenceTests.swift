@@ -5,6 +5,7 @@ import Testing
 @testable import SnowlitStorage
 
 func removeChapterReferenceSchema(_ db: Database) throws {
+    try removeSourceReferenceHistorySchema(db)
     for action in ["insert", "update", "delete"] {
         try db.execute(sql: "DROP TRIGGER inventory_chapter_reference_\(action)")
     }

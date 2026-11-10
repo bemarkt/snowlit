@@ -45,7 +45,8 @@ extension LibraryDatabase {
         return try SourceUpdateSnapshot(installation: current, candidate: candidate, candidateMetadata: metadata,
             inventoryRevision: revision ?? 0, books: books,
             currentState: Self.publicState(db, installationID: current.id, version: current.metadata.stateVersion),
-            targetState: Self.publicState(db, installationID: current.id, version: metadata.stateVersion))
+            targetState: Self.publicState(db, installationID: current.id, version: metadata.stateVersion),
+            referenceHistory: Self.savedReferenceHistory(db, current.id))
     }
 
     /// SQLite owns invalidation, including writes made by another connection.
@@ -78,7 +79,7 @@ extension LibraryDatabase {
         for table in tables {
             for action in ["INSERT", "UPDATE", "DELETE"] {
                 let owner = action == "DELETE" ? "OLD" : "NEW"
-                let selection = table == "library_book" || table == "book_reference"
+                let selection = ["library_book", "book_reference", "source_reference_transition"].contains(table)
                     ? "SELECT \(owner).installation, 1"
                     : "SELECT installation, 1 FROM library_book WHERE id=\(owner).book_id"
                 // A WHERE in the SELECT disambiguates SQLite's UPSERT grammar.

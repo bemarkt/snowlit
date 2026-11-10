@@ -81,4 +81,5 @@ public enum LibraryModelError: Error, Equatable, Sendable {
     case duplicateChapter
     case invalidPosition
     case invalidPreferences
+    case unavailableReference
 }
