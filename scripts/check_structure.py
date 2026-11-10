@@ -130,6 +130,10 @@ def check_project():
             "Package source must not be registered in Xcode")
     app_products = {objects[p]["productName"] for p in targets["Snowlit"]["packageProductDependencies"]}
     require(app_products == set(DEPENDENCIES), "App must link the four package products")
+    probe_products = {objects[p]["productName"]
+                      for p in targets["SnowlitAppTests"]["packageProductDependencies"]}
+    require(probe_products == {"SnowlitCore", "YingxueKit", "SnowlitReader"},
+            "Hosted probes must use the package products")
     references = [objects[p] for p in root["packageReferences"]]
     require(len(references) == 1
             and references[0]["isa"] == "XCLocalSwiftPackageReference"
@@ -146,6 +150,10 @@ def check_project():
             require(str(settings["IPHONEOS_DEPLOYMENT_TARGET"]) == "26.0", "Incorrect iOS minimum")
             require(str(settings["SWIFT_VERSION"]) == "6.0", "Swift 6 is required")
             require(settings["SWIFT_STRICT_CONCURRENCY"] == "complete", "Strict concurrency is required")
+            if target["name"] == "SnowlitAppTests":
+                require(settings.get("BUNDLE_LOADER") == "$(TEST_HOST)"
+                        and settings.get("TEST_HOST") == "$(BUILT_PRODUCTS_DIR)/Snowlit.app/$(BUNDLE_EXECUTABLE_FOLDER_PATH)/Snowlit",
+                        "Platform probes must run inside the application host")
     print("Xcode source ownership, linkage and build settings: passed")
 
 

@@ -12,6 +12,13 @@
 		A10000000000000000000004 /* StartupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* StartupView.swift */; };
 		A10000000000000000000021 /* StartupModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* StartupModelTests.swift */; };
 		A10000000000000000000022 /* StartupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* StartupUITests.swift */; };
+		A10000000000000000000023 /* FixtureScenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* FixtureScenario.swift */; };
+		A10000000000000000000024 /* WebKitRuntimeProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000024 /* WebKitRuntimeProbeTests.swift */; };
+		A10000000000000000000025 /* WebKitRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000025 /* WebKitRecoveryTests.swift */; };
+		A10000000000000000000026 /* ReaderProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000026 /* ReaderProbeTests.swift */; };
+		A10000000000000000000031 /* SnowlitCore in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* SnowlitCore */; };
+		A10000000000000000000033 /* YingxueKit in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000003 /* YingxueKit */; };
+		A10000000000000000000034 /* SnowlitReader in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000004 /* SnowlitReader */; };
 		A10000000000000000000011 /* SnowlitCore in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000001 /* SnowlitCore */; };
 		A10000000000000000000012 /* SnowlitStorage in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000002 /* SnowlitStorage */; };
 		A10000000000000000000013 /* YingxueKit in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000003 /* YingxueKit */; };
@@ -33,10 +40,14 @@
 		A20000000000000000000013 /* SnowlitUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SnowlitUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000021 /* StartupModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/StartupModelTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000022 /* StartupUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitUITests/StartupUITests.swift; sourceTree = "<group>"; };
+		A20000000000000000000023 /* FixtureScenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/FixtureScenario.swift; sourceTree = "<group>"; };
+		A20000000000000000000024 /* WebKitRuntimeProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/WebKitRuntimeProbeTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000025 /* WebKitRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/WebKitRecoveryTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000026 /* ReaderProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/ReaderProbeTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		A30000000000000000000011 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
+		A30000000000000000000011 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000031, A10000000000000000000033, A10000000000000000000034,); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
@@ -87,6 +98,10 @@
 			children = (
 				A20000000000000000000021 /* StartupModelTests.swift */,
 				A20000000000000000000022 /* StartupUITests.swift */,
+				A20000000000000000000023 /* FixtureScenario.swift */,
+				A20000000000000000000024 /* WebKitRuntimeProbeTests.swift */,
+				A20000000000000000000025 /* WebKitRecoveryTests.swift */,
+				A20000000000000000000026 /* ReaderProbeTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -101,6 +116,7 @@
 			buildRules = ();
 			dependencies = (A00000000000000000000011,);
 			name = SnowlitAppTests;
+			packageProductDependencies = (A90000000000000000000001, A90000000000000000000003, A90000000000000000000004,);
 			productName = SnowlitAppTests;
 			productReference = A20000000000000000000012;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -182,7 +198,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A30000000000000000000012 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000021,); runOnlyForDeploymentPostprocessing = 0; };
+		A30000000000000000000012 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000021, A10000000000000000000023, A10000000000000000000024, A10000000000000000000025, A10000000000000000000026,); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000022 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000022,); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;

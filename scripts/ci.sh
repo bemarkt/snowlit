@@ -75,7 +75,7 @@ PY
   )
 fi
 
-test_selection=(-only-testing:SnowlitAppTests -only-testing:SnowlitUITests)
+test_selection=(-only-testing:SnowlitAppTests/StartupModelTests -only-testing:SnowlitUITests)
 if [ "$kind" = tablet ]; then
   test_selection=(-only-testing:SnowlitUITests)
 fi

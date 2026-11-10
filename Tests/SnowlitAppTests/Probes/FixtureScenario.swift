@@ -16,6 +16,7 @@ final class FixtureScenario {
 
     /// A missing fixture fails the test. No environment-based skip can turn it green.
     static func withScenario(_ body: @MainActor (FixtureScenario) async throws -> Void) async throws {
+        try #require(Bundle.main.bundleIdentifier == "io.github.bemarkt.snowlit")
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 10
         configuration.timeoutIntervalForResource = 15

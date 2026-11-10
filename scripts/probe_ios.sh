@@ -11,8 +11,8 @@ case "$kind" in
   *) printf 'Usage: bash scripts/probe_ios.sh phone|tablet\n' >&2; exit 2 ;;
 esac
 case "$mode" in
-  integration) selection=(-only-testing:YingxueKitTests -only-testing:YingxueWebKitTests -only-testing:SnowlitReaderTests) ;;
-  recovery) selection=(-only-testing:YingxueRecoveryTests) ;;
+  integration) selection=(-only-testing:SnowlitAppTests/WebKitRuntimeProbeTests -only-testing:SnowlitAppTests/ReaderProbeTests) ;;
+  recovery) selection=(-only-testing:SnowlitAppTests/WebKitRecoveryTests) ;;
   *) printf 'Unknown probe mode: %s\n' "$mode" >&2; exit 2 ;;
 esac
 
@@ -34,7 +34,7 @@ files = subprocess.check_output(["git", "ls-files", "--cached", "--others", "--e
 records = []
 for raw in sorted(set(files.split(b"\0")) - {b""}):
     path = pathlib.Path(raw.decode())
-    if path.is_file() and (str(path).startswith("Packages/") or str(path).startswith("scripts/")):
+    if path.is_file() and path.suffix in (".swift", ".sh", ".py", ".mjs", ".pbxproj", ".xcscheme", ".yml"):
         records.append({"path": path.as_posix(), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
 pathlib.Path(sys.argv[1]).write_text(json.dumps(records, indent=2) + "\n")
 PY
@@ -86,26 +86,13 @@ simulator="$(python3 scripts/create_simulator.py "$device" \
 xcrun simctl boot "$simulator"
 xcrun simctl bootstatus "$simulator" -b
 
-cd Packages/SnowlitKit
-xcodebuild -list -json > "$evidence/package-schemes.json"
-package_scheme="$(python3 - "$evidence/package-schemes.json" <<'PY'
-import json, sys
-data = json.load(open(sys.argv[1]))
-schemes = [s for entry in data.values() if isinstance(entry, dict) for s in entry.get("schemes", [])]
-for name in ("SnowlitKit-Package", "SnowlitKit"):
-    if name in schemes:
-        print(name)
-        break
-else:
-    raise SystemExit(f"Package test scheme not found: {schemes}")
-PY
-)"
+xcodebuild -list -json -project Snowlit.xcodeproj > "$evidence/project-schemes.json"
 sampling=()
 if [ "$mode" = recovery ]; then
   sampling=(--process-samples "$evidence/process-samples.jsonl")
 fi
 python3 "$root/scripts/probes/supervise.py" --timeout 900 --log "$evidence/webkit-tests.log" "${sampling[@]}" -- \
-  xcodebuild test -scheme "$package_scheme" -destination "platform=iOS Simulator,id=$simulator" \
+  xcodebuild test -project Snowlit.xcodeproj -scheme Snowlit -destination "platform=iOS Simulator,id=$simulator" \
   -derivedDataPath "$root/build/runtime-$kind-$mode" -resultBundlePath "$evidence/RuntimeTests.xcresult" \
   "${selection[@]}" \
   -parallel-testing-enabled NO -test-timeouts-enabled YES \

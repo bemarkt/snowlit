@@ -11,6 +11,7 @@ struct WebKitRecoveryTests {
     /// and a process deadline. A new WKWebView is not assumed to own a new WebContent process.
     @Test(arguments: ["spin", "never"])
     func observeRecoveryAfterAbandoningUncooperativeJavaScript(fault: String) async throws {
+        try #require(Bundle.main.bundleIdentifier == "io.github.bemarkt.snowlit")
         let clock = ContinuousClock()
         let page = URL(string: "http://127.0.0.1:18731/health")!
         for repetition in 1...3 {
