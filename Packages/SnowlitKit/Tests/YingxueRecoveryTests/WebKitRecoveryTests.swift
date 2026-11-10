@@ -17,6 +17,8 @@ struct WebKitRecoveryTests {
             var probe: WebKitRuntimeProbe? = WebKitRuntimeProbe(dataStore: .nonPersistent())
             weak var abandonedView: WKWebView? = probe?.webView
             try await probe!.load(page)
+            observe("baseline", fault: fault, repetition: repetition)
+            try await Task.sleep(for: .seconds(1))
             let heartbeat = MainActorHeartbeat()
             // Test-owned task is cancelled and awaited below on success or failure.
             let ticker = Task { @MainActor in
@@ -30,6 +32,7 @@ struct WebKitRecoveryTests {
             let started = clock.now
             do {
                 let body = fault == "spin" ? "while (true) {}" : "return await new Promise(() => {});"
+                observe("execution-started", fault: fault, repetition: repetition)
                 await #expect(throws: ProbeResultRegistry<String>.Interruption.timedOut) {
                     try await probe!.evaluate(body, timeout: .milliseconds(300))
                 }
@@ -38,6 +41,7 @@ struct WebKitRecoveryTests {
                 #expect(probe!.results.pendingCount == 0)
                 probe!.close()
                 probe = nil
+                observe("closed", fault: fault, repetition: repetition)
                 let releaseDeadline = clock.now.advanced(by: .seconds(3))
                 while abandonedView != nil && clock.now < releaseDeadline {
                     try await Task.sleep(for: .milliseconds(20))
@@ -49,6 +53,10 @@ struct WebKitRecoveryTests {
                 try await replacement.load(page, timeout: .seconds(5))
                 #expect(try await replacement.evaluate("return 'fresh operation';", timeout: .seconds(5)) == "fresh operation")
                 print("RecoveryObservation fault=\(fault) repetition=\(repetition) waiter=\(waitDuration) heartbeats=\(heartbeat.ticks) newOperation=\(recoveryStarted.duration(to: clock.now)) wrapperReleased=\(abandonedView == nil)")
+                observe("replacement-ready", fault: fault, repetition: repetition)
+                // Keep the test process alive so host sampling can observe post-close CPU/RSS.
+                try await Task.sleep(for: .seconds(2))
+                observe("observation-ended", fault: fault, repetition: repetition)
             } catch {
                 probe?.close()
                 ticker.cancel()
@@ -60,6 +68,10 @@ struct WebKitRecoveryTests {
         }
         // Even if every assertion passes, CPU/RSS/process sampling is still required.
         // Waiter completion and released Swift wrappers do not prove JS/resource termination.
+    }
+
+    private func observe(_ stage: String, fault: String, repetition: Int) {
+        print("RecoveryEvent epochSeconds=\(Date().timeIntervalSince1970) stage=\(stage) fault=\(fault) repetition=\(repetition)")
     }
 
     @MainActor

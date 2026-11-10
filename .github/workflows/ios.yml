@@ -30,11 +30,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Build and test
+        id: baseline
         run: bash scripts/ci.sh "${{ matrix.device }}"
       - name: Run isolated WebKit integration probes
         run: bash scripts/probe_ios.sh "${{ matrix.device }}"
       - name: Observe recovery from uncooperative JavaScript
-        if: matrix.device == 'phone'
+        if: ${{ !cancelled() && matrix.device == 'phone' && steps.baseline.conclusion == 'success' }}
         run: bash scripts/probe_ios.sh phone recovery
       - name: Upload verification evidence
         if: always()

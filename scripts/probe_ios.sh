@@ -40,6 +40,8 @@ pathlib.Path(sys.argv[1]).write_text(json.dumps(records, indent=2) + "\n")
 PY
 
 node --test scripts/probes/site.test.mjs > "$evidence/fixture-tests.log" 2>&1
+python3 -m unittest discover -s scripts/probes -p 'test_process_samples.py' \
+  > "$evidence/process-sample-parser-tests.log" 2>&1
 fixture_pid=""
 simulator=""
 cleanup() {
@@ -98,7 +100,11 @@ else:
     raise SystemExit(f"Package test scheme not found: {schemes}")
 PY
 )"
-python3 "$root/scripts/probes/supervise.py" --timeout 900 --log "$evidence/webkit-tests.log" -- \
+sampling=()
+if [ "$mode" = recovery ]; then
+  sampling=(--process-samples "$evidence/process-samples.jsonl")
+fi
+python3 "$root/scripts/probes/supervise.py" --timeout 900 --log "$evidence/webkit-tests.log" "${sampling[@]}" -- \
   xcodebuild test -scheme "$package_scheme" -destination "platform=iOS Simulator,id=$simulator" \
   -derivedDataPath "$root/build/runtime-$kind-$mode" -resultBundlePath "$evidence/RuntimeTests.xcresult" \
   "${selection[@]}" \
