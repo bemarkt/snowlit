@@ -25,7 +25,15 @@ final class ProbeResultRegistry<Value: Sendable> {
         let deadline: Task<Void, Never>
     }
 
-    private var generation = UUID()
+    /// Each waiter retains only its own generation until it resumes. A callback
+    /// can settle it before a native invalidation arrives in the same actor turn.
+    /// Keep that cause without accumulating a history of retired generations.
+    private final class Generation {
+        let id = UUID()
+        var interruption: Interruption?
+    }
+
+    private var generation = Generation()
     private var pending: [Ticket: Pending] = [:]
     private var isClosed = false
     private(set) var discardedResults = 0
@@ -40,39 +48,49 @@ final class ProbeResultRegistry<Value: Sendable> {
     ) async throws -> Value {
         try Task.checkCancellation()
         guard !isClosed else { throw Interruption.closed }
-        let ticket = Ticket(generation: generation, operation: UUID())
+        let issuedGeneration = generation
+        let ticket = Ticket(generation: issuedGeneration.id, operation: UUID())
 
-        let value: Value = try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
-                // A cancellation before registration must not start external work.
-                guard !Task.isCancelled else {
-                    continuation.resume(throwing: Interruption.cancelled)
-                    return
-                }
-                // One owned timer per pending operation. Every settlement cancels it.
-                // No task group waits for an uncooperative JavaScript child to finish.
-                let deadline = Task { @MainActor [weak self] in
-                    do {
-                        try await Task.sleep(for: timeout)
-                    } catch {
-                        return // The owning operation settled and cancelled its timer.
+        let value: Value
+        do {
+            value = try await withTaskCancellationHandler {
+                try await withCheckedThrowingContinuation { continuation in
+                    // A cancellation before registration must not start external work.
+                    guard !Task.isCancelled else {
+                        continuation.resume(throwing: Interruption.cancelled)
+                        return
                     }
-                    self?.interrupt(ticket, because: .timedOut)
+                    // One owned timer per pending operation. Every settlement cancels it.
+                    // No task group waits for an uncooperative JavaScript child to finish.
+                    let deadline = Task { @MainActor [weak self] in
+                        do {
+                            try await Task.sleep(for: timeout)
+                        } catch {
+                            return // The owning operation settled and cancelled its timer.
+                        }
+                        self?.interrupt(ticket, because: .timedOut)
+                    }
+                    pending[ticket] = Pending(continuation: continuation, deadline: deadline)
+                    start(ticket)
                 }
-                pending[ticket] = Pending(continuation: continuation, deadline: deadline)
-                start(ticket)
+            } onCancel: {
+                // A bounded hop to the actor that owns the continuation; no persistent worker.
+                Task { @MainActor [weak self] in
+                    self?.interrupt(ticket, because: .cancelled)
+                }
             }
-        } onCancel: {
-            // A bounded hop to the actor that owns the continuation; no persistent worker.
-            Task { @MainActor [weak self] in
-                self?.interrupt(ticket, because: .cancelled)
-            }
+        } catch {
+            // Invalidation also applies to a failure delivered before resumption.
+            // In particular WebKit can fail a JS callback just before notifying
+            // its navigation delegate that the owning WebContent process ended.
+            if let reason = issuedGeneration.interruption { throw reason }
+            throw error
         }
         // Cancellation can race a successful callback before the cancellation hop
         // reaches this actor. Never hand that value back to an already-cancelled caller.
         try Task.checkCancellation()
         guard !isClosed else { throw Interruption.closed }
-        guard ticket.generation == generation else { throw Interruption.staleGeneration }
+        guard ticket.generation == generation.id else { throw Interruption.staleGeneration }
         return value
     }
 
@@ -80,7 +98,7 @@ final class ProbeResultRegistry<Value: Sendable> {
     /// resumed in this same actor turn, so invalidation cannot interleave with acceptance.
     @discardableResult
     func resolve(_ ticket: Ticket, with result: Result<Value, any Error>) -> Bool {
-        guard ticket.generation == generation,
+        guard ticket.generation == generation.id,
               let operation = pending.removeValue(forKey: ticket) else {
             discardedResults += 1
             return false
@@ -91,7 +109,8 @@ final class ProbeResultRegistry<Value: Sendable> {
     }
 
     func invalidate(because reason: Interruption) {
-        generation = UUID()
+        generation.interruption = reason
+        generation = Generation()
         let operations = pending.values
         pending.removeAll()
         for operation in operations {

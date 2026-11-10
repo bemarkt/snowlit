@@ -115,6 +115,37 @@ struct ProbeResultRegistryTests {
         #expect(recovered == "recovered")
     }
 
+    @Test(arguments: [Registry.Interruption.webContentTerminated, .sourceChanged, .sessionChanged])
+    func invalidationBeforeFailureResumesPreservesItsNativeCause(reason: Registry.Interruption) async throws {
+        let registry = Registry()
+        let callbackError = NSError(domain: "WKErrorDomain", code: 5)
+        await #expect(throws: reason) {
+            try await registry.perform(timeout: .seconds(2)) { ticket in
+                #expect(registry.resolve(ticket, with: .failure(callbackError)))
+                registry.invalidate(because: reason)
+                // Later generations must not replace this waiter's original cause.
+                registry.invalidate(because: .contextRebuilt)
+            }
+        }
+        #expect(registry.pendingCount == 0)
+        #expect(try await registry.perform(timeout: .seconds(2)) {
+            registry.resolve($0, with: .success("new generation"))
+        } == "new generation")
+    }
+
+    @Test func callbackErrorWithoutInvalidationIsNotReportedAsProcessTermination() async throws {
+        let registry = Registry()
+        let callbackError = NSError(domain: "WKErrorDomain", code: 5)
+        do {
+            _ = try await registry.perform(timeout: .seconds(2)) {
+                registry.resolve($0, with: .failure(callbackError))
+            }
+            Issue.record("Expected the original callback error")
+        } catch {
+            #expect((error as NSError) === callbackError)
+        }
+    }
+
     @Test func closingRejectsEveryWaiterAndCannotBeReopened() async throws {
         let registry = Registry()
         await #expect(throws: Registry.Interruption.closed) {
