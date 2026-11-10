@@ -5,6 +5,8 @@ struct StartupView: View {
     let sources: SourceLibraryModel
     let management: SourceManagementModel
     let candidateValidator: SourceCandidateValidator
+    let runtime: SourceRuntime
+    let authentication: SourceAuthenticationModel
     @State private var retry = 0
 
     var body: some View {
@@ -13,7 +15,8 @@ struct StartupView: View {
             case .idle, .preparing:
                 ProgressView("正在打开…")
             case .ready:
-                SourceLibraryView(model: sources, management: management, candidateValidator: candidateValidator)
+                SourceLibraryView(model: sources, management: management, candidateValidator: candidateValidator,
+                    runtime: runtime, authentication: authentication)
             case .failed(let operationID):
                 VStack(spacing: 16) {
                     Text("暂时无法打开")

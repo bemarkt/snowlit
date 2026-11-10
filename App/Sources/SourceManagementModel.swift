@@ -202,8 +202,9 @@ final class SourceManagementModel {
 
     /// Call remove only from the native removal confirmation. Reading data is
     /// retained by the store; website/Keychain cleanup remains separately retryable.
-    func perform(_ action: Action, expected: SourceInstallationSnapshot) async {
-        guard !isChanging, !isPreparing, !isValidating else { return }
+    @discardableResult
+    func perform(_ action: Action, expected: SourceInstallationSnapshot) async -> SourceInstallationSnapshot? {
+        guard !isChanging, !isPreparing, !isValidating else { return nil }
         isChanging = true; problem = nil; candidate = nil; preparationID = nil
         defer { isChanging = false }
         do {
@@ -228,10 +229,16 @@ final class SourceManagementModel {
                     throw SourceInstallationFailure.staleInstallation
                 }
                 changed += 1
+                return try .init(id: updated.id, importID: updated.importID, scriptSHA256: updated.scriptSHA256,
+                    metadata: updated.metadata, revision: updated.revision + 1, state: updated.state,
+                    configuration: updated.configuration, allowsCredentialRead: updated.allowsCredentialRead,
+                    websiteSessionID: updated.websiteSessionID, pendingCleanup: nil)
             }
+            return updated
         } catch {
-            guard !(error is CancellationError), !Task.isCancelled else { return }
+            guard !(error is CancellationError), !Task.isCancelled else { return nil }
             problem = .init(message: Self.message(for: error))
+            return nil
         }
     }
 

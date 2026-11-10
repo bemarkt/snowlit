@@ -395,6 +395,25 @@ struct SourceManagementModelTests {
         }
     }
 
+    @Test func signOutReturnsTheNewSnapshotOnlyAfterCleanupCompletes() async throws {
+        try await withLibrary { _, library in
+            let current = try await Self.install(library)
+            let pending = PendingCandidateValidation()
+            let model = Self.model(library, cleanup: { _, _ in await pending.run() })
+            let work = Task { await model.perform(.signOut, expected: current) }
+            await pending.waitUntilStarted()
+            let during = try await library.sourceInstallations()
+            #expect(during.first?.pendingCleanup != nil && during.first?.canExecute == false)
+            #expect(model.isChanging)
+            pending.finish()
+            let returned = await work.value
+            let actual = try await library.sourceInstallations()
+            #expect(returned == actual.first && returned?.canExecute == true)
+            #expect(returned?.id == current.id && returned?.websiteSessionID != current.websiteSessionID)
+            #expect(returned?.pendingCleanup == nil && !model.isChanging && model.problem == nil)
+        }
+    }
+
     private enum FixtureFailure: Error { case requested }
 
     private static func model(_ library: LibraryDatabase,

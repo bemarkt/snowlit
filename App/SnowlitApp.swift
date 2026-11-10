@@ -22,11 +22,13 @@ struct SnowlitApp: App {
                 RuntimeLifecycleProbeView()
             } else {
                 StartupView(model: composition.startup, sources: composition.sources,
-                    management: composition.management, candidateValidator: composition.candidateValidator)
+                    management: composition.management, candidateValidator: composition.candidateValidator,
+                    runtime: composition.runtime, authentication: composition.authentication)
             }
             #else
             StartupView(model: composition.startup, sources: composition.sources,
-                management: composition.management, candidateValidator: composition.candidateValidator)
+                management: composition.management, candidateValidator: composition.candidateValidator,
+                runtime: composition.runtime, authentication: composition.authentication)
             #endif
         }
     }

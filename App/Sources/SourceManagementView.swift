@@ -7,11 +7,15 @@ struct SourceManagementView: View {
     let library: SourceLibraryModel
     let management: SourceManagementModel
     let candidateValidator: SourceCandidateValidator
+    let authentication: SourceAuthenticationModel
     @State private var adoption: SourceManagementModel.Candidate?
     @State private var showRemoval = false
     @State private var removalExpected: SourceInstallationSnapshot?
     @State private var prepareRequest = 0
     @State private var actionRequest: ActionRequest?
+    @State private var showLogin = false
+    @State private var loginExpected: SourceInstallationSnapshot?
+    @State private var loginRequest = 0
 
     private struct ActionRequest: Identifiable {
         let id = UUID()
@@ -52,6 +56,13 @@ struct SourceManagementView: View {
                 }
             } else if let installed, installed.scriptSHA256 == item.script.sha256, installed.state != .removed {
                 Section("管理") {
+                    if installed.canExecute && !item.manifest.authentication.isEmpty {
+                        if let result = authentication.result(for: installed) { Text(result.message).accessibilityIdentifier("sources.authentication.result") }
+                        Button("登录或重新登录网站") { loginExpected = installed; showLogin = true }
+                            .frame(minHeight: 44).accessibilityIdentifier("sources.authenticate")
+                        if authentication.busy == installed.id { ProgressView("正在准备网站登录…") }
+                        if let problem = authentication.problem { Text(problem).accessibilityIdentifier("sources.authentication.failure") }
+                    }
                     Button(installed.state == .enabled ? "停用书源" : "启用书源") {
                         request(installed.state == .enabled ? .disable : .enable, installed)
                     }
@@ -75,7 +86,7 @@ struct SourceManagementView: View {
         }
         .navigationTitle("管理书源")
         .navigationBarTitleDisplayMode(.inline)
-        .disabled(management.isChanging)
+        .disabled(management.isChanging || authentication.busy != nil)
         .task(id: prepareRequest) {
             guard prepareRequest > 0 else { return }
             await management.prepare(importID: item.id)
@@ -85,6 +96,10 @@ struct SourceManagementView: View {
             if let actionRequest { await management.perform(actionRequest.action, expected: actionRequest.expected) }
         }
         .task(id: management.changed) { await library.refresh() }
+        .task(id: authentication.changed) { await library.refresh() }
+        .task(id: loginRequest) {
+            if loginRequest > 0, let loginExpected { await authentication.authenticate(expected: loginExpected) }
+        }
         .onDisappear { management.cancelPreparation() }
         .sheet(item: $adoption, onDismiss: { management.cancelPreparation() }) { candidate in
             SourceAdoptionView(candidate: candidate, management: management, validator: candidateValidator)
@@ -96,6 +111,12 @@ struct SourceManagementView: View {
             Button("取消", role: .cancel) {}
         } message: {
             Text("本机书籍、目录、阅读进度和已保存正文会保留；网站登录数据会清理。")
+        }
+        .confirmationDialog("开始网站登录？", isPresented: $showLogin, titleVisibility: .visible) {
+            Button("退出原网站会话并登录") { loginRequest += 1 }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("每个书源保留一组网站登录。继续会先清理本机保存的网站会话；书架、进度和正文缓存保留。")
         }
     }
 

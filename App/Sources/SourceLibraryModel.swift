@@ -10,7 +10,12 @@ final class SourceLibraryModel {
     struct SavedImport: Identifiable {
         let receipt: SourceImportRecord
         let script: SourceScriptSnapshot
+        let manifest: YingxueWire.Manifest
         var id: UUID { receipt.id }
+        init(receipt: SourceImportRecord, script: SourceScriptSnapshot) throws {
+            self.receipt = receipt; self.script = script
+            manifest = try SourceFileHeader(bytes: script.bytes).manifest
+        }
     }
 
     struct Review: Identifiable {
@@ -65,7 +70,7 @@ final class SourceLibraryModel {
                 guard let script = try await library.sourceScript(sha256: receipt.scriptSHA256, digest: digest) else {
                     throw SourceInstallationFailure.missingImport
                 }
-                loaded.append(.init(receipt: receipt, script: script))
+                loaded.append(try .init(receipt: receipt, script: script))
             }
             let installed = try await library.sourceInstallations()
             try Task.checkCancellation()
