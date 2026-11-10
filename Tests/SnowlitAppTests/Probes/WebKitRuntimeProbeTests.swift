@@ -59,6 +59,39 @@ struct WebKitRuntimeProbeTests {
         }
     }
 
+    @Test func hostOnlyCookiesStayOnTheirOriginAndRejectAnUnmatchedDomain() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            var components = try #require(URLComponents(url: fixture.base, resolvingAgainstBaseURL: false))
+            components.host = "localhost"
+            let namedBase = try #require(components.url)
+            let store = WKWebsiteDataStore.nonPersistent()
+            let address = WebKitRuntimeProbe(dataStore: store)
+            let named = WebKitRuntimeProbe(dataStore: store)
+            let native = nativeSession()
+            defer { address.close(); named.close(); native.invalidateAndCancel() }
+            try await address.load(fixture.url("page"))
+            try await named.load(namedBase.appendingPathComponent("page"))
+            #expect(try await responseCode(address, at: fixture.url("cookies/host-issue")) == "200")
+            #expect(try await cookies(named, at: namedBase.appendingPathComponent("cookies")).isEmpty)
+            #expect(try await responseCode(named, at: namedBase.appendingPathComponent("cookies/host-issue")) == "200")
+            #expect(try await cookies(address, at: fixture.url("cookies")) == ["probeHost=127.0.0.1"])
+            #expect(try await cookies(named, at: namedBase.appendingPathComponent("cookies")) == ["probeHost=localhost"])
+            let exported = await store.httpCookieStore.allCookies()
+            #expect(exported.count == 2)
+            #expect(exported.allSatisfy { $0.name == "probeHost" && $0.isHTTPOnly })
+            #expect(Set(exported.map(\.domain)).count == 2)
+            let nativeStore = try #require(native.configuration.httpCookieStorage)
+            for cookie in exported { nativeStore.setCookie(cookie) }
+            #expect(try await nativeCookies(native, at: fixture.url("cookies")) == ["probeHost=127.0.0.1"])
+            #expect(try await nativeCookies(native, at: namedBase.appendingPathComponent("cookies")) == ["probeHost=localhost"])
+            #expect(try await responseCode(address, at: fixture.url("cookies/host-clear")) == "200")
+            #expect(try await cookies(address, at: fixture.url("cookies")).isEmpty)
+            #expect(try await cookies(named, at: namedBase.appendingPathComponent("cookies")) == ["probeHost=localhost"])
+            let remaining = await store.httpCookieStore.allCookies()
+            #expect(remaining.count == 1 && remaining.first?.value == "localhost")
+        }
+    }
+
     @Test func formSubmissionAuthenticatesSharedContextsAndLogoutRevokesTheSession() async throws {
         try await FixtureScenario.withScenario { fixture in
             let sharedStore = WKWebsiteDataStore.nonPersistent()

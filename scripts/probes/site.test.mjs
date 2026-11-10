@@ -105,6 +105,25 @@ test('held requests release only after the test signals their gate', async t => 
   assert.deepEqual(await (await pending).json(), { released: 'chapter' });
 });
 
+test('host-cookie responses distinguish loopback hosts and include an intentionally invalid domain', async t => {
+  const { base } = await setup(t);
+  const named = new URL(base);
+  named.hostname = 'localhost';
+  for (const origin of [base, named.href]) {
+    const response = await fetch(`${origin}cookies/host-issue`);
+    assert.equal(response.status, 200);
+    const cookies = response.headers.getSetCookie();
+    assert.equal(cookies.length, 2);
+    assert.equal(cookies[0].split(';')[0], `probeHost=${new URL(origin).hostname}`);
+    assert.ok(!cookies[0].includes('Domain='));
+    assert.match(cookies[1], /Domain=example\.invalid/);
+    const cleared = await fetch(`${origin}cookies/host-clear`);
+    assert.match(cleared.headers.getSetCookie()[0], /Max-Age=0/);
+    assert.ok(!cleared.headers.getSetCookie()[0].includes('Domain='));
+  }
+  // This checks fixture behavior; only the Apple probes assess Cookie policy.
+});
+
 test('HTTP cancellation is observed and an independent subsequent request succeeds', async t => {
   const { base } = await setup(t);
   const controller = new AbortController();

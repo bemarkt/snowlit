@@ -144,6 +144,19 @@ export async function startFixture({ port = 0 } = {}) {
       case 'cookies':
       case 'nested/cookies':
         return send(response, 200, { cookies: cookieValues.filter(Boolean) });
+      case 'cookies/host-issue': {
+        const host = new URL(`http://${request.headers.host}`).hostname;
+        if (!['127.0.0.1', 'localhost'].includes(host)) {
+          return send(response, 400, { error: 'Unexpected fixture host' });
+        }
+        return send(response, 200, { issued: true }, undefined, { 'Set-Cookie': [
+          `probeHost=${host}; Path=${base}; HttpOnly; SameSite=Lax`,
+          `probeForeign=unmatched; Domain=example.invalid; Path=${base}; HttpOnly`,
+        ] });
+      }
+      case 'cookies/host-clear':
+        return send(response, 200, { cleared: true }, undefined,
+          { 'Set-Cookie': `probeHost=; Path=${base}; Max-Age=0; HttpOnly; SameSite=Lax` });
       case 'redirect':
         return send(response, 302, '', 'text/plain', { Location: `${base}content` });
       case 'status':
