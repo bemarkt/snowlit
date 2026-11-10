@@ -25,11 +25,14 @@ struct ReaderProbeTests {
                 let target = ProbeTextAnchor(documentID: document.id, revision: document.revision,
                                               paragraphID: "p12", utf16Offset: 0)
                 try window.restore(.init(anchor: target, y: 80))
+                #expect(abs(try window.visibleY(of: target) - 80) <= 1)
                 let visible = try window.capture()
                 #expect(visible.anchor.documentID == document.id)
                 for (width, size) in [(CGFloat(390), CGFloat(28)), (844, 18), (390, 20)] {
                     window.view.frame.size.width = width
                     try window.render(Array(documents[range]), fontSize: size, maintaining: visible)
+                    window.view.layoutIfNeeded()
+                    window.textView.layoutIfNeeded()
                     #expect(abs(try window.visibleY(of: visible.anchor) - visible.y) <= 1)
                     #expect(try window.capture().anchor.documentID == document.id)
                     #expect(window.textView.textLayoutManager != nil)

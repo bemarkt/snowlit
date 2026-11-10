@@ -6,6 +6,7 @@ import UIKit
 /// measurements here do not establish production long-book virtualization.
 @MainActor
 final class ProbeChapterWindow: UIViewController {
+    enum Failure: Error { case positionDidNotSettle }
     struct Position {
         let anchor: ProbeTextAnchor
         let y: CGFloat
@@ -64,12 +65,23 @@ final class ProbeChapterWindow: UIViewController {
     }
 
     func restore(_ position: Position) throws {
-        let delta = try visibleY(of: position.anchor) - position.y
-        let minimum = -textView.adjustedContentInset.top
-        let maximum = max(minimum, textView.contentSize.height - textView.bounds.height + textView.adjustedContentInset.bottom)
-        let y = min(maximum, max(minimum, textView.contentOffset.y + delta))
-        textView.setContentOffset(CGPoint(x: 0, y: y), animated: false)
-        textView.layoutIfNeeded()
+        // Moving the viewport can refine TextKit's paragraph geometry. Measure
+        // again after that layout, instead of accepting the pre-scroll estimate.
+        for pass in 1...3 {
+            view.layoutIfNeeded()
+            textView.layoutIfNeeded()
+            let delta = try visibleY(of: position.anchor) - position.y
+            let minimum = -textView.adjustedContentInset.top
+            let maximum = max(minimum, textView.contentSize.height - textView.bounds.height + textView.adjustedContentInset.bottom)
+            let requested = textView.contentOffset.y + delta
+            let y = min(maximum, max(minimum, requested))
+            textView.setContentOffset(CGPoint(x: 0, y: y), animated: false)
+            textView.layoutIfNeeded()
+            let observed = try visibleY(of: position.anchor)
+            print("ChapterWindowRestoration pass=\(pass) expectedY=\(position.y) observedY=\(observed) requestedOffset=\(requested) actualOffset=\(textView.contentOffset.y)")
+            if abs(observed - position.y) <= 0.5 { return }
+        }
+        throw Failure.positionDidNotSettle
     }
 
     func capture() throws -> Position {
