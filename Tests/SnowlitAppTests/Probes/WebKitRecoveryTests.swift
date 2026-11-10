@@ -97,8 +97,9 @@ struct WebKitRecoveryTests {
     @Test(arguments: ["spin", "never"])
     func observeRecoveryAfterAbandoningUncooperativeJavaScript(fault: String) async throws {
         try #require(Bundle.main.bundleIdentifier == "io.github.bemarkt.snowlit")
-        let window = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows).first(where: \.isKeyWindow))
+        let candidateWindow = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).first(where: \.isKeyWindow)
+        let window = try #require(candidateWindow)
         let clock = ContinuousClock()
         let page = URL(string: "http://127.0.0.1:18731/health")!
         for repetition in 1...3 {
