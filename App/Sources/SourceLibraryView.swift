@@ -208,7 +208,7 @@ private struct SourceImportReviewView: View {
     }
 }
 
-private struct SourceScriptDetailView: View {
+struct SourceScriptDetailView: View {
     let script: SourceScriptSnapshot
     let receipt: SourceImportRecord
 

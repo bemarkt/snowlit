@@ -32,6 +32,7 @@
 		A10000000000000000000014 /* SnowlitReader in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000004 /* SnowlitReader */; };
 		A10000000000000000000007 /* SourceLibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* SourceLibraryModel.swift */; };
 		A1000000000000000000000B /* SourceManagementModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* SourceManagementModel.swift */; };
+		A1000000000000000000000C /* SourceManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* SourceManagementView.swift */; };
 		A10000000000000000000008 /* SourceFileInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* SourceFileInspector.swift */; };
 		A10000000000000000000009 /* SourceFileReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* SourceFileReader.swift */; };
 		A1000000000000000000000A /* SourceLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* SourceLibraryView.swift */; };
@@ -67,6 +68,7 @@
 		A20000000000000000000026 /* ReaderProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/ReaderProbeTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000007 /* SourceLibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceLibraryModel.swift; sourceTree = "<group>"; };
 		A2000000000000000000000B /* SourceManagementModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceManagementModel.swift; sourceTree = "<group>"; };
+		A2000000000000000000000C /* SourceManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceManagementView.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* SourceFileInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceFileInspector.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* SourceFileReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceFileReader.swift; sourceTree = "<group>"; };
 		A2000000000000000000000A /* SourceLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceLibraryView.swift; sourceTree = "<group>"; };
@@ -115,6 +117,7 @@
 				A20000000000000000000008 /* SourceFileInspector.swift */,
 				A20000000000000000000007 /* SourceLibraryModel.swift */,
 				A2000000000000000000000B /* SourceManagementModel.swift */,
+				A2000000000000000000000C /* SourceManagementView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -258,6 +261,7 @@
 				A10000000000000000000008 /* SourceFileInspector.swift in Sources */,
 				A10000000000000000000007 /* SourceLibraryModel.swift in Sources */,
 				A1000000000000000000000B /* SourceManagementModel.swift in Sources */,
+				A1000000000000000000000C /* SourceManagementView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
