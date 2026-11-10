@@ -97,7 +97,7 @@ if [ "$mode" = recovery ]; then
 fi
 "${supervision[@]}" -- \
   xcodebuild test -project Snowlit.xcodeproj -scheme Snowlit -destination "platform=iOS Simulator,id=$simulator" \
-  -derivedDataPath "$root/build/runtime-$kind-$mode" -resultBundlePath "$evidence/RuntimeTests.xcresult" \
+  -derivedDataPath "$root/build/app-$kind" -resultBundlePath "$evidence/RuntimeTests.xcresult" \
   "${selection[@]}" \
   -parallel-testing-enabled NO -test-timeouts-enabled YES \
   -maximum-test-execution-time-allowance 60 CODE_SIGNING_ALLOWED=NO
