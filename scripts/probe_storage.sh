@@ -51,7 +51,9 @@ trap cleanup EXIT
 simulator="$(python3 scripts/create_simulator.py 'iPhone 17' "$runtime_id" "$evidence/simulator.json")"
 xcrun simctl boot "$simulator"
 xcrun simctl bootstatus "$simulator" -b
+printf 'Simulator boot completed. Installing the storage probe App.\n'
 xcrun simctl install "$simulator" "$app"
+printf 'App installed. Starting 24 storage interruption trials.\n'
 python3 scripts/probes/supervise.py --timeout 900 --log "$evidence/storage-tests.log" -- \
   python3 scripts/probes/storage_process.py "$simulator" "$sampler" "$evidence"
 printf '24 interruption trials and two fresh reopens each passed at %s\n' "$(git rev-parse HEAD)" \

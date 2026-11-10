@@ -6,6 +6,40 @@ from storage_process import DIGESTS, Probe, validate_marker, verify_reopened
 
 
 class StorageProcessEvidenceTests(unittest.TestCase):
+    def test_completed_operation_uses_simulator_lifecycle_and_observes_process_exit(self):
+        probe = object.__new__(Probe)
+        probe.simulator = "owned-simulator"
+        original = dict(pid=123, startedUTC="earlier", executable="Snowlit")
+        with patch.object(probe, "identity", side_effect=[original, original, None]), \
+             patch.object(probe, "command") as command, patch("storage_process.os.kill") as kill:
+            result = probe.finish(original)
+        command.assert_called_once_with("terminate", "owned-simulator", "io.github.bemarkt.snowlit")
+        kill.assert_not_called()
+        self.assertEqual(result["method"], "simctl-terminate")
+        self.assertTrue(result["observedGone"])
+
+    def test_checkpoint_still_requires_sigkill_of_the_exact_owned_identity(self):
+        probe = object.__new__(Probe)
+        original = dict(pid=123, startedUTC="earlier", executable="Snowlit")
+        with patch.object(probe, "identity", side_effect=[original, None]), \
+             patch("storage_process.os.kill") as kill, patch.object(probe, "command") as command, \
+             patch("storage_process.signal.SIGKILL", 9, create=True):
+            result = probe.interrupt(original)
+        self.assertEqual(kill.call_args.args[0], original["pid"])
+        self.assertEqual(kill.call_args.args[1], 9)
+        self.assertEqual(result["signal"], "SIGKILL")
+        command.assert_not_called()
+        self.assertTrue(result["observedGone"])
+
+    def test_completed_operation_never_terminates_a_changed_identity(self):
+        probe = object.__new__(Probe)
+        original = dict(pid=123, startedUTC="earlier", executable="Snowlit")
+        with patch.object(probe, "identity", return_value=dict(original, startedUTC="later")), \
+             patch.object(probe, "command") as command:
+            with self.assertRaises(ValueError):
+                probe.finish(original)
+        command.assert_not_called()
+
     def test_changed_process_identity_never_receives_a_signal(self):
         probe = object.__new__(Probe)
         original = dict(pid=123, startedUTC="earlier", executable="Snowlit")

@@ -90,12 +90,24 @@ class Probe:
         # Exact launched PID plus its native start time was checked immediately above.
         # No process-name, process-group, WebContent or other-user signals are sent.
         os.kill(pid, signal.SIGKILL)
+        return dict(method="checkpoint-interruption", signal="SIGKILL", **self.wait_for_exit(identity))
+
+    def finish(self, identity):
+        if self.identity(identity["pid"]) != identity:
+            raise ValueError("Completed App identity changed before termination")
+        # Completed seed/read operations are not fault injections. Ask the
+        # simulator lifecycle manager to terminate them before a fresh launch,
+        # instead of introducing three unrelated crashes per checkpoint trial.
+        self.command("terminate", self.simulator, BUNDLE)
+        return dict(method="simctl-terminate", **self.wait_for_exit(identity))
+
+    def wait_for_exit(self, identity):
         started = time.monotonic()
-        while self.identity(pid) == identity:
+        while self.identity(identity["pid"]) == identity:
             if time.monotonic() - started > 10:
-                raise TimeoutError("Interrupted App identity is still observable")
+                raise TimeoutError("Terminated App identity is still observable")
             time.sleep(0.05)
-        return dict(signal="SIGKILL", observedGone=True, elapsedSeconds=time.monotonic() - started)
+        return dict(observedGone=True, elapsedSeconds=time.monotonic() - started)
 
     def operation(self, trial, kind, action, point):
         mode = kind + "-" + action
@@ -104,7 +116,10 @@ class Probe:
                       startedUTC=datetime.now(timezone.utc).isoformat())
         self.operations.append(record)
         identity = None
+        started = time.monotonic()
+        marker = self.container / "Library/Caches/SnowlitStorageProcessProbes" / trial / (token + ".json")
         try:
+            print(f"Storage operation {mode}/{point} token={token}: launching", flush=True)
             output = self.command("launch", self.simulator, BUNDLE, "-snowlit-probe-storage",
                                   mode, trial, point, token)
             match = re.fullmatch(re.escape(BUNDLE) + r": ([1-9][0-9]*)\s*", output)
@@ -115,7 +130,8 @@ class Probe:
             if identity is None:
                 raise ValueError("Launched App exited before observation")
             record["process"] = identity
-            marker = self.container / "Library/Caches/SnowlitStorageProcessProbes" / trial / (token + ".json")
+            record["launchSeconds"] = time.monotonic() - started
+            print(f"Storage operation {mode}/{point} token={token}: pid={pid}, waiting for marker", flush=True)
             deadline = time.monotonic() + 20
             while not marker.exists():
                 if time.monotonic() >= deadline:
@@ -125,19 +141,26 @@ class Probe:
                 time.sleep(0.05)
             record["marker"] = json.loads(marker.read_text())
             details = validate_marker(record["marker"], token=token, mode=mode, point=point, pid=pid)
-            record["termination"] = self.interrupt(identity)
+            record["termination"] = self.interrupt(identity) if action == "write" else self.finish(identity)
             identity = None
             record["outcome"] = "passed"
+            print(f"Storage operation {mode}/{point} token={token}: completed", flush=True)
             return details
         except Exception as error:
             record["outcome"] = "failed"
             record["error"] = f"{type(error).__name__}: {error}"
+            # A launch command can time out after the App starts. Preserve any
+            # marker for diagnosis, but never accept it as a verified launch.
+            if "marker" not in record and marker.is_file():
+                record["unverifiedMarker"] = marker.read_text()
+            print(f"Storage operation {mode}/{point} token={token}: failed ({type(error).__name__})", flush=True)
             raise
         finally:
             try:
                 if identity is not None and self.identity(identity["pid"]) == identity:
                     record["cleanupTermination"] = self.interrupt(identity)
             finally:
+                record["elapsedSeconds"] = time.monotonic() - started
                 self.save()
 
     def save(self):
