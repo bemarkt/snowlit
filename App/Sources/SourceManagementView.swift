@@ -119,6 +119,7 @@ private struct SourceAdoptionView: View {
     @State private var allowCredentialRead = false
     @State private var restoreAssociation = false
     @State private var configuration: [SourceSettingValue]
+    @State private var acknowledgedChanges: Set<Data> = []
     @State private var confirmRequest = 0
 
     init(candidate: SourceManagementModel.Candidate, management: SourceManagementModel) {
@@ -161,6 +162,32 @@ private struct SourceAdoptionView: View {
                     Section("已有数据") {
                         Text("采用时将同时更新书源引用或公有状态。已保存正文与阅读位置保留原有身份。")
                             .font(.subheadline)
+                    }
+                }
+                if !candidate.configurationChanges.isEmpty {
+                    Section("需要确认的设置变化") {
+                        Text("兼容设置已保留。以下旧设置无法直接沿用，请核对新版默认值，并在书源设置中填写需要的新值。只有成功采用后才会替换旧设置。")
+                            .font(.subheadline).foregroundStyle(.secondary)
+                        ForEach(candidate.configurationChanges) { change in
+                            VStack(alignment: .leading, spacing: 8) {
+                                Text(change.label).font(.headline)
+                                Text(change.previous.key).font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                                Text(changeReason(change.reason)).font(.subheadline)
+                                LabeledContent("旧值", value: settingText(change.previous))
+                                if let proposed = change.proposedDefault {
+                                    LabeledContent("新版默认值", value: settingText(proposed))
+                                    if let selected = configuration.first(where: { Data($0.key.utf8) == change.id }) {
+                                        LabeledContent("本次将使用", value: settingText(selected))
+                                    }
+                                } else {
+                                    Text("新版已无此设置，采用成功后将移除旧值。")
+                                }
+                                Toggle(change.proposedDefault == nil ? "确认移除此设置" : "确认替换为本次填写的值",
+                                       isOn: acknowledgementBinding(change.id))
+                                    .frame(minHeight: 44)
+                            }
+                            .padding(.vertical, 4)
+                        }
                     }
                 }
                 if !candidate.manifest.publicConfiguration.isEmpty {
@@ -213,7 +240,8 @@ private struct SourceAdoptionView: View {
                         }.frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(management.isChanging || management.isValidating || (candidate.restoresAssociation && !restoreAssociation) || management.candidate == nil)
+                    .disabled(management.isChanging || management.isValidating || (candidate.restoresAssociation && !restoreAssociation)
+                        || acknowledgedChanges != Set(candidate.configurationChanges.map(\.id)) || management.candidate == nil)
                     .accessibilityIdentifier("sources.confirm-adoption")
                 }
             }
@@ -232,7 +260,8 @@ private struct SourceAdoptionView: View {
         .task(id: confirmRequest) {
             guard confirmRequest > 0 else { return }
             await management.confirm(candidateID: candidate.id, allowCredentialRead: allowCredentialRead,
-                restoreAssociation: restoreAssociation, configuration: configuration)
+                restoreAssociation: restoreAssociation, configuration: configuration,
+                acknowledgedConfigurationChanges: acknowledgedChanges)
             if management.candidate == nil && management.problem == nil { dismiss() }
         }
     }
@@ -245,6 +274,28 @@ private struct SourceAdoptionView: View {
         } set: { value in
             configuration.removeAll { $0.key.utf8.elementsEqual(key.utf8) }
             configuration.append(.text(key: key, value: value))
+            acknowledgedChanges.remove(Data(key.utf8))
+        }
+    }
+
+    private func acknowledgementBinding(_ id: Data) -> Binding<Bool> {
+        Binding { acknowledgedChanges.contains(id) } set: { accepted in
+            if accepted { acknowledgedChanges.insert(id) } else { acknowledgedChanges.remove(id) }
+        }
+    }
+
+    private func settingText(_ value: SourceSettingValue) -> String {
+        switch value {
+        case .text(_, let text): text.isEmpty ? "（空）" : text
+        case .boolean(_, let flag): flag ? "开启" : "关闭"
+        }
+    }
+
+    private func changeReason(_ reason: SourceManagementModel.ConfigurationChange.Reason) -> String {
+        switch reason {
+        case .removed: "新版移除了这个设置。"
+        case .typeChanged: "新版改变了这个设置的类型。"
+        case .choiceRemoved: "原来选中的选项已不在新版中。"
         }
     }
 
@@ -266,6 +317,7 @@ private struct SourceAdoptionView: View {
         } set: { value in
             configuration.removeAll { $0.key.utf8.elementsEqual(key.utf8) }
             configuration.append(.boolean(key: key, value: value))
+            acknowledgedChanges.remove(Data(key.utf8))
         }
     }
 }

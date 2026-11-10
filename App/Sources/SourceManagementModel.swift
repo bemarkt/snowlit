@@ -20,6 +20,7 @@ final class SourceManagementModel {
         let upgrade: SourceUpgradeAssessment?
         let plan: SourceUpdateMigrationPlan?
         let configuration: [SourceSettingValue]
+        let configurationChanges: [ConfigurationChange]
         var retainedBooks: Int { prepared?.books.count ?? 0 }
         var restoresAssociation: Bool { existing?.state == .removed }
         var requestsCredentialRead: Bool { manifest.capabilities.contains(.credentialsRead) }
@@ -28,6 +29,15 @@ final class SourceManagementModel {
     struct Problem: Identifiable {
         let id = UUID()
         let message: String
+    }
+
+    struct ConfigurationChange: Identifiable {
+        enum Reason { case removed, typeChanged, choiceRemoved }
+        let previous: SourceSettingValue
+        let label: String
+        let reason: Reason
+        let proposedDefault: SourceSettingValue?
+        var id: Data { Data(previous.key.utf8) }
     }
 
     enum Action { case enable, disable, remove, signOut, retryCleanup }
@@ -93,24 +103,25 @@ final class SourceManagementModel {
             let installationID = existing?.id ?? SourceInstallationID()
             let upgrade: SourceUpgradeAssessment?
             let prepared: SourceUpdateSnapshot?
+            let previousManifest: YingxueWire.Manifest?
             if let existing {
                 guard let current = try await library.sourceScript(sha256: existing.scriptSHA256, digest: digest) else {
                     throw SourceInstallationFailure.missingImport
                 }
-                upgrade = try .init(current: SourceFileHeader(bytes: current.bytes).manifest, candidate: manifest)
+                previousManifest = try SourceFileHeader(bytes: current.bytes).manifest
+                upgrade = try previousManifest.map { try .init(current: $0, candidate: manifest) }
                 prepared = try await library.captureSourceUpdate(importID: importID, expected: existing)
             } else {
-                upgrade = nil; prepared = nil
+                upgrade = nil; prepared = nil; previousManifest = nil
             }
-            // Incompatible public settings are not silently discarded. The
-            // installed source keeps its settings until the user changes them.
             let policy = try SourceHostPolicy(installationID: installationID, scriptSHA256: script.sha256, manifest: manifest)
-            let configuration = try SourceConfiguration(policy: policy, revision: 0, saved: existing?.configuration ?? []).storedValues
+            let review = try Self.reviewConfiguration(policy: policy, manifest: manifest, previousManifest: previousManifest, existing: existing)
             let plan = try prepared.map { try SourceUpdateMigrationPlan(prepared: $0) }
             try Task.checkCancellation()
             guard preparationID == attempt else { return }
             candidate = .init(installationID: installationID, receipt: receipt, script: script, manifest: manifest,
-                existing: existing, prepared: prepared, upgrade: upgrade, plan: plan, configuration: configuration)
+                existing: existing, prepared: prepared, upgrade: upgrade, plan: plan,
+                configuration: review.values, configurationChanges: review.changes)
         } catch {
             guard preparationID == attempt, !(error is CancellationError), !Task.isCancelled else { return }
             problem = .init(message: Self.message(for: error))
@@ -124,7 +135,7 @@ final class SourceManagementModel {
     }
 
     func confirm(candidateID: UUID, allowCredentialRead: Bool, restoreAssociation: Bool,
-                 configuration: [SourceSettingValue]) async {
+                 configuration: [SourceSettingValue], acknowledgedConfigurationChanges: Set<Data> = []) async {
         guard !isChanging, !isValidating, let candidate, candidate.id == candidateID else { return }
         let attempt = UUID()
         validationID = attempt; isValidating = true; problem = nil
@@ -137,7 +148,10 @@ final class SourceManagementModel {
         }
         do {
             guard !candidate.restoresAssociation || restoreAssociation,
-                  !allowCredentialRead || candidate.requestsCredentialRead else { throw Failure.confirmationRequired }
+                  !allowCredentialRead || candidate.requestsCredentialRead,
+                  Set(candidate.configurationChanges.map(\.id)) == acknowledgedConfigurationChanges else {
+                throw Failure.confirmationRequired
+            }
             let policy = try SourceHostPolicy(installationID: candidate.installationID,
                 scriptSHA256: candidate.script.sha256, manifest: candidate.manifest)
             let values = try SourceConfiguration(policy: policy, revision: 0, saved: configuration).storedValues
@@ -223,6 +237,61 @@ final class SourceManagementModel {
 
     func clearProblem() { problem = nil }
 
+    private static func reviewConfiguration(policy: SourceHostPolicy, manifest: YingxueWire.Manifest, previousManifest: YingxueWire.Manifest?,
+                                            existing: SourceInstallationSnapshot?) throws
+        -> (values: [SourceSettingValue], changes: [ConfigurationChange]) {
+        let defaults = try SourceConfiguration(policy: policy, revision: 0, saved: []).storedValues
+        guard let previousManifest, let existing else { return (defaults, []) }
+        let oldPolicy = try SourceHostPolicy(installationID: existing.id, scriptSHA256: existing.scriptSHA256,
+                                            manifest: previousManifest)
+        // Validate the old version too; malformed stored settings are not
+        // silently treated as an expected incompatibility in the new version.
+        let oldValues = try SourceConfiguration(policy: oldPolicy, revision: 0, saved: existing.configuration).storedValues
+        var retained: [SourceSettingValue] = []
+        var changes: [ConfigurationChange] = []
+        for old in oldValues {
+            guard let oldField = previousManifest.publicConfiguration.first(where: { fieldKey($0).utf8.elementsEqual(old.key.utf8) }) else {
+                throw Failure.inconsistentValidation
+            }
+            guard let newField = manifest.publicConfiguration.first(where: { fieldKey($0).utf8.elementsEqual(old.key.utf8) }) else {
+                changes.append(.init(previous: old, label: fieldLabel(oldField), reason: .removed, proposedDefault: nil))
+                continue
+            }
+            let reason: ConfigurationChange.Reason?
+            switch (oldField, newField) {
+            case (.text, .text), (.boolean, .boolean): reason = nil
+            case (.choice, .choice(let field)):
+                guard case .text(_, let selected) = old else { throw Failure.inconsistentValidation }
+                reason = field.choices.contains { $0.value.utf8.elementsEqual(selected.utf8) } ? nil : .choiceRemoved
+            default: reason = .typeChanged
+            }
+            if let reason {
+                let proposed = defaults.first { $0.key.utf8.elementsEqual(old.key.utf8) }
+                guard proposed != nil else { throw Failure.inconsistentValidation }
+                changes.append(.init(previous: old, label: fieldLabel(newField), reason: reason, proposedDefault: proposed))
+            } else {
+                retained.append(old)
+            }
+        }
+        return (try SourceConfiguration(policy: policy, revision: 0, saved: retained).storedValues, changes)
+    }
+
+    private static func fieldKey(_ field: YingxueWire.PublicSetting) -> String {
+        switch field {
+        case .text(let field): field.key
+        case .boolean(let field): field.key
+        case .choice(let field): field.key
+        }
+    }
+
+    private static func fieldLabel(_ field: YingxueWire.PublicSetting) -> String {
+        switch field {
+        case .text(let field): field.label
+        case .boolean(let field): field.label
+        case .choice(let field): field.label
+        }
+    }
+
     private static func message(for error: any Error) -> String {
         if error as? SourceInstallationFailure == .cleanupPending {
             return "上次登录数据尚未清理完成。请先重试清理，再启用或恢复书源。"
@@ -232,7 +301,7 @@ final class SourceManagementModel {
             return "书源或阅读数据已经变化，请重新验证此候选后确认。"
         }
         if error is SourceConfigurationFailure { return "已有设置不符合这个版本，当前设置已保留。请检查新版配置要求。" }
-        if error is Failure { return "请核对书源权限与恢复关联的确认，尚未采用此候选。" }
+        if error is Failure { return "请核对设置变化、书源权限与恢复关联的确认，尚未采用此候选。" }
         return "操作未完成，请重试。阅读数据会保留；如有待清理的登录数据，请先完成清理。"
     }
 }

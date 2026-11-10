@@ -95,6 +95,137 @@ struct SourceManagementModelTests {
         }
     }
 
+    @Test func changedConfigurationRequiresEveryAcknowledgementAndPersistsConfirmedValues() async throws {
+        try await withLibrary { path, library in
+            let original = try await Self.stage(library, settings: #"[{"kind":"text","key":"keep","label":"Keep","initial":"old default"},{"kind":"boolean","key":"flag","label":"Flag","initial":false},{"kind":"choice","key":"valid","label":"Valid","initial":"a","choices":[{"value":"a","label":"A"},{"value":"b","label":"B"}]},{"kind":"text","key":"removed","label":"Removed","initial":"old"},{"kind":"boolean","key":"type","label":"Type","initial":false},{"kind":"choice","key":"choice","label":"Choice","initial":"a","choices":[{"value":"a","label":"A"},{"value":"b","label":"B"}]}]"#)
+            let previous: [SourceSettingValue] = [.text(key: "keep", value: "personal"), .boolean(key: "flag", value: true),
+                .text(key: "valid", value: "b"), .text(key: "removed", value: "retained until adoption"),
+                .boolean(key: "type", value: true), .text(key: "choice", value: "b")]
+            let current = try await library.installSource(importID: original.id, id: .init(), configuration: previous, consent: .managedOnly)
+            let newer = try await Self.stage(library, version: 2, settings: #"[{"kind":"text","key":"keep","label":"Keep","initial":"new default"},{"kind":"boolean","key":"flag","label":"Flag","initial":false},{"kind":"choice","key":"valid","label":"Valid","initial":"a","choices":[{"value":"a","label":"A"},{"value":"b","label":"B"}]},{"kind":"text","key":"type","label":"New type","initial":"replacement"},{"kind":"choice","key":"choice","label":"Choice","initial":"c","choices":[{"value":"a","label":"A"},{"value":"c","label":"C"}]},{"kind":"text","key":"added","label":"Added","initial":"fresh"}]"#)
+            var observed: [SourceManagementModel.ValidationRequest] = []
+            var invalidated = false
+            let model = Self.model(library, validate: { request in
+                observed.append(request)
+                return try request.candidate.plan?.validate(references: [], state: nil)
+            }, invalidate: { _ in invalidated = true })
+            await model.prepare(importID: newer.id)
+            let candidate = try #require(model.candidate)
+            let defaults: [SourceSettingValue] = [.text(key: "keep", value: "personal"), .boolean(key: "flag", value: true),
+                .text(key: "valid", value: "b"), .text(key: "type", value: "replacement"),
+                .text(key: "choice", value: "c"), .text(key: "added", value: "fresh")]
+            #expect(candidate.configuration == defaults)
+            #expect(candidate.configurationChanges.map(\.previous) == Array(previous.suffix(3)))
+            #expect(candidate.configurationChanges.map(\.reason) == [.removed, .typeChanged, .choiceRemoved])
+            #expect(candidate.configurationChanges.map(\.proposedDefault) == [nil, .text(key: "type", value: "replacement"), .text(key: "choice", value: "c")])
+            let all = Set(candidate.configurationChanges.map(\.id))
+            for acknowledgements in [Set<Data>(), Set([Data("removed".utf8)]), all.union([Data("unexpected".utf8)])] {
+                await model.confirm(candidateID: candidate.id, allowCredentialRead: false, restoreAssociation: false,
+                    configuration: defaults, acknowledgedConfigurationChanges: acknowledgements)
+                #expect(observed.isEmpty && !invalidated && model.problem != nil)
+                #expect(try await library.sourceInstallations() == [current])
+            }
+            let final = defaults.map { value in value.key == "type" ? .text(key: "type", value: "edited by owner") : value }
+            await model.confirm(candidateID: candidate.id, allowCredentialRead: false, restoreAssociation: false,
+                configuration: final, acknowledgedConfigurationChanges: all)
+            #expect(model.problem == nil && model.candidate == nil && invalidated)
+            #expect(observed.count == 1 && observed.first?.configuration == final)
+            let installed = try await library.sourceInstallations()
+            #expect(installed.first?.configuration == final && installed.first?.importID == newer.id)
+            let reopened = try LibraryDatabase(existingAt: path)
+            #expect(try await reopened.sourceInstallations() == installed)
+            try await reopened.close()
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func textAndChoiceKindChangesRequireReviewEvenWhenBothStoreText(choiceFirst: Bool) async throws {
+        try await withLibrary { _, library in
+            let text = #"[{"kind":"text","key":"category","label":"Category","initial":"all"}]"#
+            let choice = #"[{"kind":"choice","key":"category","label":"Category","initial":"all","choices":[{"value":"all","label":"All"},{"value":"fiction","label":"Fiction"}]}]"#
+            let original = try await Self.stage(library, settings: choiceFirst ? choice : text)
+            _ = try await library.installSource(importID: original.id, id: .init(),
+                configuration: [.text(key: "category", value: "fiction")], consent: .managedOnly)
+            let newer = try await Self.stage(library, version: 2, settings: choiceFirst ? text : choice)
+            let model = Self.model(library)
+            await model.prepare(importID: newer.id)
+            let candidate = try #require(model.candidate)
+            #expect(candidate.configurationChanges.map(\.reason) == [.typeChanged])
+            #expect(candidate.configurationChanges.first?.previous == .text(key: "category", value: "fiction"))
+            #expect(candidate.configuration == [.text(key: "category", value: "all")])
+        }
+    }
+
+    @Test func configurationReviewKeepsDistinctUTF8KeysDistinct() async throws {
+        try await withLibrary { _, library in
+            let original = try await Self.stage(library, settings: #"[{"kind":"text","key":"\u00e9","label":"First","initial":"one"},{"kind":"text","key":"e\u0301","label":"Second","initial":"two"}]"#)
+            let current = try await library.installSource(importID: original.id, id: .init(),
+                configuration: [.text(key: "\u{e9}", value: "one"), .text(key: "e\u{301}", value: "two")], consent: .managedOnly)
+            let newer = try await Self.stage(library, version: 2)
+            let model = Self.model(library)
+            await model.prepare(importID: newer.id)
+            let candidate = try #require(model.candidate)
+            let ids = Set(candidate.configurationChanges.map(\.id))
+            #expect(ids.count == 2)
+            await model.confirm(candidateID: candidate.id, allowCredentialRead: false, restoreAssociation: false,
+                configuration: [], acknowledgedConfigurationChanges: [Data("\u{e9}".utf8)])
+            #expect(try await library.sourceInstallations() == [current])
+            await model.confirm(candidateID: candidate.id, allowCredentialRead: false, restoreAssociation: false,
+                configuration: [], acknowledgedConfigurationChanges: ids)
+            #expect(model.problem == nil && model.candidate == nil)
+            #expect(try await library.sourceInstallations().first?.configuration == [])
+        }
+    }
+
+    @Test(arguments: ["cancel", "validation", "stale"])
+    func unsuccessfulConfigurationUpgradePreservesOriginalSettings(outcome: String) async throws {
+        try await withLibrary { path, library in
+            let original = try await Self.stage(library, withConfiguration: true)
+            let current = try await library.installSource(importID: original.id, id: .init(),
+                configuration: [.text(key: "category", value: "my category")], consent: .approvedForCandidate)
+            let newer = try await Self.stage(library, version: 2)
+            let pending = PendingCandidateValidation()
+            let model = Self.model(library, validate: { request in
+                if outcome == "cancel" { await pending.run() }
+                if outcome == "validation" { throw FixtureFailure.requested }
+                if outcome == "stale" {
+                    _ = try await library.addBook(reference: .init(installationID: current.id, referenceVersion: 1, key: "new"), title: "New", author: nil)
+                }
+                return try request.candidate.plan?.validate(references: [], state: nil)
+            })
+            await model.prepare(importID: newer.id)
+            let candidate = try #require(model.candidate)
+            let task = Task { await model.confirm(candidateID: candidate.id, allowCredentialRead: false,
+                restoreAssociation: false, configuration: [],
+                acknowledgedConfigurationChanges: Set(candidate.configurationChanges.map(\.id))) }
+            if outcome == "cancel" {
+                await pending.waitUntilStarted()
+                model.cancelPreparation()
+                pending.finish()
+            }
+            await task.value
+            #expect(try await library.sourceInstallations() == [current])
+            #expect(!model.isValidating && !model.isChanging && model.changed == 0)
+            if outcome != "cancel" { #expect(model.problem != nil) }
+            let reopened = try LibraryDatabase(existingAt: path)
+            #expect(try await reopened.sourceInstallations() == [current])
+            try await reopened.close()
+        }
+    }
+
+    @Test func invalidOldSettingsAreNotSilentlyDiscardedDuringUpgrade() async throws {
+        try await withLibrary { _, library in
+            let original = try await Self.stage(library, withConfiguration: true)
+            let current = try await library.installSource(importID: original.id, id: .init(),
+                configuration: [.boolean(key: "category", value: true)], consent: .managedOnly)
+            let newer = try await Self.stage(library, version: 2)
+            let model = Self.model(library)
+            await model.prepare(importID: newer.id)
+            #expect(model.candidate == nil && model.problem != nil)
+            #expect(try await library.sourceInstallations() == [current])
+        }
+    }
+
     @Test func failedRuntimeValidationPreservesTheActiveVersionAndConsent() async throws {
         try await withLibrary { _, library in
             let current = try await Self.install(library, consent: .approvedForCandidate)
@@ -261,8 +392,8 @@ struct SourceManagementModelTests {
     }
 
     private static func stage(_ library: LibraryDatabase, version: Int = 1, credentials: Bool = true,
-                              withConfiguration: Bool = false) async throws -> SourceImportRecord {
-        let configuration = withConfiguration ? #"[{"kind":"text","key":"category","label":"Category","initial":"all"}]"# : "[]"
+                              withConfiguration: Bool = false, settings: String? = nil) async throws -> SourceImportRecord {
+        let configuration = settings ?? (withConfiguration ? #"[{"kind":"text","key":"category","label":"Category","initial":"all"}]"# : "[]")
         let bytes = Data("""
             /* @yingxue
             {"protocolVersion":1,"sourceID":"org.example.management","name":"Fixture","scriptVersion":"\(version)","referenceVersion":1,"stateVersion":1,"capabilities":\(credentials ? "[\"credentials.read\"]" : "[]"),"origins":[],"authentication":[],"publicConfiguration":\(configuration)}
