@@ -13,9 +13,17 @@ struct AppComposition {
     let candidateValidator: SourceCandidateValidator
     let runtime: SourceRuntime
     let authentication: SourceAuthenticationModel
+    let search: SourceSearchModel
+    let shelf: LibraryShelfModel
+    let makeBook: @MainActor (SourceSearchModel.Item) -> SourceBookModel
 
     init() {
+        #if DEBUG
+        let fixtureDirectory = LibraryFlowFixture.directory(arguments: ProcessInfo.processInfo.arguments)
+        let storage = LibraryBootstrap(directory: fixtureDirectory)
+        #else
         let storage = LibraryBootstrap()
+        #endif
         let files = SourceFileReader()
         let validator = SourceCandidateValidator()
         let runtime = SourceRuntime(openLibrary: { try await storage.open() },
@@ -40,6 +48,19 @@ struct AppComposition {
             inspect: { source, requirements in try await SourceFileInspector.inspect(source, requirements: requirements) },
             digest: { bytes in SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() },
             readFile: { url in try await files.read(url) })
+        let invoke: SourceInvocation = { input, expected in try await runtime.invoke(input, expected: expected) }
+        search = SourceSearchModel(invoke: invoke)
+        let shelf = LibraryShelfModel(load: { try await storage.open().books() },
+            loadCatalog: { try await storage.open().catalog(for: $0) })
+        self.shelf = shelf
+        makeBook = { item in
+            SourceBookModel(item: item, invoke: invoke) { installed, details, catalog in
+                let book = try await storage.open().addBook(reference: catalog.book, title: details.title,
+                    author: details.author, catalog: catalog, expectedInstallation: installed)
+                await shelf.refresh()
+                return book
+            }
+        }
 
         #if DEBUG
         // Only debug UI tests can request this deterministic first-attempt failure.
@@ -54,7 +75,12 @@ struct AppComposition {
         #endif
 
         startup = StartupModel {
+            #if DEBUG
+            let library = try await storage.open()
+            if fixtureDirectory != nil { try await LibraryFlowFixture.prepare(library) }
+            #else
             _ = try await storage.open()
+            #endif
         }
     }
 }

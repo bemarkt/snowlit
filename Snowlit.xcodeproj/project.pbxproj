@@ -51,6 +51,17 @@
 		A10000000000000000000043 /* SourceRuntime.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000043 /* SourceRuntime.swift */; };
 		A10000000000000000000044 /* SourceAuthenticationModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000044 /* SourceAuthenticationModel.swift */; };
 		A10000000000000000000045 /* SourceAuthenticationModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000045 /* SourceAuthenticationModelTests.swift */; };
+		A10000000000000000000050 /* SourceBrowsing.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000050 /* SourceBrowsing.swift */; };
+		A10000000000000000000051 /* SourceSearchModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000051 /* SourceSearchModel.swift */; };
+		A10000000000000000000052 /* SourceSearchView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000052 /* SourceSearchView.swift */; };
+		A10000000000000000000053 /* SourceBookModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000053 /* SourceBookModel.swift */; };
+		A10000000000000000000054 /* SourceBookView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000054 /* SourceBookView.swift */; };
+		A10000000000000000000055 /* LibraryShelfModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000055 /* LibraryShelfModel.swift */; };
+		A10000000000000000000056 /* LibraryShelfView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000056 /* LibraryShelfView.swift */; };
+		A10000000000000000000057 /* LibraryRootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000057 /* LibraryRootView.swift */; };
+		A10000000000000000000058 /* LibraryFlowFixture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000058 /* LibraryFlowFixture.swift */; };
+		A10000000000000000000059 /* SourceBrowsingModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000059 /* SourceBrowsingModelTests.swift */; };
+		A1000000000000000000005A /* LibraryFlowUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000005A /* LibraryFlowUITests.swift */; };
 /* End PBXBuildFile section */
 
 /* Begin PBXContainerItemProxy section */
@@ -99,6 +110,17 @@
 		A20000000000000000000043 /* SourceRuntime.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceRuntime.swift; sourceTree = "<group>"; };
 		A20000000000000000000044 /* SourceAuthenticationModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceAuthenticationModel.swift; sourceTree = "<group>"; };
 		A20000000000000000000045 /* SourceAuthenticationModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/SourceAuthenticationModelTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000050 /* SourceBrowsing.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceBrowsing.swift; sourceTree = "<group>"; };
+		A20000000000000000000051 /* SourceSearchModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Search/SourceSearchModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000052 /* SourceSearchView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Search/SourceSearchView.swift; sourceTree = "<group>"; };
+		A20000000000000000000053 /* SourceBookModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Books/SourceBookModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000054 /* SourceBookView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Books/SourceBookView.swift; sourceTree = "<group>"; };
+		A20000000000000000000055 /* LibraryShelfModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Library/LibraryShelfModel.swift; sourceTree = "<group>"; };
+		A20000000000000000000056 /* LibraryShelfView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Library/LibraryShelfView.swift; sourceTree = "<group>"; };
+		A20000000000000000000057 /* LibraryRootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Composition/LibraryRootView.swift; sourceTree = "<group>"; };
+		A20000000000000000000058 /* LibraryFlowFixture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Experiments/LibraryFlowFixture.swift; sourceTree = "<group>"; };
+		A20000000000000000000059 /* SourceBrowsingModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/SourceBrowsingModelTests.swift; sourceTree = "<group>"; };
+		A2000000000000000000005A /* LibraryFlowUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitUITests/LibraryFlowUITests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
@@ -130,6 +152,15 @@
 		A40000000000000000000002 /* App */ = {
 			isa = PBXGroup;
 			children = (
+				A20000000000000000000058 /* LibraryFlowFixture.swift */,
+				A20000000000000000000057 /* LibraryRootView.swift */,
+				A20000000000000000000056 /* LibraryShelfView.swift */,
+				A20000000000000000000055 /* LibraryShelfModel.swift */,
+				A20000000000000000000054 /* SourceBookView.swift */,
+				A20000000000000000000053 /* SourceBookModel.swift */,
+				A20000000000000000000052 /* SourceSearchView.swift */,
+				A20000000000000000000051 /* SourceSearchModel.swift */,
+				A20000000000000000000050 /* SourceBrowsing.swift */,
 				A20000000000000000000001 /* SnowlitApp.swift */,
 				A20000000000000000000002 /* AppComposition.swift */,
 				A20000000000000000000003 /* StartupModel.swift */,
@@ -168,6 +199,8 @@
 		A40000000000000000000004 /* Tests */ = {
 			isa = PBXGroup;
 			children = (
+				A2000000000000000000005A /* LibraryFlowUITests.swift */,
+				A20000000000000000000059 /* SourceBrowsingModelTests.swift */,
 				A20000000000000000000021 /* StartupModelTests.swift */,
 				A20000000000000000000022 /* StartupUITests.swift */,
 				A20000000000000000000027 /* ReaderInteractionUITests.swift */,
@@ -280,12 +313,21 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A30000000000000000000012 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000021, A10000000000000000000023, A10000000000000000000024, A10000000000000000000025, A10000000000000000000026, A10000000000000000000028, A10000000000000000000029, A10000000000000000000035, A10000000000000000000037, A10000000000000000000036, A10000000000000000000030, A10000000000000000000039, A10000000000000000000045, A10000000000000000000038,); runOnlyForDeploymentPostprocessing = 0; };
-		A30000000000000000000022 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000022, A10000000000000000000027,); runOnlyForDeploymentPostprocessing = 0; };
+		A30000000000000000000012 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000059, A10000000000000000000021, A10000000000000000000023, A10000000000000000000024, A10000000000000000000025, A10000000000000000000026, A10000000000000000000028, A10000000000000000000029, A10000000000000000000035, A10000000000000000000037, A10000000000000000000036, A10000000000000000000030, A10000000000000000000039, A10000000000000000000045, A10000000000000000000038,); runOnlyForDeploymentPostprocessing = 0; };
+		A30000000000000000000022 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A1000000000000000000005A, A10000000000000000000022, A10000000000000000000027,); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				A10000000000000000000050 /* SourceBrowsing.swift in Sources */,
+				A10000000000000000000051 /* SourceSearchModel.swift in Sources */,
+				A10000000000000000000052 /* SourceSearchView.swift in Sources */,
+				A10000000000000000000053 /* SourceBookModel.swift in Sources */,
+				A10000000000000000000054 /* SourceBookView.swift in Sources */,
+				A10000000000000000000055 /* LibraryShelfModel.swift in Sources */,
+				A10000000000000000000056 /* LibraryShelfView.swift in Sources */,
+				A10000000000000000000057 /* LibraryRootView.swift in Sources */,
+				A10000000000000000000058 /* LibraryFlowFixture.swift in Sources */,
 				A10000000000000000000001 /* SnowlitApp.swift in Sources */,
 				A10000000000000000000002 /* AppComposition.swift in Sources */,
 				A10000000000000000000003 /* StartupModel.swift in Sources */,

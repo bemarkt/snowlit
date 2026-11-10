@@ -16,6 +16,7 @@ struct SourceExecutionView: View {
     let session: SourceExecutionSession
     let cancel: @MainActor () -> Void
     let retryCleanup: @MainActor () async throws -> Void
+    var mountsSession = true
     @Environment(\.scenePhase) private var scenePhase
     @State private var cleanupRequest = 0
     @State private var cleanupFailed = false
@@ -46,7 +47,7 @@ struct SourceExecutionView: View {
             .padding()
             .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             .background(Color(uiColor: .systemBackground))
-            .background(SourceCandidateContainer(session: session))
+            .background { if mountsSession { SourceExecutionContainer(session: session) } }
             .navigationTitle(session.isCandidate ? "验证书源" : "访问书源")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
@@ -77,7 +78,7 @@ struct SourceExecutionView: View {
     }
 }
 
-private struct SourceCandidateContainer: UIViewRepresentable {
+struct SourceExecutionContainer: UIViewRepresentable {
     let session: SourceExecutionSession
     func makeUIView(context: Context) -> SourceMountView {
         let view = SourceMountView()
@@ -87,7 +88,7 @@ private struct SourceCandidateContainer: UIViewRepresentable {
     func updateUIView(_ view: SourceMountView, context: Context) { session.attach(to: view) }
 }
 
-private final class SourceMountView: UIView {
+final class SourceMountView: UIView {
     var onMount: ((UIView) -> Void)?
     override func didMoveToWindow() {
         super.didMoveToWindow()

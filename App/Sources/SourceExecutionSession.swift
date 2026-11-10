@@ -20,6 +20,7 @@ final class SourceExecutionSession: Identifiable {
     private(set) var phase: Phase = .waitingForView
     private(set) var formSession: SourceFormSession?
     private(set) var webInteraction: SourceWebInteraction?
+    private(set) var needsPresentation = false
     @ObservationIgnored private let request: SourceManagementModel.ValidationRequest?
     @ObservationIgnored private let installation: SourceInstallationSnapshot?
     @ObservationIgnored private let library: LibraryDatabase?
@@ -205,6 +206,7 @@ final class SourceExecutionSession: Identifiable {
     private func present(_ request: YingxueWire.InteractionRequest, forms: SourceFormSession,
                          ticket: SourceOperationGate.Ticket) async throws -> YingxueWire.InteractionResult {
         let presentation = try await gate.beginInteraction(request, for: ticket, policy: policy)
+        needsPresentation = true
         switch request {
         case .form: return try await forms.present(presentation)
         case .web(let request):

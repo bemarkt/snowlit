@@ -7,9 +7,7 @@ struct SourceLibraryView: View {
     let model: SourceLibraryModel
     let management: SourceManagementModel
     let candidateValidator: SourceCandidateValidator
-    let runtime: SourceRuntime
     let authentication: SourceAuthenticationModel
-    @Environment(\.scenePhase) private var scenePhase
     @State private var showImporter = false
     @State private var showPreview = false
     @State private var selection: Selection?
@@ -23,7 +21,7 @@ struct SourceLibraryView: View {
                     VStack(alignment: .leading, spacing: 8) {
                         Text("Snowlit")
                             .font(.headline)
-                            .accessibilityIdentifier("startup.ready")
+                            .accessibilityIdentifier("sources.title")
                         Text("书源连接网站，书架与阅读进度保存在本机。")
                             .font(.subheadline)
                             .foregroundStyle(.secondary)
@@ -93,9 +91,6 @@ struct SourceLibraryView: View {
             .refreshable { model.clearProblem(); await model.refresh() }
         }
         .task(id: refreshRequest) { await model.refresh() }
-        .onChange(of: scenePhase) { _, phase in
-            if phase == .background { runtime.cancel(); candidateValidator.cancel() }
-        }
         .fileImporter(isPresented: $showImporter, allowedContentTypes: [.javaScript, .plainText, .data]) { result in
             switch result {
             case .success(let url):
@@ -112,11 +107,6 @@ struct SourceLibraryView: View {
             model.cancelPreview(); selection = nil
         }) {
             SourceImportReviewView(model: model) { showPreview = false; selection = nil }
-        }
-        .sheet(item: Binding(get: { runtime.active }, set: { value in
-            if value == nil { runtime.cancel() }
-        })) { session in
-            SourceExecutionView(session: session, cancel: { runtime.cancel() }, retryCleanup: { try await runtime.retryCleanup() })
         }
     }
 

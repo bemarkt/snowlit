@@ -108,22 +108,26 @@ public actor LibraryDatabase: LibraryStore {
     public func addBook(reference: SourceBookReference, title: String, author: String?) throws -> LibraryBook {
         try checkOpen()
         return try queue.write { db in
-            let installation = reference.installationID.rawValue.uuidString
-            if let row = try Row.fetchOne(db, sql: """
-                SELECT b.* FROM library_book b JOIN book_reference r ON r.book_id=b.id
-                WHERE r.installation=? AND r.reference_version=? AND r.remote_key=?
-                """, arguments: [installation, reference.referenceVersion, reference.key]) {
-                return try Self.decodeBook(row)
-            }
-            let book = LibraryBook(id: LocalBookID(), reference: reference, title: title, author: author)
-            try db.execute(sql: """
-                INSERT INTO library_book (id, installation, reference_version, remote_key, title, author)
-                VALUES (?, ?, ?, ?, ?, ?)
-                """, arguments: [book.id.rawValue.uuidString, installation, reference.referenceVersion,
-                                  reference.key, title, author])
-            try Self.recordBookReference(db, bookID: book.id, reference: reference)
-            return book
+            try Self.addBook(db, reference: reference, title: title, author: author)
         }
+    }
+
+    static func addBook(_ db: Database, reference: SourceBookReference, title: String, author: String?) throws -> LibraryBook {
+        let installation = reference.installationID.rawValue.uuidString
+        if let row = try Row.fetchOne(db, sql: """
+            SELECT b.* FROM library_book b JOIN book_reference r ON r.book_id=b.id
+            WHERE r.installation=? AND r.reference_version=? AND r.remote_key=?
+            """, arguments: [installation, reference.referenceVersion, reference.key]) {
+            return try Self.decodeBook(row)
+        }
+        let book = LibraryBook(id: LocalBookID(), reference: reference, title: title, author: author)
+        try db.execute(sql: """
+            INSERT INTO library_book (id, installation, reference_version, remote_key, title, author)
+            VALUES (?, ?, ?, ?, ?, ?)
+            """, arguments: [book.id.rawValue.uuidString, installation, reference.referenceVersion,
+                              reference.key, title, author])
+        try Self.recordBookReference(db, bookID: book.id, reference: reference)
+        return book
     }
 
     public func books() throws -> [LibraryBook] {
@@ -159,17 +163,21 @@ public actor LibraryDatabase: LibraryStore {
             guard try Self.decodeBook(row).networkReference == catalog.book else {
                 throw LibraryModelError.differentBook
             }
-            let id = token.bookID.rawValue.uuidString
-            try db.execute(sql: "DELETE FROM catalog_entry WHERE book_id=?", arguments: [id])
-            for (ordinal, entry) in catalog.entries.enumerated() {
-                try Self.recordChapterReference(db, bookID: token.bookID, reference: entry.reference)
-                try db.execute(sql: "INSERT INTO catalog_entry (book_id, ordinal, remote_key, title) VALUES (?, ?, ?, ?)",
-                               arguments: [id, ordinal, entry.reference.key, entry.title])
-            }
-            try db.execute(sql: "UPDATE library_book SET catalog_revision=?, catalog_reference=?, catalog_request=NULL WHERE id=?",
-                           arguments: [catalog.revision, try JSONEncoder().encode(catalog.book), id])
+            try Self.replaceCatalog(db, catalog: catalog, bookID: token.bookID)
             return true
         }
+    }
+
+    static func replaceCatalog(_ db: Database, catalog: CatalogSnapshot, bookID: LocalBookID) throws {
+        let id = bookID.rawValue.uuidString
+        try db.execute(sql: "DELETE FROM catalog_entry WHERE book_id=?", arguments: [id])
+        for (ordinal, entry) in catalog.entries.enumerated() {
+            try Self.recordChapterReference(db, bookID: bookID, reference: entry.reference)
+            try db.execute(sql: "INSERT INTO catalog_entry (book_id, ordinal, remote_key, title) VALUES (?, ?, ?, ?)",
+                           arguments: [id, ordinal, entry.reference.key, entry.title])
+        }
+        try db.execute(sql: "UPDATE library_book SET catalog_revision=?, catalog_reference=?, catalog_request=NULL WHERE id=?",
+                       arguments: [catalog.revision, try JSONEncoder().encode(catalog.book), id])
     }
 
     public func catalog(for bookID: LocalBookID) throws -> CatalogSnapshot? {

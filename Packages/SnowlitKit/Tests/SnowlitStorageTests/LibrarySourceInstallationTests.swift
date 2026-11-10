@@ -5,6 +5,52 @@ import Testing
 @testable import SnowlitStorage
 
 struct LibrarySourceInstallationTests {
+    @Test func discoveredBookAndCompleteCatalogCommitAtomicallyAndRejectOldSources() async throws {
+        try await withLibrary { path, database in
+            let installed = try await install(database)
+            let reference = try SourceBookReference(installationID: installed.id, referenceVersion: 1, key: "new")
+            let catalog = try CatalogSnapshot(book: reference, revision: "first", entries: [
+                .init(reference: .init(book: reference, key: "c1"), title: "Chapter")])
+            try await database.queue.write { db in
+                try db.execute(sql: "CREATE TRIGGER reject_discovery BEFORE INSERT ON catalog_entry BEGIN SELECT RAISE(ABORT, 'fixture'); END")
+            }
+            await #expect(throws: DatabaseError.self) {
+                try await database.addBook(reference: reference, title: "Book", author: nil, catalog: catalog, expectedInstallation: installed)
+            }
+            #expect(try await database.books().isEmpty)
+            try await database.queue.write { try $0.execute(sql: "DROP TRIGGER reject_discovery") }
+            let second = try LibraryDatabase(existingAt: path)
+            do {
+                async let a = database.addBook(reference: reference, title: "Book", author: nil, catalog: catalog, expectedInstallation: installed)
+                async let b = second.addBook(reference: reference, title: "Book", author: nil, catalog: catalog, expectedInstallation: installed)
+                let (first, repeated) = try await (a, b)
+                #expect(first == repeated)
+                #expect(try await database.catalog(for: first.id) == catalog)
+                let newer = try CatalogSnapshot(book: reference, revision: "newer", entries: [
+                    .init(reference: .init(book: reference, key: "c2"), title: "New chapter")])
+                let token = try await database.beginCatalogUpdate(for: first.id)
+                #expect(try await database.publishCatalog(newer, using: token))
+                let duplicate = try await second.addBook(reference: reference, title: "Other title", author: nil,
+                    catalog: catalog, expectedInstallation: installed)
+                let retained = try await second.catalog(for: first.id)
+                #expect(duplicate == first && retained == newer)
+                _ = try await database.setSourceEnabled(false, expected: installed)
+                await #expect(throws: SourceInstallationFailure.staleInstallation) {
+                    try await second.addBook(reference: reference, title: "Book", author: nil, catalog: catalog, expectedInstallation: installed)
+                }
+                #expect(try await database.books() == [first])
+                try await second.close()
+                let reopened = try LibraryDatabase(existingAt: path)
+                #expect(try await reopened.catalog(for: first.id) == newer)
+                #expect(try await reopened.books() == [first])
+                try await reopened.close()
+            } catch {
+                do { try await second.close() } catch { Issue.record(error, "Discovery connection cleanup failed") }
+                throw error
+            }
+        }
+    }
+
     @Test func configurationChangesUseExactKeysAndRejectStaleWriters() async throws {
         try await withLibrary { _, database in
             let original = try await install(database)

@@ -12,6 +12,10 @@ final class SourceRuntime {
     enum Failure: Error { case busy, cleanupRequired }
     private(set) var active: SourceExecutionSession?
     private(set) var isPreparing = false
+    var presentation: SourceExecutionSession? {
+        guard let active, active.needsPresentation || active.phase == .cleanupRequired else { return nil }
+        return active
+    }
     @ObservationIgnored private let openLibrary: @Sendable () async throws -> LibraryDatabase
     @ObservationIgnored private let digest: SourceScriptSnapshot.Digest
     @ObservationIgnored private var operationID: UUID?
@@ -23,6 +27,11 @@ final class SourceRuntime {
     }
 
     func invoke(_ input: YingxueWire.OperationInput, expected: SourceInstallationSnapshot) async throws -> YingxueWire.OperationReply {
+        if let previous = work, previous.isCancelled, let id = operationID {
+            _ = await previous.result
+            try await finish(id)
+        }
+        try Task.checkCancellation()
         guard work == nil && active == nil else { throw Failure.busy }
         let id = UUID()
         operationID = id; installationID = expected.id; isPreparing = true

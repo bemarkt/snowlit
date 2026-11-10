@@ -36,6 +36,8 @@ final class StartupUITests: XCTestCase {
     func testSourceFilePickerCanBeCancelledWithoutSavingAnImport() {
         let app = XCUIApplication()
         app.launch()
+        XCTAssertTrue(app.staticTexts["startup.ready"].waitForExistence(timeout: 10))
+        app.tabBars.buttons["书源"].tap()
         let importFile = app.buttons["sources.import"]
         XCTAssertTrue(importFile.waitForExistence(timeout: 10))
         XCTAssertTrue(importFile.isHittable)
