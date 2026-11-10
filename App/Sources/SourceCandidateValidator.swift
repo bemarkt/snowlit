@@ -202,7 +202,7 @@ final class SourceCandidateSession: Identifiable {
         guard !closed else { throw Failure.unavailable }
         if worker.webView.window != nil { return }
         try await withTaskCancellationHandler {
-            try await withCheckedThrowingContinuation { continuation in
+            try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<Void, any Error>) in
                 guard !Task.isCancelled, !closed else { continuation.resume(throwing: CancellationError()); return }
                 mountWaiter = continuation
             }
