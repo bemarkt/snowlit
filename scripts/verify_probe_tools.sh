@@ -14,7 +14,7 @@ mkdir -p "$evidence"
 } | tee "$evidence/environment.txt"
 
 printf 'Checking synthetic website fixtures.\n'
-node --test scripts/probes/site.test.mjs 2>&1 | tee "$evidence/fixture-tests.log"
+node --test scripts/probes/site.test.mjs scripts/probes/worker.test.mjs 2>&1 | tee "$evidence/fixture-tests.log"
 export SNOWLIT_PROCESS_SAMPLER="$PWD/build/process-snapshot"
 printf 'Building the native process sampler.\n'
 xcrun --sdk macosx clang -std=c11 -O2 -Wall -Wextra -Werror \

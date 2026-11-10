@@ -3,11 +3,76 @@ import Foundation
 import SnowlitCore
 import Testing
 import WebKit
+import UIKit
 @testable import YingxueKit
 
 @Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct WebKitRuntimeProbeTests {
+    @Test func isolatedModuleWorkerPreservesDataAndCannotFetchOutsideItsNativeHost() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            let (status, bytes) = try await fixture.request("worker-source.mjs")
+            try #require(status == 200)
+            try await WorkerExperiment.withExperiment { worker in
+            try await worker.start(source: String(decoding: bytes, as: UTF8.self))
+            try await worker.send(["mode": "normal", "text": "中文 🧪", "token": "normal"])
+            try await FixtureScenario.eventually { try await worker.value("returned") == "true" }
+            #expect(try await worker.value("result.echo") == "中文 🧪")
+            #expect(try await worker.value("result.sum") == "6")
+            #expect(try await worker.value("workerConstructors") == "undefined/undefined")
+            try await worker.stop()
+
+            try await worker.start(source: String(decoding: bytes, as: UTF8.self))
+            try await worker.send(["mode": "network", "url": fixture.url("worker-forbidden").absoluteString, "token": "network"])
+            try await FixtureScenario.eventually { try await worker.value("returned") == "true" }
+            #expect(try await worker.value("result.blocked") == "true")
+            let observation = try await fixture.status()
+            let requests = try #require(observation["requests"] as? [[String: String]])
+            #expect(!requests.contains { $0["path"] == "worker-forbidden" })
+            try await worker.stop()
+            }
+        }
+    }
+
+    @Test func workerTerminationEndsEnteredSpinAndNeverWorkAndAllowsFreshModules() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            let (status, bytes) = try await fixture.request("worker-source.mjs")
+            try #require(status == 200)
+            let source = String(decoding: bytes, as: UTF8.self)
+            try await WorkerExperiment.withExperiment { worker in
+            for mode in ["spin", "never"] {
+                for repetition in 1...3 {
+                    let token = "\(mode)-\(repetition)"
+                    try await worker.start(source: source)
+                    try await worker.send(["mode": mode, "token": token])
+                    try await FixtureScenario.eventually { try await worker.value("entered") == token }
+                    if mode == "spin" {
+                        try await FixtureScenario.eventually { try await worker.value("pulses > 0") == "true" }
+                    }
+                    #expect(try await worker.value("returned") == "false")
+                    let started = ContinuousClock.now
+                    try await worker.stop()
+                    let stopDuration = started.duration(to: .now)
+                    #expect(stopDuration < .seconds(1))
+                    // Already queued parent messages may precede termination.
+                    // Observe a settled count, then require continued quiescence.
+                    try await Task.sleep(for: .milliseconds(100))
+                    let settled = try await worker.value("pulses")
+                    try await Task.sleep(for: .milliseconds(500))
+                    #expect(try await worker.value("pulses") == settled)
+                    #expect(try await worker.value("returned") == "false")
+                    try await worker.start(source: source)
+                    try await worker.send(["mode": "normal", "text": token, "token": "replacement"])
+                    try await FixtureScenario.eventually { try await worker.value("returned") == "true" }
+                    #expect(try await worker.value("result.echo") == token)
+                    try await worker.stop()
+                    print("WorkerTerminationObservation fault=\(mode) repetition=\(repetition) stopDuration=\(stopDuration) latePulses=0 replacement=true")
+                }
+            }
+            }
+        }
+    }
+
     @Test func moduleInspectionParsesSharedCorpusWithoutExecutingSource() async throws {
         try await FixtureScenario.withScenario { fixture in
             let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
@@ -408,5 +473,107 @@ struct WebKitRuntimeProbeTests {
     }
 
     private struct CookieEcho: Decodable { let cookies: [String] }
+}
+
+/// A dedicated Worker inside a window-attached WebKit document. It is isolated
+/// feasibility code, with no product credentials, database or host capabilities.
+@MainActor
+private final class WorkerExperiment {
+    private let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
+    private let window: UIWindow
+    private weak var previousWindow: UIWindow?
+    private var prepared = false
+
+    private init() throws {
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        previousWindow = scene.windows.first { $0.isKeyWindow }
+        window = UIWindow(windowScene: scene)
+        let controller = UIViewController()
+        window.rootViewController = controller
+        probe.webView.frame = window.bounds
+        probe.webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        controller.view.addSubview(probe.webView)
+        window.makeKeyAndVisible()
+    }
+
+    static func withExperiment(_ body: @MainActor (WorkerExperiment) async throws -> Void) async throws {
+        let experiment = try WorkerExperiment()
+        defer {
+            experiment.probe.close()
+            experiment.window.isHidden = true
+            experiment.previousWindow?.makeKeyAndVisible()
+        }
+        do {
+            try await experiment.probe.loadHTML("""
+                <!doctype html><meta http-equiv="Content-Security-Policy"
+                content="default-src 'none'; script-src blob:; worker-src blob:; connect-src 'none'">
+                <title>Isolated worker experiment</title>
+                """)
+            experiment.prepared = true
+            try await body(experiment)
+            try await experiment.stop()
+        } catch {
+            if experiment.prepared {
+                do { try await experiment.stop() }
+                catch { Issue.record(error, "Worker experiment cleanup failed") }
+            }
+            throw error
+        }
+    }
+
+    func start(source: String) async throws {
+        _ = try await probe.evaluate("""
+            const moduleURL = URL.createObjectURL(new Blob([source], {type: 'text/javascript'}));
+            const bootstrap = `
+              for (const name of ['Worker', 'SharedWorker']) {
+                Object.defineProperty(globalThis, name, {value: undefined, writable: false, configurable: false});
+              }
+              const {execute, constructorsAtLoad} = await import(${JSON.stringify(moduleURL)});
+              const send = postMessage.bind(globalThis);
+              onmessage = async ({data}) => {
+                send({kind: 'entered', token: data.token});
+                try { send({kind: 'result', value: await execute(data, send)}); }
+                catch { send({kind: 'failed'}); }
+              };
+              send({kind: 'ready', constructors: constructorsAtLoad});
+            `;
+            const workerURL = URL.createObjectURL(new Blob([bootstrap], {type: 'text/javascript'}));
+            const state = {worker: new Worker(workerURL, {type: 'module'}), moduleURL, workerURL,
+              ready: false, entered: '', pulses: 0, returned: false, result: null, error: false};
+            state.worker.onmessage = ({data}) => {
+              if (data.kind === 'ready') { state.ready = true; state.workerConstructors = data.constructors; }
+              else if (data.kind === 'entered') state.entered = data.token;
+              else if (data.kind === 'pulse') state.pulses++;
+              else if (data.kind === 'result') { state.result = data.value; state.returned = true; }
+              else state.error = true;
+            };
+            state.worker.onerror = event => { event.preventDefault(); state.error = true; };
+            globalThis.workerExperiment = state;
+            return 'started';
+            """, arguments: ["source": source])
+        try await FixtureScenario.eventually { try await value("ready") == "true" }
+    }
+
+    func send(_ input: [String: String]) async throws {
+        let json = String(decoding: try JSONEncoder().encode(input), as: UTF8.self)
+        _ = try await probe.evaluate("workerExperiment.worker.postMessage(JSON.parse(input)); return 'sent';",
+            arguments: ["input": json])
+    }
+
+    // Expressions are fixed test observations, never supplied by source modules.
+    func value(_ expression: String) async throws -> String {
+        try await probe.evaluate("if (workerExperiment.error) throw new Error('Worker failed'); return String(workerExperiment.\(expression));")
+    }
+
+    func stop() async throws {
+        _ = try await probe.evaluate("""
+            const state = globalThis.workerExperiment;
+            if (state?.worker) {
+              state.worker.terminate(); state.worker = null;
+              URL.revokeObjectURL(state.workerURL); URL.revokeObjectURL(state.moduleURL);
+            }
+            return 'terminated';
+            """, timeout: .seconds(1))
+    }
 }
 #endif

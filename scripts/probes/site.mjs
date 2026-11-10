@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { readFileSync } from 'node:fs';
 
 const authorExample = readFileSync(new URL('../../protocols/yingxue/examples/fixture.source.js', import.meta.url), 'utf8');
+const workerSource = readFileSync(new URL('./worker-source.mjs', import.meta.url), 'utf8');
 
 export const fixtureVersion = 'runtime-probe-1';
 export const contentHTML = `<!doctype html><html><head><title>合成章节</title></head><body>
@@ -78,6 +79,9 @@ export async function startFixture({ port = 0 } = {}) {
     const base = `/scenarios/${id}/`;
     // Observation polling must not grow the scenario's request history itself.
     if (path !== 'status') scenario.requests.push({ method: request.method, path });
+    if (path === 'worker-source.mjs' && request.method === 'GET') {
+      return send(response, 200, workerSource, 'text/javascript; charset=utf-8');
+    }
     const sid = `synthetic-${id}-${scenario.revision}`;
     const cookie = request.headers.cookie ?? '';
     const cookieValues = cookie.split(';').map(value => value.trim());
