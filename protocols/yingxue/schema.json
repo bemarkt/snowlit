@@ -2,8 +2,29 @@
   "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "Yingxue M1 wire contract candidate",
   "description": "Protocol 1 candidate. The schema is the source for generated Swift and TypeScript types and structural validation. Semantic identity, normalization, and execution checks also apply.",
+  "x-module": {
+    "ecmaVersion": 2024,
+    "requiredExports": ["search", "book", "chapters", "chapter"],
+    "optionalExports": ["authenticate", "migrateReferences", "migrateState"],
+    "parameterCount": 2
+  },
   "$ref": "#/$defs/Manifest",
   "$defs": {
+    "ExportName": { "type": "string", "enum": ["search", "book", "chapters", "chapter", "authenticate", "migrateReferences", "migrateState"] },
+    "ModuleExports": { "type": "array", "items": { "$ref": "#/$defs/ExportName" }, "uniqueItems": true },
+    "AcceptedKind": { "type": "string", "const": "accepted" },
+    "RejectedKind": { "type": "string", "const": "rejected" },
+    "InspectionReason": { "type": "string", "enum": ["syntax", "externalModule", "missingExport", "unknownExport", "invalidFunction"] },
+    "Column": { "type": "integer", "minimum": 0, "maximum": 9007199254740991 },
+    "ModuleAccepted": {
+      "type": "object", "properties": { "kind": { "$ref": "#/$defs/AcceptedKind" }, "exports": { "$ref": "#/$defs/ModuleExports" } },
+      "required": ["kind", "exports"], "additionalProperties": false
+    },
+    "ModuleRejected": {
+      "type": "object", "properties": { "kind": { "$ref": "#/$defs/RejectedKind" }, "reason": { "$ref": "#/$defs/InspectionReason" }, "line": { "$ref": "#/$defs/PositiveInteger" }, "column": { "$ref": "#/$defs/Column" } },
+      "required": ["kind", "reason"], "additionalProperties": false
+    },
+    "ModuleInspection": { "oneOf": [ { "$ref": "#/$defs/ModuleAccepted" }, { "$ref": "#/$defs/ModuleRejected" } ] },
     "Opaque": {
       "type": "string",
       "minLength": 1,

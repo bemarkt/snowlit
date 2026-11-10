@@ -117,7 +117,8 @@ def swift():
         else:
             raise ValueError(t)
         rules += [f'        "{name}": {rule},']
-    output += ['}', '', 'enum GeneratedWireSchema {', '    static let rules: [String: WireRule] = [', *rules, '    ]', '}', '']
+    output += ['}', '', 'enum GeneratedWireSchema {', '    static let rules: [String: WireRule] = [', *rules, '    ]', '}',
+               'enum GeneratedModulePolicy {', '    static let requiredExports = [' + ', '.join(map(quote,SCHEMA['x-module']['requiredExports'])) + ']', '}', '']
     return '\n'.join(output)
 
 
@@ -148,7 +149,10 @@ def main():
     outputs = {
         ROOT/'Packages/SnowlitKit/Sources/YingxueKit/Contract/GeneratedWire.swift': swift(),
         ROOT/'protocols/yingxue/yingxue.d.ts': typescript(),
+        ROOT/'Packages/SnowlitKit/Sources/YingxueKit/Resources/SourceInspection/module-policy.js': HEADER + 'globalThis.SnowlitModulePolicy = Object.freeze(' + json.dumps(SCHEMA['x-module'],ensure_ascii=False,sort_keys=True) + ');\n',
     }
+    assert set(SCHEMA['x-module']) == {'ecmaVersion','requiredExports','optionalExports','parameterCount'}
+    assert set(SCHEMA['x-module']['requiredExports'] + SCHEMA['x-module']['optionalExports']) == set(DEFS['ExportName']['enum'])
     corpus_path = ROOT/'protocols/yingxue/fixtures/wire.json'
     corpus = json.loads(corpus_path.read_text(encoding='utf-8'))
     corpus_swift = [HEADER, '// Corpus SHA-256: ' + hashlib.sha256(corpus_path.read_bytes()).hexdigest(),
@@ -160,6 +164,18 @@ def main():
         corpus_swift += ['        .init(name: ' + quote(case['name']) + ', type: ' + quote(case['type']) + ', json: ' + quote(case['json']) + ', valid: ' + str(case['valid']).lower() + '),']
     corpus_swift += ['    ]', '}', '']
     outputs[ROOT/'Packages/SnowlitKit/Tests/YingxueKitTests/GeneratedWireCorpus.swift'] = '\n'.join(corpus_swift)
+    module_corpus_path = ROOT/'protocols/yingxue/fixtures/modules.json'
+    module_corpus = json.loads(module_corpus_path.read_text(encoding='utf-8'))
+    module_swift = [HEADER, '// Corpus SHA-256: ' + hashlib.sha256(module_corpus_path.read_bytes()).hexdigest(),
+        'struct ModuleCorpusCase: Sendable {',
+        '    let name: String; let source: String; let requirements: [String]; let reason: String?',
+        '    static let all: [ModuleCorpusCase] = [']
+    for case in module_corpus:
+        assert set(case) == {'name','source','requirements','reason'}
+        requirements='['+', '.join(map(quote,case['requirements']))+']'
+        module_swift += ['        .init(name: ' + quote(case['name']) + ', source: ' + quote(case['source']) + ', requirements: ' + requirements + ', reason: ' + ('nil' if case['reason'] is None else quote(case['reason'])) + '),']
+    module_swift += ['    ]', '}', '']
+    outputs[ROOT/'Tests/SnowlitAppTests/Probes/GeneratedModuleCorpus.swift'] = '\n'.join(module_swift)
     for path, body in outputs.items():
         if args.check:
             if not path.exists() or path.read_text(encoding='utf-8') != body:

@@ -25,7 +25,13 @@ A readable UTF-8 `.source.js` file starts with a JSON comment header:
 */
 ```
 
-An optional UTF-8 BOM and CRLF header line ending are accepted. The first `*/` closes the header; JSON text containing that sequence must escape the slash. The remainder is a self-contained ES Module. Metadata extraction does not execute the module, and a valid header alone is not installation acceptance. The installation pipeline also needs module analysis and isolated host verification.
+An optional UTF-8 BOM and CRLF header line ending are accepted. The first `*/` closes the header; JSON text containing that sequence must escape the slash. The remainder is a self-contained ES Module. Metadata extraction does not execute the module, and a valid header alone is not installation acceptance.
+
+The module exports `search`, `book`, `chapters`, and `chapter` as async, non-generator functions with two declared parameters `(ctx, input)`. Function declarations, async function expressions/arrows assigned to top-level variables, and local export aliases are accepted. Default exports and unknown exports are rejected. A source declaring any authentication mode also exports `authenticate`; reference/state upgrades may additionally export `migrateReferences`/`migrateState`. These names and the syntax edition (ECMAScript 2024) come from `x-module` in the schema.
+
+Acorn 8.19.0 performs complete AST parsing without evaluating source code. The inspection rejects static imports, re-exports from another module, and dynamic import expressions anywhere in the AST. Import-like strings/comments are data and do not cause false matches. This is syntax and declared-shape validation, not a claim that arbitrary script behavior, generated code, networking, or resource usage is safe. Isolated host verification and runtime capability enforcement are still required. Parser reports contain only categories and line/column positions.
+
+The official Acorn distribution and MIT license are bundled unchanged; `vendor.json` records the archive integrity and individual file hashes. The iOS inspection program and Node author tool use the same parser, policy, and inspection function. Callers pass source through a string argument, never interpolate it into the trusted program. The source digest covers the original file bytes, including header, BOM, and line endings.
 
 `sourceID` identifies the author's source family. The host generates an installation ID, which remains stable across manual updates. Source responses cannot supply installation IDs or local book IDs. Names, account sessions, script versions, and digests are not local book keys. `scriptVersion` is an opaque display/version label, not an automatic update ordering rule.
 
@@ -54,6 +60,7 @@ An update must retain the source family ID and the host installation identity. `
 ```sh
 python3 scripts/generate_yingxue.py --check
 node --test protocols/yingxue/contract.test.mjs
+node scripts/check_yingxue_source.mjs path/to/example.source.js
 ```
 
 The Swift corpus and semantic tests run with YingxueKit's package tests. Node and portable Swift results establish contract behavior, not iOS WebKit compatibility.

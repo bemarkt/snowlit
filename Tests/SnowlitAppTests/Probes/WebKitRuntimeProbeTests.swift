@@ -7,6 +7,27 @@ import WebKit
 @Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct WebKitRuntimeProbeTests {
+    @Test func moduleInspectionParsesSharedCorpusWithoutExecutingSource() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
+            defer { probe.close() }
+            try await probe.load(fixture.url("page"))
+            let program = try SourceInspectionProgram()
+            #expect(try await probe.evaluate(program.bootstrap + "\nreturn 'parser-ready';") == "parser-ready")
+            for sample in ModuleCorpusCase.all {
+                let json = try await probe.evaluate(program.evaluationBody,
+                    arguments: ["source": sample.source, "requirements": sample.requirements])
+                let report = try YingxueWireCodec.decode(YingxueWire.ModuleInspection.self, from: Data(json.utf8))
+                switch report {
+                case .accepted:
+                    #expect(sample.reason == nil, "Unexpected acceptance: \(sample.name)")
+                case .rejected(let failure):
+                    #expect(failure.reason.rawValue == sample.reason, "Unexpected rejection: \(sample.name)")
+                }
+            }
+        }
+    }
+
     @Test func esModuleFetchAndDOMPreserveParagraphAndImageSemantics() async throws {
         try await FixtureScenario.withScenario { fixture in
             let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())

@@ -1,0 +1,144 @@
+[
+  {
+    "name": "direct-async-functions",
+    "source": "export async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n",
+    "requirements": [],
+    "reason": null
+  },
+  {
+    "name": "unexecuted-top-level-throw",
+    "source": "throw new Error('do not execute unknown source');\nexport async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n",
+    "requirements": [],
+    "reason": null
+  },
+  {
+    "name": "import-like-text-is-data",
+    "source": "const text = `import('https://invalid.example/x.js')`;\nconst regex = /export\\s+from/;\n/* import x from 'elsewhere'; */\nexport async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n",
+    "requirements": [],
+    "reason": null
+  },
+  {
+    "name": "top-level-async-arrow",
+    "source": "export const search = async (ctx, input) => { return {items: [], nextCursor: null}; };\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n",
+    "requirements": [],
+    "reason": null
+  },
+  {
+    "name": "local-export-alias",
+    "source": "async function locate(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n\nexport { locate as search };",
+    "requirements": [],
+    "reason": null
+  },
+  {
+    "name": "unicode-export-spelling",
+    "source": "export async function s\\u0065arch(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n",
+    "requirements": [],
+    "reason": null
+  },
+  {
+    "name": "authentication-required",
+    "source": "export async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n\nexport async function authenticate(ctx, input) { return {}; }",
+    "requirements": [
+      "authenticate"
+    ],
+    "reason": null
+  },
+  {
+    "name": "syntax-error",
+    "source": "export async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n\nconst broken = ;",
+    "requirements": [],
+    "reason": "syntax"
+  },
+  {
+    "name": "static-import",
+    "source": "import helper from 'https://invalid.example/helper.js';\nexport async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n",
+    "requirements": [],
+    "reason": "externalModule"
+  },
+  {
+    "name": "nested-dynamic-import",
+    "source": "export async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n\nfunction unused() { return import('https://invalid.example/helper.js'); }",
+    "requirements": [],
+    "reason": "externalModule"
+  },
+  {
+    "name": "escaped-dynamic-import",
+    "source": "export async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n\nconst unused = () => import('h\\u0074tps://invalid.example/x');",
+    "requirements": [],
+    "reason": "externalModule"
+  },
+  {
+    "name": "re-export",
+    "source": "export async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n\nexport { x } from './other.js';",
+    "requirements": [],
+    "reason": "externalModule"
+  },
+  {
+    "name": "export-star",
+    "source": "export async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n\nexport * from './other.js';",
+    "requirements": [],
+    "reason": "externalModule"
+  },
+  {
+    "name": "missing-function",
+    "source": "export async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\n",
+    "requirements": [],
+    "reason": "missingExport"
+  },
+  {
+    "name": "synchronous-function",
+    "source": "export function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n",
+    "requirements": [],
+    "reason": "invalidFunction"
+  },
+  {
+    "name": "generator-function",
+    "source": "export async function* search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n",
+    "requirements": [],
+    "reason": "invalidFunction"
+  },
+  {
+    "name": "wrong-parameter-count",
+    "source": "export async function search(input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n",
+    "requirements": [],
+    "reason": "invalidFunction"
+  },
+  {
+    "name": "rest-parameters",
+    "source": "export async function search(ctx, ...input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n",
+    "requirements": [],
+    "reason": "invalidFunction"
+  },
+  {
+    "name": "call-produced-function",
+    "source": "export const search = factory();\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n",
+    "requirements": [],
+    "reason": "invalidFunction"
+  },
+  {
+    "name": "unknown-export",
+    "source": "export async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n\nexport const password = 'synthetic-private';",
+    "requirements": [],
+    "reason": "unknownExport"
+  },
+  {
+    "name": "default-export",
+    "source": "export async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n\nexport default {};",
+    "requirements": [],
+    "reason": "unknownExport"
+  },
+  {
+    "name": "authentication-missing",
+    "source": "export async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n",
+    "requirements": [
+      "authenticate"
+    ],
+    "reason": "missingExport"
+  },
+  {
+    "name": "duplicate-export",
+    "source": "export async function search(ctx, input) { return {items: [], nextCursor: null}; }\nexport async function book(ctx, input) { return {reference: input.reference, title: 'Example'}; }\nexport async function chapters(ctx, input) { return {book: input.book, revision: 'r1', items: [], nextCursor: null}; }\nexport async function chapter(ctx, input) { return {reference: input.reference, revision: 'r1', body: {kind: 'text', text: 'Example'}}; }\n\nexport const search = async (ctx, input) => ({});",
+    "requirements": [],
+    "reason": "syntax"
+  }
+]
