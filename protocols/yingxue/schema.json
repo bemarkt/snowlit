@@ -1,0 +1,921 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "Yingxue M1 wire contract candidate",
+  "description": "Protocol 1 candidate. The schema is the source for generated Swift and TypeScript types and structural validation. Semantic identity, normalization, and execution checks also apply.",
+  "$ref": "#/$defs/Manifest",
+  "$defs": {
+    "Opaque": {
+      "type": "string",
+      "minLength": 1,
+      "pattern": "^[^\\u0000]+$(?![\\s\\S])"
+    },
+    "Text": {
+      "type": "string"
+    },
+    "Label": {
+      "type": "string",
+      "minLength": 1
+    },
+    "Cursor": {
+      "type": [
+        "string",
+        "null"
+      ],
+      "minLength": 1,
+      "pattern": "^[^\\u0000]+$(?![\\s\\S])"
+    },
+    "ProtocolVersion": {
+      "type": "integer",
+      "const": 1
+    },
+    "PositiveInteger": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "Port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535
+    },
+    "Dimension": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 9007199254740991
+    },
+    "HeadingLevel": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 6
+    },
+    "Flag": {
+      "type": "boolean"
+    },
+    "SourceID": {
+      "type": "string",
+      "pattern": "^[a-z][a-z0-9]*(?:[.-][a-z0-9]+)*$(?![\\s\\S])"
+    },
+    "Host": {
+      "type": "string",
+      "pattern": "^(?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)(?:\\.[a-z0-9](?:[a-z0-9-]*[a-z0-9])?)*$(?![\\s\\S])"
+    },
+    "Scheme": {
+      "type": "string",
+      "enum": [
+        "https",
+        "http"
+      ]
+    },
+    "Capability": {
+      "type": "string",
+      "enum": [
+        "http",
+        "dom",
+        "browser",
+        "publicState"
+      ]
+    },
+    "Authentication": {
+      "type": "string",
+      "enum": [
+        "web",
+        "form"
+      ]
+    },
+    "Capabilities": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Capability"
+      },
+      "uniqueItems": true
+    },
+    "Authentications": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Authentication"
+      },
+      "uniqueItems": true
+    },
+    "Origin": {
+      "type": "object",
+      "properties": {
+        "scheme": {
+          "$ref": "#/$defs/Scheme"
+        },
+        "host": {
+          "$ref": "#/$defs/Host"
+        },
+        "port": {
+          "$ref": "#/$defs/Port"
+        }
+      },
+      "required": [
+        "scheme",
+        "host"
+      ],
+      "additionalProperties": false
+    },
+    "Origins": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Origin"
+      },
+      "uniqueItems": true
+    },
+    "TextSettingKind": {
+      "type": "string",
+      "const": "text"
+    },
+    "BooleanSettingKind": {
+      "type": "string",
+      "const": "boolean"
+    },
+    "ChoiceSettingKind": {
+      "type": "string",
+      "const": "choice"
+    },
+    "TextSetting": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/TextSettingKind"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "label": {
+          "$ref": "#/$defs/Label"
+        },
+        "initial": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "label",
+        "initial"
+      ],
+      "additionalProperties": false
+    },
+    "BooleanSetting": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/BooleanSettingKind"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "label": {
+          "$ref": "#/$defs/Label"
+        },
+        "initial": {
+          "$ref": "#/$defs/Flag"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "label",
+        "initial"
+      ],
+      "additionalProperties": false
+    },
+    "Choice": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "label": {
+          "$ref": "#/$defs/Label"
+        }
+      },
+      "required": [
+        "value",
+        "label"
+      ],
+      "additionalProperties": false
+    },
+    "Choices": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Choice"
+      }
+    },
+    "ChoiceSetting": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ChoiceSettingKind"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "label": {
+          "$ref": "#/$defs/Label"
+        },
+        "initial": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "choices": {
+          "$ref": "#/$defs/Choices"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "label",
+        "initial",
+        "choices"
+      ],
+      "additionalProperties": false
+    },
+    "PublicSetting": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TextSetting"
+        },
+        {
+          "$ref": "#/$defs/BooleanSetting"
+        },
+        {
+          "$ref": "#/$defs/ChoiceSetting"
+        }
+      ]
+    },
+    "PublicSettings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PublicSetting"
+      }
+    },
+    "Manifest": {
+      "type": "object",
+      "properties": {
+        "protocolVersion": {
+          "$ref": "#/$defs/ProtocolVersion"
+        },
+        "sourceID": {
+          "$ref": "#/$defs/SourceID"
+        },
+        "name": {
+          "$ref": "#/$defs/Label"
+        },
+        "author": {
+          "$ref": "#/$defs/Label"
+        },
+        "description": {
+          "$ref": "#/$defs/Text"
+        },
+        "scriptVersion": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "referenceVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        },
+        "stateVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        },
+        "capabilities": {
+          "$ref": "#/$defs/Capabilities"
+        },
+        "origins": {
+          "$ref": "#/$defs/Origins"
+        },
+        "authentication": {
+          "$ref": "#/$defs/Authentications"
+        },
+        "publicConfiguration": {
+          "$ref": "#/$defs/PublicSettings"
+        }
+      },
+      "required": [
+        "protocolVersion",
+        "sourceID",
+        "name",
+        "scriptVersion",
+        "referenceVersion",
+        "stateVersion",
+        "capabilities",
+        "origins",
+        "authentication",
+        "publicConfiguration"
+      ],
+      "additionalProperties": false
+    },
+    "BookReference": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        }
+      },
+      "required": [
+        "key"
+      ],
+      "additionalProperties": false
+    },
+    "ChapterReference": {
+      "type": "object",
+      "properties": {
+        "book": {
+          "$ref": "#/$defs/BookReference"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        }
+      },
+      "required": [
+        "book",
+        "key"
+      ],
+      "additionalProperties": false
+    },
+    "BookSummary": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/BookReference"
+        },
+        "title": {
+          "$ref": "#/$defs/Label"
+        },
+        "author": {
+          "$ref": "#/$defs/Text"
+        },
+        "summary": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "reference",
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "Books": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/BookSummary"
+      }
+    },
+    "SearchInput": {
+      "type": "object",
+      "properties": {
+        "query": {
+          "$ref": "#/$defs/Label"
+        },
+        "cursor": {
+          "$ref": "#/$defs/Cursor"
+        }
+      },
+      "required": [
+        "query",
+        "cursor"
+      ],
+      "additionalProperties": false
+    },
+    "SearchPage": {
+      "type": "object",
+      "properties": {
+        "items": {
+          "$ref": "#/$defs/Books"
+        },
+        "nextCursor": {
+          "$ref": "#/$defs/Cursor"
+        }
+      },
+      "required": [
+        "items",
+        "nextCursor"
+      ],
+      "additionalProperties": false
+    },
+    "BookInput": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/BookReference"
+        }
+      },
+      "required": [
+        "reference"
+      ],
+      "additionalProperties": false
+    },
+    "BookDetails": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/BookReference"
+        },
+        "title": {
+          "$ref": "#/$defs/Label"
+        },
+        "author": {
+          "$ref": "#/$defs/Text"
+        },
+        "summary": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "reference",
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "ChaptersInput": {
+      "type": "object",
+      "properties": {
+        "book": {
+          "$ref": "#/$defs/BookReference"
+        },
+        "cursor": {
+          "$ref": "#/$defs/Cursor"
+        }
+      },
+      "required": [
+        "book",
+        "cursor"
+      ],
+      "additionalProperties": false
+    },
+    "ChapterSummary": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "title": {
+          "$ref": "#/$defs/Label"
+        }
+      },
+      "required": [
+        "key",
+        "title"
+      ],
+      "additionalProperties": false
+    },
+    "Chapters": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ChapterSummary"
+      }
+    },
+    "ChaptersPage": {
+      "type": "object",
+      "properties": {
+        "book": {
+          "$ref": "#/$defs/BookReference"
+        },
+        "revision": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "items": {
+          "$ref": "#/$defs/Chapters"
+        },
+        "nextCursor": {
+          "$ref": "#/$defs/Cursor"
+        }
+      },
+      "required": [
+        "book",
+        "revision",
+        "items",
+        "nextCursor"
+      ],
+      "additionalProperties": false
+    },
+    "ChapterInput": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/ChapterReference"
+        }
+      },
+      "required": [
+        "reference"
+      ],
+      "additionalProperties": false
+    },
+    "Resource": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "reference": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "baseURL": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "alternateText": {
+          "$ref": "#/$defs/Text"
+        },
+        "mimeType": {
+          "$ref": "#/$defs/Label"
+        },
+        "width": {
+          "$ref": "#/$defs/Dimension"
+        },
+        "height": {
+          "$ref": "#/$defs/Dimension"
+        }
+      },
+      "required": [
+        "id",
+        "reference"
+      ],
+      "additionalProperties": false
+    },
+    "TextRunKind": {
+      "type": "string",
+      "const": "text"
+    },
+    "ImageKind": {
+      "type": "string",
+      "const": "image"
+    },
+    "CommentKind": {
+      "type": "string",
+      "const": "comment"
+    },
+    "ParagraphKind": {
+      "type": "string",
+      "const": "paragraph"
+    },
+    "HeadingKind": {
+      "type": "string",
+      "const": "heading"
+    },
+    "TextRun": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/TextRunKind"
+        },
+        "text": {
+          "$ref": "#/$defs/Text"
+        },
+        "strong": {
+          "$ref": "#/$defs/Flag"
+        },
+        "emphasis": {
+          "$ref": "#/$defs/Flag"
+        }
+      },
+      "required": [
+        "kind",
+        "text",
+        "strong",
+        "emphasis"
+      ],
+      "additionalProperties": false
+    },
+    "Image": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ImageKind"
+        },
+        "id": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "resource": {
+          "$ref": "#/$defs/Resource"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "resource"
+      ],
+      "additionalProperties": false
+    },
+    "Comment": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CommentKind"
+        },
+        "id": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "paragraphID": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "externalReference": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "appearance": {
+          "$ref": "#/$defs/Resource"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "paragraphID",
+        "externalReference"
+      ],
+      "additionalProperties": false
+    },
+    "Inline": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TextRun"
+        },
+        {
+          "$ref": "#/$defs/Image"
+        },
+        {
+          "$ref": "#/$defs/Comment"
+        }
+      ]
+    },
+    "Inlines": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Inline"
+      }
+    },
+    "Paragraph": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ParagraphKind"
+        },
+        "id": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "runs": {
+          "$ref": "#/$defs/Inlines"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "runs"
+      ],
+      "additionalProperties": false
+    },
+    "Heading": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/HeadingKind"
+        },
+        "id": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "runs": {
+          "$ref": "#/$defs/Inlines"
+        },
+        "level": {
+          "$ref": "#/$defs/HeadingLevel"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "runs",
+        "level"
+      ],
+      "additionalProperties": false
+    },
+    "Block": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Paragraph"
+        },
+        {
+          "$ref": "#/$defs/Heading"
+        },
+        {
+          "$ref": "#/$defs/Image"
+        },
+        {
+          "$ref": "#/$defs/Comment"
+        }
+      ]
+    },
+    "Blocks": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Block"
+      }
+    },
+    "ParagraphBinding": {
+      "type": "object",
+      "properties": {
+        "htmlID": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "paragraphID": {
+          "$ref": "#/$defs/Opaque"
+        }
+      },
+      "required": [
+        "htmlID",
+        "paragraphID"
+      ],
+      "additionalProperties": false
+    },
+    "ParagraphBindings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ParagraphBinding"
+      }
+    },
+    "IllustrationKind": {
+      "type": "string",
+      "const": "illustration"
+    },
+    "IllustrationBinding": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/IllustrationKind"
+        },
+        "htmlID": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "elementID": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "resourceID": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "reference": {
+          "$ref": "#/$defs/Opaque"
+        }
+      },
+      "required": [
+        "kind",
+        "htmlID",
+        "elementID",
+        "resourceID"
+      ],
+      "additionalProperties": false
+    },
+    "CommentBinding": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CommentKind"
+        },
+        "htmlID": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "elementID": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "resourceID": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "reference": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "paragraphID": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "externalReference": {
+          "$ref": "#/$defs/Opaque"
+        }
+      },
+      "required": [
+        "kind",
+        "htmlID",
+        "elementID",
+        "resourceID",
+        "paragraphID",
+        "externalReference"
+      ],
+      "additionalProperties": false
+    },
+    "ImageBinding": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/IllustrationBinding"
+        },
+        {
+          "$ref": "#/$defs/CommentBinding"
+        }
+      ]
+    },
+    "ImageBindings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ImageBinding"
+      }
+    },
+    "TextBodyKind": {
+      "type": "string",
+      "const": "text"
+    },
+    "HTMLBodyKind": {
+      "type": "string",
+      "const": "html"
+    },
+    "StructuredBodyKind": {
+      "type": "string",
+      "const": "structured"
+    },
+    "TextBody": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/TextBodyKind"
+        },
+        "text": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "kind",
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "HTMLBody": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/HTMLBodyKind"
+        },
+        "html": {
+          "$ref": "#/$defs/Text"
+        },
+        "baseURL": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "paragraphs": {
+          "$ref": "#/$defs/ParagraphBindings"
+        },
+        "images": {
+          "$ref": "#/$defs/ImageBindings"
+        }
+      },
+      "required": [
+        "kind",
+        "html",
+        "baseURL",
+        "paragraphs",
+        "images"
+      ],
+      "additionalProperties": false
+    },
+    "StructuredBody": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/StructuredBodyKind"
+        },
+        "blocks": {
+          "$ref": "#/$defs/Blocks"
+        }
+      },
+      "required": [
+        "kind",
+        "blocks"
+      ],
+      "additionalProperties": false
+    },
+    "ChapterBody": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/TextBody"
+        },
+        {
+          "$ref": "#/$defs/HTMLBody"
+        },
+        {
+          "$ref": "#/$defs/StructuredBody"
+        }
+      ]
+    },
+    "ChapterResult": {
+      "type": "object",
+      "properties": {
+        "reference": {
+          "$ref": "#/$defs/ChapterReference"
+        },
+        "revision": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "body": {
+          "$ref": "#/$defs/ChapterBody"
+        }
+      },
+      "required": [
+        "reference",
+        "revision",
+        "body"
+      ],
+      "additionalProperties": false
+    }
+  }
+}

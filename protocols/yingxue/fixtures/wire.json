@@ -1,0 +1,194 @@
+[
+  {
+    "name": "manifest-anonymous",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1,\"sourceID\":\"org.example.reader\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": true
+  },
+  {
+    "name": "manifest-future-version",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":2,\"sourceID\":\"org.example.reader\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": false
+  },
+  {
+    "name": "manifest-unknown-capability",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1,\"sourceID\":\"org.example.reader\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"readLibrary\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": false
+  },
+  {
+    "name": "manifest-duplicate-capability",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1,\"sourceID\":\"org.example.reader\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"http\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": false
+  },
+  {
+    "name": "manifest-extra-credential-field",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1,\"sourceID\":\"org.example.reader\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}],\"cookie\":\"synthetic-private-value\"}",
+    "valid": false
+  },
+  {
+    "name": "manifest-invalid-source-id-newline",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1,\"sourceID\":\"valid\\n\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": false
+  },
+  {
+    "name": "manifest-boolean-version",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":true,\"sourceID\":\"org.example.reader\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": false
+  },
+  {
+    "name": "manifest-unsafe-reference-version",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1,\"sourceID\":\"org.example.reader\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":9007199254740992,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": false
+  },
+  {
+    "name": "manifest-null-name",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1,\"sourceID\":\"org.example.reader\",\"name\":null,\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": false
+  },
+  {
+    "name": "manifest-empty-name",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1,\"sourceID\":\"org.example.reader\",\"name\":\"\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": false
+  },
+  {
+    "name": "manifest-web-and-form",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1,\"sourceID\":\"org.example.reader\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[\"web\",\"form\"],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": true
+  },
+  {
+    "name": "search-valid-empty",
+    "type": "SearchPage",
+    "json": "{\"items\":[],\"nextCursor\":null}",
+    "valid": true
+  },
+  {
+    "name": "search-missing-end",
+    "type": "SearchPage",
+    "json": "{\"items\":[]}",
+    "valid": false
+  },
+  {
+    "name": "search-nonempty-cursor",
+    "type": "SearchPage",
+    "json": "{\"items\":[{\"reference\":{\"key\":\"same title 1\"},\"title\":\"same\"},{\"reference\":{\"key\":\"same title 2\"},\"title\":\"same\"}],\"nextCursor\":\"page:2\"}",
+    "valid": true
+  },
+  {
+    "name": "search-empty-cursor",
+    "type": "SearchPage",
+    "json": "{\"items\":[],\"nextCursor\":\"\"}",
+    "valid": false
+  },
+  {
+    "name": "search-private-extra-book-field",
+    "type": "SearchPage",
+    "json": "{\"items\":[{\"reference\":{\"key\":\"b\"},\"title\":\"book\",\"password\":\"synthetic-secret\"}],\"nextCursor\":null}",
+    "valid": false
+  },
+  {
+    "name": "catalog-complete",
+    "type": "ChaptersPage",
+    "json": "{\"book\":{\"key\":\"b\"},\"revision\":\"r1\",\"items\":[{\"key\":\"c\",\"title\":\"chapter\"}],\"nextCursor\":null}",
+    "valid": true
+  },
+  {
+    "name": "catalog-null-revision",
+    "type": "ChaptersPage",
+    "json": "{\"book\":{\"key\":\"b\"},\"revision\":null,\"items\":[],\"nextCursor\":null}",
+    "valid": false
+  },
+  {
+    "name": "chapter-html-with-comment-and-image",
+    "type": "ChapterResult",
+    "json": "{\"reference\":{\"book\":{\"key\":\"b\"},\"key\":\"c\"},\"revision\":\"r1\",\"body\":{\"kind\":\"html\",\"html\":\"<p id='p'>正文<img id='comment' src='comments.svg'></p><img src='figure.png'>\",\"baseURL\":\"https://fixture.invalid/chapters/\",\"paragraphs\":[{\"htmlID\":\"p\",\"paragraphID\":\"paragraph\"}],\"images\":[{\"kind\":\"comment\",\"htmlID\":\"comment\",\"elementID\":\"entry\",\"resourceID\":\"icon\",\"paragraphID\":\"paragraph\",\"externalReference\":\"thread\"}]}}",
+    "valid": true
+  },
+  {
+    "name": "chapter-text",
+    "type": "ChapterResult",
+    "json": "{\"reference\":{\"book\":{\"key\":\"b\"},\"key\":\"c\"},\"revision\":\"r1\",\"body\":{\"kind\":\"text\",\"text\":\"é 👩🏽‍💻\\n重复\\n重复\"}}",
+    "valid": true
+  },
+  {
+    "name": "chapter-unknown-content-kind",
+    "type": "ChapterResult",
+    "json": "{\"reference\":{\"book\":{\"key\":\"b\"},\"key\":\"c\"},\"revision\":\"r1\",\"body\":{\"kind\":\"javascript\",\"code\":\"fetch('/bad')\"}}",
+    "valid": false
+  },
+  {
+    "name": "chapter-unknown-local-identity",
+    "type": "ChapterResult",
+    "json": "{\"reference\":{\"book\":{\"key\":\"b\"},\"key\":\"c\",\"installationID\":\"chosen-by-source\"},\"revision\":\"r1\",\"body\":{\"kind\":\"html\",\"html\":\"<p id='p'>正文<img id='comment' src='comments.svg'></p><img src='figure.png'>\",\"baseURL\":\"https://fixture.invalid/chapters/\",\"paragraphs\":[{\"htmlID\":\"p\",\"paragraphID\":\"paragraph\"}],\"images\":[{\"kind\":\"comment\",\"htmlID\":\"comment\",\"elementID\":\"entry\",\"resourceID\":\"icon\",\"paragraphID\":\"paragraph\",\"externalReference\":\"thread\"}]}}",
+    "valid": false
+  },
+  {
+    "name": "chapter-null-opaque-key",
+    "type": "ChapterResult",
+    "json": "{\"reference\":{\"book\":{\"key\":\"b\"},\"key\":\"\\u0000\"},\"revision\":\"r1\",\"body\":{\"kind\":\"html\",\"html\":\"<p id='p'>正文<img id='comment' src='comments.svg'></p><img src='figure.png'>\",\"baseURL\":\"https://fixture.invalid/chapters/\",\"paragraphs\":[{\"htmlID\":\"p\",\"paragraphID\":\"paragraph\"}],\"images\":[{\"kind\":\"comment\",\"htmlID\":\"comment\",\"elementID\":\"entry\",\"resourceID\":\"icon\",\"paragraphID\":\"paragraph\",\"externalReference\":\"thread\"}]}}",
+    "valid": false
+  },
+  {
+    "name": "chapter-structured",
+    "type": "ChapterResult",
+    "json": "{\"reference\":{\"book\":{\"key\":\"b\"},\"key\":\"c\"},\"revision\":\"r1\",\"body\":{\"kind\":\"structured\",\"blocks\":[{\"kind\":\"heading\",\"id\":\"title\",\"level\":2,\"runs\":[{\"kind\":\"text\",\"text\":\"标题\",\"strong\":false,\"emphasis\":false}]},{\"kind\":\"paragraph\",\"id\":\"p\",\"runs\":[{\"kind\":\"text\",\"text\":\"正文\",\"strong\":true,\"emphasis\":false},{\"kind\":\"image\",\"id\":\"i\",\"resource\":{\"id\":\"r\",\"reference\":\"picture.png\",\"width\":100,\"height\":200}},{\"kind\":\"comment\",\"id\":\"comment\",\"paragraphID\":\"p\",\"externalReference\":\"thread\"}]}]}}",
+    "valid": true
+  },
+  {
+    "name": "chapter-invalid-heading-level",
+    "type": "Heading",
+    "json": "{\"kind\":\"heading\",\"id\":\"h\",\"level\":7,\"runs\":[]}",
+    "valid": false
+  },
+  {
+    "name": "chapter-invalid-image-dimension",
+    "type": "Resource",
+    "json": "{\"id\":\"i\",\"reference\":\"i.png\",\"width\":0}",
+    "valid": false
+  },
+  {
+    "name": "opaque-composed-unicode",
+    "type": "BookReference",
+    "json": "{\"key\":\"é\"}",
+    "valid": true
+  },
+  {
+    "name": "opaque-decomposed-unicode",
+    "type": "BookReference",
+    "json": "{\"key\":\"é\"}",
+    "valid": true
+  },
+  {
+    "name": "duplicate-escaped-version",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1,\"protocol\\u0056ersion\":999,\"sourceID\":\"org.example.reader\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": false
+  },
+  {
+    "name": "nested-duplicate-key",
+    "type": "BookInput",
+    "json": "{\"reference\":{\"key\":\"first\",\"k\\u0065y\":\"second\"}}",
+    "valid": false
+  },
+  {
+    "name": "fractional-protocol-value",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1.0,\"sourceID\":\"org.example.reader\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": true
+  },
+  {
+    "name": "malformed-json",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":",
+    "valid": false
+  }
+]
