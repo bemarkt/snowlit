@@ -66,6 +66,14 @@ private final class RuntimeLifecycleProbe: UIViewController {
               runtime == nil, isViewLoaded, view.window != nil else { return }
         let current = generation
         let probe = RuntimeLifecycleSession(dataStore: websiteDataStore)
+        // Compare actual window participation with the failed offscreen rebuild.
+        // Keep a nonzero, visible blank document behind the native controls; no
+        // hidden/transparent view or longer deadline can mask this condition.
+        probe.view.frame = view.bounds
+        probe.view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        probe.view.isUserInteractionEnabled = false
+        probe.view.accessibilityElementsHidden = true
+        view.insertSubview(probe.view, at: 0)
         runtime = probe
         phase = .preparing
         render()
@@ -76,7 +84,7 @@ private final class RuntimeLifecycleProbe: UIViewController {
                 ready += 1; phase = .ready; render()
             } catch {
                 guard let self, generation == current else { return }
-                recordFailure(error, operation: "prepare")
+                recordFailure(error, operation: "prepare.\(probe.preparationStage)")
             }
         }
     }

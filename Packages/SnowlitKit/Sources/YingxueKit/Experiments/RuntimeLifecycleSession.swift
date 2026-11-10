@@ -1,5 +1,6 @@
 #if os(iOS) && DEBUG
 import Foundation
+import UIKit
 import WebKit
 
 /// Debug-only worker for the App's real background/foreground UI fixture.
@@ -7,6 +8,8 @@ import WebKit
 public final class RuntimeLifecycleSession: NSObject, WKScriptMessageHandler {
     private let probe: WebKitRuntimeProbe
     private var entered: (@MainActor @Sendable () -> Void)?
+    public var view: UIView { probe.webView }
+    public private(set) var preparationStage = "document"
 
     public init(dataStore: WKWebsiteDataStore) {
         probe = WebKitRuntimeProbe(dataStore: dataStore)
@@ -14,8 +17,11 @@ public final class RuntimeLifecycleSession: NSObject, WKScriptMessageHandler {
     }
 
     public func prepare() async throws {
+        preparationStage = "document"
         try await probe.loadHTML("<!doctype html><html><head><title>Lifecycle probe</title></head><body></body></html>")
+        preparationStage = "javascript"
         guard try await probe.evaluate("return 'ready';") == "ready" else { throw Failure.invalidResult }
+        preparationStage = "ready"
     }
 
     public func waitForInterruption(onEntered: @escaping @MainActor @Sendable () -> Void) async throws {
