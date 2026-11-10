@@ -102,7 +102,7 @@ private struct SourceWebInteractionView: View {
 
     var body: some View {
         NavigationStack {
-            SourceWebsiteView(webView: interaction.view)
+            SourceWebsiteView(container: interaction.container)
                 .safeAreaInset(edge: .top) {
                     VStack(alignment: .leading, spacing: 4) {
                         Text(interaction.sourceName).font(.headline)
@@ -127,7 +127,10 @@ private struct SourceWebInteractionView: View {
 }
 
 private struct SourceWebsiteView: UIViewRepresentable {
-    let webView: WKWebView
-    func makeUIView(context: Context) -> WKWebView { webView }
-    func updateUIView(_ view: WKWebView, context: Context) {}
+    let container: UIView
+    func makeUIView(context: Context) -> UIView { container }
+    func updateUIView(_ view: UIView, context: Context) {}
+    static func dismantleUIView(_ view: UIView, coordinator: ()) {
+        for child in view.subviews { child.removeFromSuperview() }
+    }
 }

@@ -212,15 +212,23 @@ final class SourceExecutionSession: Identifiable {
         case .web(let request):
             guard let host, !closed else { throw Failure.unavailable }
             let page = try await host.browser.open(.init(target: request.target))
-            guard let view = host.browser.webView(for: page.page.id), !closed else { throw Failure.unavailable }
-            let interaction = SourceWebInteraction(title: request.title, sourceName: sourceName, view: view)
+            let interaction = try makeWebInteraction(title: request.title, pageID: page.page.id, browser: host.browser)
             webInteraction = interaction
-            defer { if webInteraction === interaction { webInteraction = nil } }
+            defer {
+                interaction.releasePage()
+                if webInteraction === interaction { webInteraction = nil }
+            }
             let result = try await interaction.response()
             try await gate.check(ticket)
             _ = try await host.browser.closePage(.init(id: page.page.id))
             return try await gate.completeInteraction(.init(id: presentation.id, result: result), for: ticket)
         }
+    }
+
+    private func makeWebInteraction(title: String, pageID: String,
+                                    browser: SourceBrowserSession) throws -> SourceWebInteraction {
+        guard let view = browser.webView(for: pageID), !closed else { throw Failure.unavailable }
+        return SourceWebInteraction(title: title, sourceName: sourceName, view: view)
     }
 
     private func mount(_ view: WKWebView) {
@@ -253,12 +261,22 @@ final class SourceWebInteraction: Identifiable {
     let id = UUID()
     let title: String
     let sourceName: String
-    let view: WKWebView
+    /// SwiftUI may retain a dismissed representable. It owns only this emptyable
+    /// container, never the website view whose data store must be releasable.
+    let container = UIView()
     private(set) var finished = false
     @ObservationIgnored private var result: YingxueWire.InteractionResult?
     @ObservationIgnored private var waiter: CheckedContinuation<YingxueWire.InteractionResult, Never>?
 
-    init(title: String, sourceName: String, view: WKWebView) { self.title = title; self.sourceName = sourceName; self.view = view }
+    init(title: String, sourceName: String, view: WKWebView) {
+        self.title = title; self.sourceName = sourceName
+        view.removeFromSuperview()
+        view.frame = container.bounds; view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        container.addSubview(view)
+    }
+    func releasePage() {
+        for view in container.subviews { view.removeFromSuperview() }
+    }
     func complete() { settle(.completed(.init(kind: .completed))) }
     func cancel() { settle(.cancelled(.init(kind: .cancelled))) }
     func response() async throws -> YingxueWire.InteractionResult {
@@ -272,6 +290,7 @@ final class SourceWebInteraction: Identifiable {
     }
     private func settle(_ value: YingxueWire.InteractionResult) {
         guard !finished else { return }
+        releasePage()
         finished = true; result = value; waiter?.resume(returning: value); waiter = nil
     }
 }

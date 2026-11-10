@@ -5,6 +5,7 @@ import SnowlitStorage
 import SwiftUI
 import Testing
 import UIKit
+import WebKit
 import YingxueKit
 @testable import Snowlit
 
@@ -192,6 +193,8 @@ struct SourceCandidateValidatorTests {
             cancel: { runtime.cancel() }, retryCleanup: { try await runtime.retryCleanup() }))
         window.makeKeyAndVisible()
         defer { window.isHidden = true; window.rootViewController = nil; previous?.makeKeyAndVisible() }
+        var retainedWebInteraction: SourceWebInteraction?
+        weak var presentedPage: WKWebView?
         do {
             if let action {
                 try await FixtureScenario.eventually { session.formSession?.form != nil }
@@ -201,15 +204,24 @@ struct SourceCandidateValidatorTests {
             if let webAction {
                 try await FixtureScenario.eventually { session.webInteraction != nil }
                 let interaction = try #require(session.webInteraction)
+                retainedWebInteraction = interaction
+                presentedPage = interaction.container.subviews.first as? WKWebView
+                #expect(presentedPage != nil)
                 webAction(interaction)
             }
             let reply = try await work.value
             #expect(runtime.active == nil && session.phase == .finished)
+            if let retainedWebInteraction {
+                #expect(retainedWebInteraction.container.subviews.isEmpty && presentedPage == nil)
+            }
             return reply
         } catch {
             do { try await runtime.invalidate(expected.id) }
             catch { Issue.record(error, "Installed operation cleanup failed") }
             _ = await work.result
+            if let retainedWebInteraction {
+                #expect(retainedWebInteraction.container.subviews.isEmpty && presentedPage == nil)
+            }
             throw error
         }
     }

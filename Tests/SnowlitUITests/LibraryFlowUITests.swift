@@ -3,6 +3,7 @@ import XCTest
 final class LibraryFlowUITests: XCTestCase {
     @MainActor
     func testAdoptSearchAllCatalogPagesAddAndReopenFromTheShelf() {
+        continueAfterFailure = false
         let app = XCUIApplication()
         app.launchArguments = ["-snowlit-test-library-flow", UUID().uuidString]
         app.launch()
@@ -26,7 +27,9 @@ final class LibraryFlowUITests: XCTestCase {
         let query = app.searchFields.firstMatch
         XCTAssertTrue(query.waitForExistence(timeout: 5))
         query.tap(); query.typeText("fixture\n")
-        XCTAssertTrue(app.staticTexts["Another Novel"].waitForExistence(timeout: 15))
+        let firstResult = app.buttons.matching(identifier: "search.result")
+            .matching(NSPredicate(format: "label == %@", "Another Novel")).firstMatch
+        XCTAssertTrue(firstResult.waitForExistence(timeout: 15))
         let more = app.buttons["search.more"]
         XCTAssertTrue(more.isHittable)
         more.tap()
