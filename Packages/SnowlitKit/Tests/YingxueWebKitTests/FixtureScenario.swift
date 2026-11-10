@@ -38,6 +38,12 @@ final class FixtureScenario {
         do {
             try await body(scenario)
         } catch {
+            do {
+                let (_, observation) = try await scenario.request("status")
+                // The synthetic status contains only route/method and request counts.
+                // Never include cookies, request bodies or protected content here.
+                print("FixtureFailureObservation \(String(decoding: observation, as: UTF8.self))")
+            } catch { Issue.record(error, "Fixture failure observation unavailable") }
             do { _ = try await scenario.request("", method: "DELETE") }
             catch { Issue.record(error, "Fixture scenario cleanup failed") }
             throw error

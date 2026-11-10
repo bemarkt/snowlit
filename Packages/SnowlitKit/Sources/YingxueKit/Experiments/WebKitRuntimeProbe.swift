@@ -17,6 +17,8 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
     private var navigation: (WKNavigation, ProbeResultRegistry<String>.Ticket)?
     private(set) var terminationCount = 0
     private var isClosed = false
+    private let observationID = UUID()
+    private var evaluationCount = 0
 
     init(dataStore: WKWebsiteDataStore) {
         let configuration = WKWebViewConfiguration()
@@ -32,12 +34,17 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
         results.invalidate(because: .contextRebuilt)
         navigation = nil
         webView.stopLoading()
-        _ = try await navigations.perform(timeout: timeout) { ticket in
-            if let started = webView.load(URLRequest(url: url)) {
-                navigation = (started, ticket)
-            } else {
-                navigations.resolve(ticket, with: .failure(Failure.navigationNotStarted))
+        do {
+            _ = try await navigations.perform(timeout: timeout) { ticket in
+                if let started = webView.load(URLRequest(url: url)) {
+                    navigation = (started, ticket)
+                } else {
+                    navigations.resolve(ticket, with: .failure(Failure.navigationNotStarted))
+                }
             }
+        } catch {
+            observeFailure(operation: "load", sequence: 0)
+            throw error
         }
     }
 
@@ -49,21 +56,28 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
         timeout: Duration = .seconds(10)
     ) async throws -> String {
         guard !isClosed else { throw Failure.closed }
-        return try await results.perform(timeout: timeout) { ticket in
-            webView.callAsyncJavaScript(body, arguments: arguments, in: nil, in: .page) {
-                [weak self] result in
-                guard let self else { return }
-                switch result {
-                case .success(let value):
-                    guard let string = value as? String else {
-                        results.resolve(ticket, with: .failure(Failure.nonStringResult))
-                        return
+        evaluationCount += 1
+        let sequence = evaluationCount
+        do {
+            return try await results.perform(timeout: timeout) { ticket in
+                webView.callAsyncJavaScript(body, arguments: arguments, in: nil, in: .page) {
+                    [weak self] result in
+                    guard let self else { return }
+                    switch result {
+                    case .success(let value):
+                        guard let string = value as? String else {
+                            results.resolve(ticket, with: .failure(Failure.nonStringResult))
+                            return
+                        }
+                        results.resolve(ticket, with: .success(string))
+                    case .failure(let error):
+                        results.resolve(ticket, with: .failure(error))
                     }
-                    results.resolve(ticket, with: .success(string))
-                case .failure(let error):
-                    results.resolve(ticket, with: .failure(error))
                 }
             }
+        } catch {
+            observeFailure(operation: "evaluate", sequence: sequence)
+            throw error
         }
     }
 
@@ -99,6 +113,11 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
         navigation = nil
         navigations.invalidate(because: .webContentTerminated)
         results.invalidate(because: .webContentTerminated)
+    }
+
+    private func observeFailure(operation: String, sequence: Int) {
+        // Probe metadata only: no scripts, arguments, URLs, cookies or website content.
+        print("WebKitProbeObservation id=\(observationID) operation=\(operation) sequence=\(sequence) loading=\(webView.isLoading) terminations=\(terminationCount) pending=\(results.pendingCount) epochSeconds=\(Date().timeIntervalSince1970)")
     }
 
     private func settleNavigation(_ completed: WKNavigation?, with result: Result<String, any Error>) {
