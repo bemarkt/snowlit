@@ -15,6 +15,8 @@ struct WireContractTests {
             case "ChaptersPage": _ = try YingxueWireCodec.decode(YingxueWire.ChaptersPage.self, from: bytes)
             case "ChapterResult": _ = try YingxueWireCodec.decode(YingxueWire.ChapterResult.self, from: bytes)
             case "BookReference": _ = try YingxueWireCodec.decode(YingxueWire.BookReference.self, from: bytes)
+            case "OperationCall": _ = try YingxueWireCodec.decode(YingxueWire.OperationCall.self, from: bytes)
+            case "OperationReply": _ = try YingxueWireCodec.decode(YingxueWire.OperationReply.self, from: bytes)
             default: Issue.record("Add typed decoding for this valid corpus model")
             }
         } else {

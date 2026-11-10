@@ -55,6 +55,16 @@ Use `YingxueWireCodec` at Swift wire boundaries. Direct `JSONDecoder` or `JSONEn
 
 An update must retain the source family ID and the host installation identity. `SourceUpgradeAssessment` reports newly requested capabilities, authentication modes, and effective origins for review. Changing `referenceVersion` requires explicit reference migration; changing `stateVersion` requires public state migration. The assessment never activates a script, resets state, substitutes chapters, or deletes local books. A failed or unapproved candidate leaves the current version usable.
 
+## Execution identity and results
+
+The host creates an `OperationCall` with a protocol version, a typed request, and an `OperationContext`. Context contains a host request UUID, installation UUID, exact script SHA-256, public configuration revision, website session revision, and generation UUID. These identify execution validity; they do not become local book or reading-position keys. UUIDs and digests use canonical lowercase spelling.
+
+`OperationReply` discriminates the four reading results and a structured failure. Every reply echoes the complete context and names the operation. Failures preserve a code, stage, and retryability hint; arbitrary error strings, scripts, HTML, and credentials are not shareable diagnostic fields. A retryability hint does not authorize replaying a website write.
+
+`SourceOperationGate` owns active tickets for one installation. It validates a response against the host's ticket before returning it. Source replacement, configuration changes, login/logout, or disablement invalidate all tickets and return their request IDs so the backend owner can cancel network, browser, and UI resources. Closing is terminal. Cancellation of one ticket does not cancel another consumer, and a finished ticket cannot accept another result. An invalid replacement cannot destroy the current gate state.
+
+Validating a reply keeps its ticket active while the caller normalizes or saves it. Check the ticket again after every suspension, then finish it explicitly. The receiving reader/search service also checks its navigation generation. Storage must keep its own transactional request/version predicates; a gate check before an asynchronous database call is not an atomic commit guard. This actor rejects stale results; it makes no claim to terminate JavaScript or reclaim WebContent CPU.
+
 ## Local checks
 
 ```sh

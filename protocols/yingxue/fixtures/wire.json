@@ -190,5 +190,53 @@
     "type": "Manifest",
     "json": "{\"protocolVersion\":",
     "valid": false
+  },
+  {
+    "name": "operation-call",
+    "type": "OperationCall",
+    "json": "{\"protocolVersion\":1,\"context\":{\"requestID\":\"00000000-0000-0000-0000-000000000001\",\"installationID\":\"00000000-0000-0000-0000-000000000002\",\"scriptSHA256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"configurationRevision\":0,\"sessionRevision\":2,\"generation\":\"00000000-0000-0000-0000-000000000003\"},\"request\":{\"kind\":\"search\",\"input\":{\"query\":\"book\",\"cursor\":null}}}",
+    "valid": true
+  },
+  {
+    "name": "operation-reply",
+    "type": "OperationReply",
+    "json": "{\"kind\":\"search\",\"context\":{\"requestID\":\"00000000-0000-0000-0000-000000000001\",\"installationID\":\"00000000-0000-0000-0000-000000000002\",\"scriptSHA256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"configurationRevision\":0,\"sessionRevision\":2,\"generation\":\"00000000-0000-0000-0000-000000000003\"},\"value\":{\"items\":[],\"nextCursor\":null}}",
+    "valid": true
+  },
+  {
+    "name": "operation-failure",
+    "type": "OperationReply",
+    "json": "{\"kind\":\"failure\",\"context\":{\"requestID\":\"00000000-0000-0000-0000-000000000001\",\"installationID\":\"00000000-0000-0000-0000-000000000002\",\"scriptSHA256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"configurationRevision\":0,\"sessionRevision\":2,\"generation\":\"00000000-0000-0000-0000-000000000003\"},\"operation\":\"chapter\",\"error\":{\"code\":\"needsAuthentication\",\"stage\":\"execute\",\"retryable\":false}}",
+    "valid": true
+  },
+  {
+    "name": "operation-unknown-secret",
+    "type": "OperationCall",
+    "json": "{\"protocolVersion\":1,\"context\":{\"requestID\":\"00000000-0000-0000-0000-000000000001\",\"installationID\":\"00000000-0000-0000-0000-000000000002\",\"scriptSHA256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"configurationRevision\":0,\"sessionRevision\":2,\"generation\":\"00000000-0000-0000-0000-000000000003\",\"token\":\"private\"},\"request\":{\"kind\":\"search\",\"input\":{\"query\":\"book\",\"cursor\":null}}}",
+    "valid": false
+  },
+  {
+    "name": "operation-invalid-digest",
+    "type": "OperationCall",
+    "json": "{\"protocolVersion\":1,\"context\":{\"requestID\":\"00000000-0000-0000-0000-000000000001\",\"installationID\":\"00000000-0000-0000-0000-000000000002\",\"scriptSHA256\":\"AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA\",\"configurationRevision\":0,\"sessionRevision\":2,\"generation\":\"00000000-0000-0000-0000-000000000003\"},\"request\":{\"kind\":\"search\",\"input\":{\"query\":\"book\",\"cursor\":null}}}",
+    "valid": false
+  },
+  {
+    "name": "operation-negative-revision",
+    "type": "OperationCall",
+    "json": "{\"protocolVersion\":1,\"context\":{\"requestID\":\"00000000-0000-0000-0000-000000000001\",\"installationID\":\"00000000-0000-0000-0000-000000000002\",\"scriptSHA256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"configurationRevision\":0,\"sessionRevision\":-1,\"generation\":\"00000000-0000-0000-0000-000000000003\"},\"request\":{\"kind\":\"search\",\"input\":{\"query\":\"book\",\"cursor\":null}}}",
+    "valid": false
+  },
+  {
+    "name": "operation-bad-kind",
+    "type": "OperationCall",
+    "json": "{\"protocolVersion\":1,\"context\":{\"requestID\":\"00000000-0000-0000-0000-000000000001\",\"installationID\":\"00000000-0000-0000-0000-000000000002\",\"scriptSHA256\":\"aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa\",\"configurationRevision\":0,\"sessionRevision\":2,\"generation\":\"00000000-0000-0000-0000-000000000003\"},\"request\":{\"kind\":\"deleteLibrary\",\"input\":{}}}",
+    "valid": false
+  },
+  {
+    "name": "operation-error-private-message",
+    "type": "OperationError",
+    "json": "{\"code\":\"network\",\"stage\":\"http\",\"retryable\":true,\"message\":\"synthetic-private\"}",
+    "valid": false
   }
 ]
