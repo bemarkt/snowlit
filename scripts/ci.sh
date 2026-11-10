@@ -75,11 +75,13 @@ simulator="$(python3 scripts/create_simulator.py "$device" \
   "$runtime_id" "$evidence/simulator.json")"
 xcrun simctl boot "$simulator"
 xcrun simctl bootstatus "$simulator" -b
+printf 'Simulator boot completed. Starting Package and App baseline checks.\n'
 destination="platform=iOS Simulator,id=$simulator"
 
 if [ "$kind" = phone ]; then
   (
     cd Packages/SnowlitKit
+    printf 'Resolving the Package test scheme.\n'
     xcodebuild -list -json -clonedSourcePackagesDirPath "$packages" > "$evidence/package-schemes.json"
     package_scheme="$(python3 - "$evidence/package-schemes.json" <<'PY'
 import json, sys
@@ -104,6 +106,7 @@ PY
   )
 fi
 
+printf 'Package checks completed. Starting App startup and credential tests.\n'
 test_selection=(-only-testing:SnowlitAppTests/StartupModelTests -only-testing:SnowlitAppTests/CredentialStoreTests -only-testing:SnowlitUITests/StartupUITests)
 if [ "$kind" = tablet ]; then
   test_selection=(-only-testing:SnowlitUITests/StartupUITests)
@@ -125,6 +128,7 @@ xcrun simctl launch "$simulator" io.github.bemarkt.snowlit \
   | tee "$evidence/launch.log"
 
 if [ "$kind" = phone ]; then
+  printf 'App baseline checks completed. Starting the Release device build.\n'
   xcodebuild build -project Snowlit.xcodeproj -scheme Snowlit \
     -configuration Release -destination 'generic/platform=iOS' \
     -derivedDataPath "$root/build/release" -clonedSourcePackagesDirPath "$packages" CODE_SIGNING_ALLOWED=NO \

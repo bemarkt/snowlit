@@ -35,8 +35,14 @@ class SupervisionTests(unittest.TestCase):
                 release.touch()
                 rest, errors = process.communicate(timeout=5)
                 self.assertEqual(process.returncode, 0, errors)
-                self.assertNotIn(b'child-ready', rest)
-                self.assertIn(b'child-finished\n', rest)
+                # The final JSON includes the command source, which itself
+                # contains the marker literals. Compare actual output lines.
+                lines = rest.splitlines()
+                self.assertEqual(len(lines), 2)
+                self.assertEqual(lines[0], b'child-finished')
+                status = json.loads(lines[1])
+                self.assertEqual(status['exitCode'], 0)
+                self.assertFalse(status['timedOut'])
                 self.assertEqual((folder / 'command.log').read_bytes(),
                                  b'child-ready\nchild-finished\n')
             finally:

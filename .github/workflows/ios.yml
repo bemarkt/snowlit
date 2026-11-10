@@ -44,6 +44,9 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Verify probe tooling before building the App
+        id: probe-tools
+        run: bash scripts/verify_probe_tools.sh
       - name: Restore locked package checkouts
         id: package-cache
         uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
@@ -66,15 +69,23 @@ jobs:
         run: bash scripts/ci.sh "${{ matrix.device }}" baseline
       - name: Run isolated WebKit integration probes
         if: ${{ !cancelled() && steps.host.conclusion == 'success' && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'integration') }}
+        env:
+          SNOWLIT_PROBE_TOOLS_PREPARED: ${{ steps.probe-tools.conclusion == 'success' }}
         run: bash scripts/probe_ios.sh "${{ matrix.device }}"
       - name: Observe recovery from uncooperative JavaScript
         if: ${{ !cancelled() && matrix.device == 'phone' && steps.host.conclusion == 'success' && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'recovery') }}
+        env:
+          SNOWLIT_PROBE_TOOLS_PREPARED: ${{ steps.probe-tools.conclusion == 'success' }}
         run: bash scripts/probe_ios.sh phone recovery
       - name: Observe system page curl gestures
         if: ${{ !cancelled() && steps.host.conclusion == 'success' && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'reader-ui') }}
+        env:
+          SNOWLIT_PROBE_TOOLS_PREPARED: ${{ steps.probe-tools.conclusion == 'success' }}
         run: bash scripts/probe_ios.sh "${{ matrix.device }}" reader-ui
       - name: Interrupt and reopen isolated storage
         if: ${{ !cancelled() && steps.host.conclusion == 'success' && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'storage') }}
+        env:
+          SNOWLIT_PROBE_TOOLS_PREPARED: ${{ steps.probe-tools.conclusion == 'success' }}
         run: bash scripts/probe_storage.sh
       - name: Record verification scope
         if: always()

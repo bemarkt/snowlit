@@ -48,13 +48,13 @@ for raw in sorted(set(files.split(b"\0")) - {b""}):
 pathlib.Path(sys.argv[1]).write_text(json.dumps(records, indent=2) + "\n")
 PY
 
-node --test scripts/probes/site.test.mjs > "$evidence/fixture-tests.log" 2>&1
 export SNOWLIT_PROCESS_SAMPLER="$root/build/process-snapshot"
-xcrun --sdk macosx clang -std=c11 -O2 -Wall -Wextra -Werror \
-  scripts/probes/process_snapshot.c -lproc -o "$SNOWLIT_PROCESS_SAMPLER" \
-  > "$evidence/sampler-build.log" 2>&1
-python3 -m unittest discover -s scripts/probes -p 'test_*.py' \
-  > "$evidence/probe-tool-tests.log" 2>&1
+# CI runs these common prerequisites before building the App. Standalone probe
+# invocations perform the same checks and preserve their shared evidence.
+if [ "${SNOWLIT_PROBE_TOOLS_PREPARED:-false}" != true ]; then
+  bash scripts/verify_probe_tools.sh
+fi
+test -x "$SNOWLIT_PROCESS_SAMPLER"
 fixture_pid=""
 simulator=""
 probe_complete=false

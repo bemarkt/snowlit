@@ -32,10 +32,11 @@ pathlib.Path(sys.argv[1]).write_text(json.dumps(records, indent=2) + "\n")
 pathlib.Path(sys.argv[3]).write_text(json.dumps(dict(configuration="Debug", binarySHA256=
     hashlib.sha256(pathlib.Path(sys.argv[2]).read_bytes()).hexdigest()), indent=2) + "\n")
 PY
-sampler="$root/build/storage-process-snapshot"
-xcrun --sdk macosx clang -std=c11 -O2 -Wall -Wextra -Werror \
-  scripts/probes/process_snapshot.c -lproc -o "$sampler" \
-  > "$evidence/sampler-build.log" 2>&1
+sampler="$root/build/process-snapshot"
+if [ "${SNOWLIT_PROBE_TOOLS_PREPARED:-false}" != true ]; then
+  bash scripts/verify_probe_tools.sh
+fi
+test -x "$sampler"
 simulator=""
 cleanup() {
   result=$?
