@@ -10,6 +10,7 @@
 		A10000000000000000000002 /* AppComposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* AppComposition.swift */; };
 		A10000000000000000000003 /* StartupModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000003 /* StartupModel.swift */; };
 		A10000000000000000000004 /* StartupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* StartupView.swift */; };
+		A10000000000000000000005 /* StorageProcessProbeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000005 /* StorageProcessProbeView.swift */; };
 		A10000000000000000000021 /* StartupModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* StartupModelTests.swift */; };
 		A10000000000000000000022 /* StartupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* StartupUITests.swift */; };
 		A10000000000000000000027 /* ReaderInteractionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* ReaderInteractionUITests.swift */; };
@@ -36,6 +37,7 @@
 		A20000000000000000000002 /* AppComposition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Composition/AppComposition.swift; sourceTree = "<group>"; };
 		A20000000000000000000003 /* StartupModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Composition/StartupModel.swift; sourceTree = "<group>"; };
 		A20000000000000000000004 /* StartupView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Composition/StartupView.swift; sourceTree = "<group>"; };
+		A20000000000000000000005 /* StorageProcessProbeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Experiments/StorageProcessProbeView.swift; sourceTree = "<group>"; };
 		A20000000000000000000011 /* Snowlit.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = Snowlit.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000012 /* SnowlitAppTests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SnowlitAppTests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000013 /* SnowlitUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SnowlitUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
@@ -81,6 +83,7 @@
 				A20000000000000000000002 /* AppComposition.swift */,
 				A20000000000000000000003 /* StartupModel.swift */,
 				A20000000000000000000004 /* StartupView.swift */,
+				A20000000000000000000005 /* StorageProcessProbeView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -211,6 +214,7 @@
 				A10000000000000000000002 /* AppComposition.swift in Sources */,
 				A10000000000000000000003 /* StartupModel.swift in Sources */,
 				A10000000000000000000004 /* StartupView.swift in Sources */,
+				A10000000000000000000005 /* StorageProcessProbeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

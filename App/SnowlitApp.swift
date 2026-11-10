@@ -11,7 +11,9 @@ struct SnowlitApp: App {
     var body: some Scene {
         WindowGroup {
             #if DEBUG
-            if ProcessInfo.processInfo.arguments.contains("-snowlit-probe-reader-interaction") {
+            if ProcessInfo.processInfo.arguments.contains("-snowlit-probe-storage") {
+                StorageProcessProbeView()
+            } else if ProcessInfo.processInfo.arguments.contains("-snowlit-probe-reader-interaction") {
                 ReaderInteractionProbeView()
             } else {
                 StartupView(model: startup)
