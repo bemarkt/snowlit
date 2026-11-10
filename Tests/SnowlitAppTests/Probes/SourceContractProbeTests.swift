@@ -19,7 +19,8 @@ struct SourceContractProbeTests {
             print("SourceContractObservation sourceSHA256=\(digest) protocol=\(file.manifest.protocolVersion)")
             let host = try NativeContractProbe(file: file, digest: digest)
             do {
-                try await host.prepare(at: fixture.url("page"), source: file.source)
+                let inspected = try await host.prepare(at: fixture.url("page"), bytes: bytes)
+                #expect(inspected.bytes == bytes && inspected.sha256 == digest)
                 let search = try await host.invoke(.search(.init(kind: .search, input: .init(query: "Synthetic", cursor: nil))))
                 guard case .search(let result) = search else { throw FixtureScenario.Failure.invalidResponse }
                 let book = try #require(result.value.items.first?.reference)
@@ -102,19 +103,24 @@ private final class NativeContractProbe: NSObject, WKScriptMessageHandlerWithRep
         probe.webView.configuration.userContentController.addScriptMessageHandler(self, contentWorld: world, name: "contractHost")
     }
 
-    func prepare(at url: URL, source: String) async throws {
+    func prepare(at url: URL, bytes: Data) async throws -> SourceScriptSnapshot {
+        let preview = try SourceImportPreview(bytes: bytes)
+        let source = preview.header.source
         try await probe.load(url)
         let program = try SourceInspectionProgram()
         _ = try await probe.evaluate(program.bootstrap + "\nreturn 'ready';", contentWorld: world)
         let inspected = try await probe.evaluate(program.evaluationBody,
             arguments: ["source": source, "requirements": SourceModuleInspection.requirements(for: manifest)], contentWorld: world)
-        _ = try SourceModuleInspection.accept(Data(inspected.utf8), manifest: manifest)
+        let snapshot = try preview.acceptInspection(Data(inspected.utf8), digest: {
+            SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined()
+        })
         _ = try await probe.evaluate("""
             const url = URL.createObjectURL(new Blob([source], {type: 'text/javascript'}));
             try { globalThis.contractModule = await import(url); }
             finally { URL.revokeObjectURL(url); }
             return 'loaded';
             """, arguments: ["source": source], contentWorld: world)
+        return snapshot
     }
 
     func invoke(_ input: YingxueWire.OperationInput) async throws -> YingxueWire.OperationReply {
