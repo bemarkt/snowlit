@@ -32,7 +32,8 @@ final class SourceExecutionSession: Identifiable {
     @ObservationIgnored private let configuration: SourceConfiguration
     @ObservationIgnored private let workspace: SourceCandidateWorkspace?
     @ObservationIgnored private let credentials: any CredentialStore
-    @ObservationIgnored private let website: SourceWebsiteSession
+    @ObservationIgnored private var website: SourceWebsiteSession?
+    var websiteDataStore: WKWebsiteDataStore? { website?.dataStore }
     @ObservationIgnored private var stateAccess: SourcePublicStateAccess?
     @ObservationIgnored private var revocation: Task<Void, any Error>?
     @ObservationIgnored private var host: SourceNativeHost?
@@ -154,9 +155,17 @@ final class SourceExecutionSession: Identifiable {
                 catch { failed = true }
             }
             if let formSession { do { try await formSession.cancel() } catch { failed = true } }
-            if let host { do { try await host.close() } catch { failed = true } }
-            if isCandidate { do { try await website.erase() } catch { failed = true } }
-            else { await website.close() }
+            if let host {
+                do { try await host.close(); self.host = nil } catch { failed = true }
+            }
+            if let website {
+                if isCandidate {
+                    do { try await website.erase(); self.website = nil } catch { failed = true }
+                } else {
+                    await website.close()
+                    self.website = nil
+                }
+            }
             do { try await worker.close() } catch { failed = true }
             await workspace?.close()
             if failed { throw Failure.cleanupRequired }
@@ -169,7 +178,7 @@ final class SourceExecutionSession: Identifiable {
     }
 
     private func execute(_ input: YingxueWire.OperationInput) async throws -> YingxueWire.OperationReply {
-        guard !closed else { throw Failure.unavailable }
+        guard !closed, let website else { throw Failure.unavailable }
         let ticket = try await gate.begin(input)
         let stateHost: SourcePublicStateHost?
         if let library, let stateAccess, manifest.capabilities.contains(.publicState) {
