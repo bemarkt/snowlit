@@ -50,6 +50,12 @@ def read_progress(path, *, token, mode, point, pid):
     return phase
 
 
+def validate_active(marker, *, token, mode, point, pid):
+    expected = dict(token=token, mode=mode, point=point, pid=pid, stage="active")
+    if any(marker.get(key) != value for key, value in expected.items()):
+        raise ValueError("Scene readiness does not match this launch")
+
+
 def verify_reopened(kind, point, first, second):
     expected = "replacement" if point in {"afterCommit", "pointerCommitted", "adopted"} else "original"
     for details in (first, second):
@@ -132,6 +138,7 @@ class Probe:
         started = time.monotonic()
         marker = self.container / "Library/Caches/SnowlitStorageProcessProbes" / trial / (token + ".json")
         progress = marker.with_suffix(".progress.json")
+        active = marker.with_suffix(".active.json")
         try:
             print(f"Storage operation {mode}/{point} token={token}: launching", flush=True)
             output = self.command("launch", self.simulator, BUNDLE, "-snowlit-probe-storage",
@@ -147,18 +154,24 @@ class Probe:
             record["launchSeconds"] = time.monotonic() - started
             print(f"Storage operation {mode}/{point} token={token}: pid={pid}, waiting for marker", flush=True)
             deadline = time.monotonic() + 20
-            while not marker.exists():
+            # A completed storage task can precede the UIKit scene becoming
+            # active. Finish launching this exact App before terminating it;
+            # rapid termination during launch otherwise confounds the next one.
+            while not marker.exists() or not active.exists():
                 phase = read_progress(progress, token=token, mode=mode, point=point, pid=pid)
                 if phase is not None and phase != record.get("lastProgress"):
                     record["lastProgress"] = phase
                     print(f"Storage operation {mode}/{point} token={token}: {phase}", flush=True)
                 if time.monotonic() >= deadline:
-                    raise TimeoutError("App did not publish the requested checkpoint")
+                    missing = "checkpoint" if not marker.exists() else "active scene"
+                    raise TimeoutError(f"App did not publish the requested {missing}")
                 if self.identity(pid) != identity:
                     raise ValueError("App exited before publishing its checkpoint")
                 time.sleep(0.05)
             record["marker"] = json.loads(marker.read_text())
             details = validate_marker(record["marker"], token=token, mode=mode, point=point, pid=pid)
+            record["activeScene"] = json.loads(active.read_text())
+            validate_active(record["activeScene"], token=token, mode=mode, point=point, pid=pid)
             record["termination"] = self.interrupt(identity) if action == "write" else self.finish(identity)
             identity = None
             record["outcome"] = "passed"
@@ -173,6 +186,8 @@ class Probe:
                 record["unverifiedMarker"] = marker.read_text()
             if progress.is_file():
                 record["unverifiedProgress"] = progress.read_text()
+            if active.is_file() and "activeScene" not in record:
+                record["unverifiedActiveScene"] = active.read_text()
             # A short sample of this exact owned App is diagnostic only. It can
             # distinguish launch/UI scheduling from a blocked database reopen.
             if identity is not None and self.identity(identity["pid"]) == identity:

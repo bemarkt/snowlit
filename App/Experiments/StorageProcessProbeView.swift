@@ -9,7 +9,13 @@ import UIKit
 /// No live database or source installation participates in this process experiment.
 struct StorageProcessProbeView: View {
     @ObservedObject var probe: StorageProcessProbeDelegate
-    var body: some View { Text(probe.status) }
+    @Environment(\.scenePhase) private var scenePhase
+    var body: some View {
+        Text(probe.status)
+            .onChange(of: scenePhase, initial: true) { _, phase in
+                if phase == .active { probe.sceneBecameActive() }
+            }
+    }
 }
 
 /// The process experiment starts once from application launch, independently of
@@ -19,12 +25,15 @@ struct StorageProcessProbeView: View {
 final class StorageProcessProbeDelegate: NSObject, UIApplicationDelegate, ObservableObject {
     @Published private(set) var status = "Storage process experiment"
     private var work: Task<Void, Never>?
+    private var operation: StorageProbeOperation?
+    private var publishedActive = false
 
     func application(_ application: UIApplication,
                      didFinishLaunchingWithOptions launchOptions: [UIApplication.LaunchOptionsKey: Any]? = nil) -> Bool {
         guard ProcessInfo.processInfo.arguments.contains("-snowlit-probe-storage") else { return true }
         do {
             let operation = try StorageProbeOperation(arguments: ProcessInfo.processInfo.arguments)
+            self.operation = operation
             try operation.publishProgress("application-launched")
             work = Task { [weak self] in
                 guard let self else { return }
@@ -44,6 +53,17 @@ final class StorageProcessProbeDelegate: NSObject, UIApplicationDelegate, Observ
     }
 
     func applicationWillTerminate(_ application: UIApplication) { work?.cancel() }
+
+    func sceneBecameActive() {
+        guard let operation, !publishedActive else { return }
+        do {
+            try operation.publishActive()
+            publishedActive = true
+        } catch {
+            status = "Experiment scene readiness could not be recorded"
+            print("SNOWLIT_STORAGE_ACTIVE_FAILED type=\(String(reflecting: type(of: error)))")
+        }
+    }
 }
 
 private struct StorageProbeOperation: Sendable {
@@ -77,6 +97,10 @@ private struct StorageProbeOperation: Sendable {
 
     func publishProgress(_ phase: String) throws {
         try publish("progress", ["phase": phase], suffix: ".progress.json")
+    }
+
+    func publishActive() throws {
+        try publish("active", [:], suffix: ".active.json")
     }
 
     private func publish(_ stage: String, _ details: [String: String], suffix: String = ".json") throws {
