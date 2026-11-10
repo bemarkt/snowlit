@@ -55,6 +55,9 @@ public struct ChapterImage: Equatable, Codable, Sendable {
     public let id: String
     public let resource: ChapterResource
     public init(id: String, resource: ChapterResource) { self.id = id; self.resource = resource }
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id.utf8.elementsEqual(rhs.id.utf8) && lhs.resource == rhs.resource
+    }
 }
 
 public struct ParagraphComment: Equatable, Codable, Sendable {
@@ -66,18 +69,35 @@ public struct ParagraphComment: Equatable, Codable, Sendable {
         self.id = id; self.paragraphID = paragraphID
         self.externalReference = externalReference; self.appearance = appearance
     }
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id.utf8.elementsEqual(rhs.id.utf8) && lhs.paragraphID.utf8.elementsEqual(rhs.paragraphID.utf8)
+            && lhs.externalReference.utf8.elementsEqual(rhs.externalReference.utf8) && lhs.appearance == rhs.appearance
+    }
 }
 
 public enum ChapterInline: Equatable, Codable, Sendable {
     case text(String, TextStyle)
     case image(ChapterImage)
     case comment(ParagraphComment)
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        switch (lhs, rhs) {
+        case (.text(let left, let leftStyle), .text(let right, let rightStyle)):
+            left.utf8.elementsEqual(right.utf8) && leftStyle == rightStyle
+        case (.image(let left), .image(let right)): left == right
+        case (.comment(let left), .comment(let right)): left == right
+        default: false
+        }
+    }
 }
 
 public struct ChapterParagraph: Equatable, Codable, Sendable {
     public let id: String
     public let runs: [ChapterInline]
     public init(id: String, runs: [ChapterInline]) { self.id = id; self.runs = runs }
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.id.utf8.elementsEqual(rhs.id.utf8) && lhs.runs == rhs.runs
+    }
     public var text: String {
         runs.reduce(into: "") { output, run in
             if case .text(let value, _) = run { output += value }
@@ -179,6 +199,11 @@ public struct ChapterContent: Equatable, Codable, Sendable {
     }
 
     public var text: String { blocks.compactMap(\.paragraph).map(\.text).joined(separator: "\n") }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.chapter == rhs.chapter && lhs.sourceRevision.utf8.elementsEqual(rhs.sourceRevision.utf8)
+            && lhs.normalizationVersion == rhs.normalizationVersion && lhs.blocks == rhs.blocks
+    }
 
     /// Fixed-key JSON, integral dimensions, and ordered arrays form normalization v1 bytes.
     /// Unicode is preserved, never normalized to merge opaque identifiers.

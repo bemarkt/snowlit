@@ -8,6 +8,22 @@ import WinSDK
 @testable import SnowlitCore
 
 struct ChapterContentTests {
+    @Test func semanticEqualityDoesNotSuppressByteDistinctContentOrRemoteIdentities() throws {
+        let composed = "é", decomposed = "e\u{301}"
+        #expect(composed == decomposed) // Swift display-text equivalence differs from opaque identity.
+        let resource = ChapterResource(id: "resource", reference: "image.png")
+        #expect(ChapterImage(id: composed, resource: resource) != ChapterImage(id: decomposed, resource: resource))
+        #expect(ParagraphComment(id: "c", paragraphID: "p", externalReference: composed)
+                != ParagraphComment(id: "c", paragraphID: "p", externalReference: decomposed))
+        #expect(ChapterParagraph(id: composed, runs: []) != ChapterParagraph(id: decomposed, runs: []))
+        #expect(ChapterInline.text(composed, TextStyle()) != ChapterInline.text(decomposed, TextStyle()))
+        let original = try sample()
+        let left = try ChapterContent(chapter: original.chapter, sourceRevision: composed, blocks: original.blocks)
+        let right = try ChapterContent(chapter: original.chapter, sourceRevision: decomposed, blocks: original.blocks)
+        #expect(left != right)
+        #expect(try left.canonicalBytes() != right.canonicalBytes())
+    }
+
     @Test func digestAdapterMatchesSHA256KnownAnswers() throws {
         #expect(try digest(Data()) == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855")
         #expect(try digest(Data("abc".utf8)) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
