@@ -1,12 +1,37 @@
 #if os(iOS)
 import Foundation
 import Testing
+import UIKit
 import WebKit
 @testable import YingxueKit
 
 @Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct WebKitRecoveryTests {
+    /// A controlled preparation comparison, separate from the required fault
+    /// tests below. A visible window is the only variable; deadlines stay fixed.
+    @Test(arguments: [false, true])
+    func comparePreparationWithWindowAttachment(attached: Bool) async throws {
+        let clock = ContinuousClock()
+        let window = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).first(where: \.isKeyWindow))
+        for repetition in 1...3 {
+            let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
+            defer { probe.close() }
+            // Keep geometry equal in both cases so only attachment changes.
+            probe.webView.frame = window.bounds
+            if attached {
+                window.addSubview(probe.webView)
+            }
+            #expect((probe.webView.window != nil) == attached)
+            let start = clock.now
+            print("PreparationStarted attached=\(attached) repetition=\(repetition)")
+            try await probe.loadHTML("<!doctype html><html><head><title>Preparation comparison</title></head><body></body></html>")
+            #expect(try await probe.evaluate("return document.readyState;") == "complete")
+            print("PreparationObservation attached=\(attached) repetition=\(repetition) elapsed=\(start.duration(to: clock.now))")
+        }
+    }
+
     /// The supervising script injects the OS process fault only after proving
     /// one WebContent child belongs to this test host's dedicated launchd_sim.
     /// Bounded touched allocations exercise retained page memory before the
