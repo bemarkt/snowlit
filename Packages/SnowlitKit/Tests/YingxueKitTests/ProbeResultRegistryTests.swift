@@ -135,14 +135,20 @@ struct ProbeResultRegistryTests {
 
     @Test func callbackErrorWithoutInvalidationIsNotReportedAsProcessTermination() async throws {
         let registry = Registry()
-        let callbackError = NSError(domain: "WKErrorDomain", code: 5)
+        let callbackError = NSError(domain: "WKErrorDomain", code: 5, userInfo: ["fixture": "original-callback"])
         do {
             _ = try await registry.perform(timeout: .seconds(2)) {
                 registry.resolve($0, with: .failure(callbackError))
             }
             Issue.record("Expected the original callback error")
         } catch {
-            #expect((error as NSError) === callbackError)
+            // Darwin can bridge a registered NSError domain through its native
+            // Swift error type. The error payload, not object address, is owned.
+            let received = error as NSError
+            #expect(!(error is Registry.Interruption))
+            #expect(received.domain == callbackError.domain)
+            #expect(received.code == callbackError.code)
+            #expect(NSDictionary(dictionary: received.userInfo).isEqual(to: callbackError.userInfo))
         }
     }
 
