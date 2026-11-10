@@ -91,23 +91,11 @@ destination="platform=iOS Simulator,id=$simulator"
 if [ "$kind" = phone ]; then
   (
     cd Packages/SnowlitKit
-    printf 'Resolving the Package test scheme.\n'
-    run_ci_command package-schemes 60 "$evidence/package-schemes.log" \
-      bash -c 'exec xcodebuild -list -json -clonedSourcePackagesDirPath "$1" > "$2"' \
-      _ "$packages" "$evidence/package-schemes.json"
-    package_scheme="$(python3 - "$evidence/package-schemes.json" <<'PY'
-import json, sys
-data = json.load(open(sys.argv[1]))
-schemes = [s for entry in data.values() if isinstance(entry, dict)
-           for s in entry.get("schemes", [])]
-for name in ("SnowlitKit-Package", "SnowlitKit"):
-    if name in schemes:
-        print(name)
-        break
-else:
-    raise SystemExit(f"Package test scheme not found: {schemes}")
-PY
-)"
+    # Xcode generates this aggregate scheme from the fixed Package name.
+    # The test command validates it; a separate scheme listing can stall before
+    # any tests execute and adds no coverage.
+    package_scheme="SnowlitKit-Package"
+    printf 'Testing Package scheme: %s\n' "$package_scheme"
     run_ci_command package-tests 600 "$evidence/storage-tests.log" \
       xcodebuild test -scheme "$package_scheme" -destination "$destination" \
       -derivedDataPath "$root/build/package-tests" \
