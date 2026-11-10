@@ -7,7 +7,7 @@ import YingxueKit
 @MainActor
 enum AppComposition {
     static func makeStartup() -> StartupModel {
-        let storage = StorageBootstrap()
+        let storage = LibraryBootstrap()
 
         #if DEBUG
         // Only debug UI tests can request this deterministic first-attempt failure.
@@ -15,13 +15,13 @@ enum AppComposition {
             let fault = StartupTestFault()
             return StartupModel {
                 try await fault.failOnce()
-                try await storage.prepare()
+                _ = try await storage.open()
             }
         }
         #endif
 
         return StartupModel {
-            try await storage.prepare()
+            _ = try await storage.open()
         }
     }
 }
