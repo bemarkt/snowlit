@@ -101,7 +101,7 @@ struct ReaderProbeTests {
         }
     }
 
-    @Test func textKit2KeepsTheSameAnchorAcrossPhoneTabletAndFontChanges() throws {
+    @Test func textKit2KeepsTheSameAnchorAcrossWidthsAndFontChanges() throws {
         let document = try fixture()
         let viewport = ProbeViewport(document: document)
         viewport.loadViewIfNeeded()
