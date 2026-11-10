@@ -333,19 +333,33 @@ struct ProbeFileStoreTests {
 
     private func makeDirectoryLink(at link: URL, to target: URL) throws {
         #if os(Windows)
-        // The portable runner supplies PowerShell. Junctions need no symlink privilege.
+        // Junctions need no symlink privilege. Do not inherit the concurrently
+        // running storage tests' file handles into this short-lived helper.
         let executable = try #require(ProcessInfo.processInfo.environment["SNOWLIT_PROBE_POWERSHELL"])
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = ["-NoProfile", "-NonInteractive", "-Command",
-            "New-Item -ItemType Junction -Path $env:SNOWLIT_PROBE_LINK -Value $env:SNOWLIT_PROBE_TARGET -ErrorAction Stop | Out-Null"]
-        var environment = ProcessInfo.processInfo.environment
-        environment["SNOWLIT_PROBE_LINK"] = link.path
-        environment["SNOWLIT_PROBE_TARGET"] = target.path
-        process.environment = environment
-        try process.run()
-        process.waitUntilExit()
-        try #require(process.terminationStatus == 0)
+        let quotedLink = link.path.replacingOccurrences(of: "'", with: "''")
+        let quotedTarget = target.path.replacingOccurrences(of: "'", with: "''")
+        let script = "New-Item -ItemType Junction -Path '\(quotedLink)' -Value '\(quotedTarget)' -ErrorAction Stop | Out-Null"
+        let encoded = try #require(script.data(using: .utf16LittleEndian)).base64EncodedString()
+        let application = Array(executable.utf16) + [0]
+        var command = Array("\"\(executable)\" -NoProfile -NonInteractive -EncodedCommand \(encoded)".utf16) + [0]
+        var startup = STARTUPINFOW()
+        startup.cb = DWORD(MemoryLayout<STARTUPINFOW>.size)
+        var process = PROCESS_INFORMATION()
+        let created = application.withUnsafeBufferPointer { app in
+            command.withUnsafeMutableBufferPointer { command in
+                CreateProcessW(app.baseAddress, command.baseAddress, nil, nil, false, DWORD(CREATE_NO_WINDOW), nil, nil, &startup, &process)
+            }
+        }
+        try #require(created)
+        defer { _ = CloseHandle(process.hThread); _ = CloseHandle(process.hProcess) }
+        let waited = WaitForSingleObject(process.hProcess, 30_000)
+        if waited == DWORD(WAIT_TIMEOUT) {
+            _ = TerminateProcess(process.hProcess, 1)
+        }
+        try #require(waited == DWORD(WAIT_OBJECT_0))
+        var status: DWORD = 1
+        try #require(GetExitCodeProcess(process.hProcess, &status))
+        try #require(status == 0)
         #else
         try FileManager.default.createSymbolicLink(at: link, withDestinationURL: target)
         #endif
