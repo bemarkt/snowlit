@@ -7,6 +7,47 @@ import CryptoKit
 @testable import SnowlitStorage
 
 struct ProbeFileStoreTests {
+    #if os(iOS)
+    @Test(arguments: ["staging", "objects"])
+    func filesystemPermissionFailurePreservesCommittedContentAndCanRecover(folder: String) async throws {
+        try await withDirectory { directory in
+            let root = directory.appendingPathComponent("store")
+            let store = try ProbeFileStore(root: root, create: true, digest: Self.sha256)
+            let original = Data("original committed chapter".utf8)
+            let replacement = Data("replacement after permissions recover".utf8)
+            try await store.save(key: "chapter", data: original)
+            let objects = root.appendingPathComponent("objects")
+            let before = try fileSnapshot(objects)
+            let restricted = root.appendingPathComponent(folder)
+            let attributes = try FileManager.default.attributesOfItem(atPath: restricted.path)
+            let permissions = try #require(attributes[.posixPermissions] as? NSNumber)
+            defer {
+                do { try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: restricted.path) }
+                catch { Issue.record(error, "Unable to restore the isolated directory permissions") }
+            }
+            try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: restricted.path)
+            do {
+                try await store.save(key: "chapter", data: replacement)
+                Issue.record("Writing through the restricted directory unexpectedly succeeded")
+            } catch {
+                let failure = error as NSError
+                #expect(failure.domain == NSCocoaErrorDomain && failure.code == CocoaError.fileWriteNoPermission.rawValue)
+            }
+            #expect(try await store.load(key: "chapter") == original)
+            #expect(try fileSnapshot(objects) == before)
+            try FileManager.default.setAttributes([.posixPermissions: permissions], ofItemAtPath: restricted.path)
+            #expect(try await store.recoverOrphans() == (folder == "objects" ? 1 : 0))
+            #expect(try await store.recoverOrphans() == 0)
+            try await store.save(key: "chapter", data: replacement)
+            try await store.close()
+            let reopened = try ProbeFileStore(root: root, create: false, digest: Self.sha256)
+            #expect(try await reopened.load(key: "chapter") == replacement)
+            try await reopened.validate()
+            try await reopened.close()
+        }
+    }
+    #endif
+
     @Test func hashAdapterMatchesThePublishedSHA256Vector() throws {
         #expect(try Self.sha256(Data("abc".utf8)) == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad")
     }
