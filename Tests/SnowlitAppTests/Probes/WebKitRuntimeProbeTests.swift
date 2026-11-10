@@ -9,6 +9,140 @@ import UIKit
 @Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct WebKitRuntimeProbeTests {
+    @Test func sourceBrowserExtractsDynamicDOMWithoutWebsiteGlobalsOrHostBridge() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            try await withSourceBrowser { browser, gate, ticket in
+                let page = try await browser.open(.init(target: .init(url: fixture.url("dynamic").absoluteString)))
+                let view = try #require(browser.webView(for: page.page.id))
+                _ = try await view.evaluateJavaScript("globalThis.websiteOnly = 'private';")
+                try await FixtureScenario.eventually {
+                    try await browser.evaluate(.init(page: page.page,
+                        script: "return document.querySelector('#content').dataset.ready === 'true';", inputJSON: "null")).json == "true"
+                }
+                let input = "\"; throw new Error('input-is-data'); //"
+                let value = try await browser.evaluate(.init(page: page.page,
+                    script: "return {text: document.querySelector('#content').textContent, echo: input, site: typeof websiteOnly, bridge: typeof globalThis.webkit?.messageHandlers?.sourceHost};",
+                    inputJSON: String(decoding: try JSONEncoder().encode(input), as: UTF8.self)))
+                #expect(try JSONDecoder().decode([String: String].self, from: Data(value.json.utf8)) ==
+                    ["text": "动态合成正文", "echo": input, "site": "undefined", "bridge": "undefined"])
+                for script in ["return undefined;", "return {value: NaN};", "return [() => 1];", "const a = {}; a.self = a; return a;"] {
+                    await #expect(throws: SourceBrowserFailure.invalidResult) {
+                        try await browser.evaluate(.init(page: page.page, script: script, inputJSON: "null"))
+                    }
+                }
+                #expect(try await browser.closePage(.init(id: page.page.id)).closed)
+                #expect(view.superview == nil)
+                #expect(await gate.pageIDs(for: ticket).isEmpty)
+                await #expect(throws: SourcePageFailure.missingPage) {
+                    try await browser.evaluate(.init(page: page.page, script: "return 'old';", inputJSON: "null"))
+                }
+            }
+        }
+    }
+
+    @Test func sourceBrowserInvalidatesHandlesBeforeWebsiteNavigationCompletes() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            try await withSourceBrowser { browser, gate, ticket in
+                let page = try await browser.open(.init(target: .init(url: fixture.url("page").absoluteString)))
+                let view = try #require(browser.webView(for: page.page.id))
+                let result = Task { try await browser.evaluate(.init(page: page.page,
+                    script: "await fetch(input); return 'old';",
+                    inputJSON: String(decoding: try JSONEncoder().encode(fixture.url("wait/extract-old").absoluteString), as: UTF8.self))) }
+                defer { result.cancel() }
+                try await FixtureScenario.eventually { try await (fixture.status()["pending"] as? Int) == 1 }
+                _ = view.load(URLRequest(url: fixture.url("wait/navigation")))
+                try await FixtureScenario.eventually {
+                    do { try await gate.checkPage(page.page, for: ticket); return false }
+                    catch SourcePageFailure.staleNavigation { return true }
+                }
+                #expect(try await fixture.request("release/extract-old", method: "POST").0 == 200)
+                await #expect(throws: (any Error).self) { try await result.value }
+                await #expect(throws: SourcePageFailure.staleNavigation) {
+                    try await browser.evaluate(.init(page: page.page, script: "return 'stale';", inputJSON: "null"))
+                }
+                #expect(try await browser.closePage(.init(id: page.page.id)).closed)
+                #expect(await gate.pageIDs(for: ticket).isEmpty)
+                try await FixtureScenario.eventually { try await (fixture.status()["pending"] as? Int) == 0 }
+            }
+        }
+    }
+
+    @Test func sourceBrowserCancellationAndConcurrentCloseReleaseOwnedPages() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            try await withSourceBrowser { browser, gate, ticket in
+                let opening = Task { try await browser.open(.init(target: .init(url: fixture.url("wait/open-cancel").absoluteString))) }
+                defer { opening.cancel() }
+                try await FixtureScenario.eventually { try await (fixture.status()["pending"] as? Int) == 1 }
+                opening.cancel()
+                await #expect(throws: (any Error).self) { try await opening.value }
+                #expect(await gate.pageIDs(for: ticket).isEmpty)
+                try await FixtureScenario.eventually { try await (fixture.status()["pending"] as? Int) == 0 }
+                // Cancelling one page load does not retire the enclosing operation.
+                try await gate.check(ticket)
+                let page = try await browser.open(.init(target: .init(url: fixture.url("page").absoluteString)))
+                let view = try #require(browser.webView(for: page.page.id))
+                let evaluating = Task { try await browser.evaluate(.init(page: page.page,
+                    script: "document.body.dataset.entered = 'true'; return await new Promise(() => {});", inputJSON: "null")) }
+                defer { evaluating.cancel() }
+                try await FixtureScenario.eventually {
+                    try await view.evaluateJavaScript("document.body.dataset.entered") as? String == "true"
+                }
+                let first = Task { try await browser.close() }
+                let second = Task { try await browser.close() }
+                try await first.value; try await second.value
+                await #expect(throws: (any Error).self) { try await evaluating.value }
+                #expect(view.superview == nil)
+                #expect(await gate.pageIDs(for: ticket).isEmpty)
+                await #expect(throws: SourceBrowserFailure.closed) {
+                    try await browser.open(.init(target: .init(url: fixture.url("page").absoluteString)))
+                }
+                // Awaited native cleanup is not proof of arbitrary page JS termination.
+                try await gate.check(ticket)
+            }
+        }
+    }
+
+    @Test func sourceBrowserBlocksUndeclaredRedirectsAndSubresourcesBeforeTransmission() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            var foreign = try #require(URLComponents(url: fixture.url("browser/control"), resolvingAgainstBaseURL: false))
+            foreign.host = "localhost"
+            let (_, control) = try await URLSession.shared.data(from: #require(foreign.url))
+            #expect((control as? HTTPURLResponse)?.statusCode == 200)
+            try await withSourceBrowser { browser, _, _ in
+                let page = try await browser.open(.init(target: .init(url: fixture.url("browser/resources").absoluteString)))
+                try await FixtureScenario.eventually {
+                    try await browser.evaluate(.init(page: page.page,
+                        script: "return document.body.dataset.fetch ?? 'waiting';", inputJSON: "null")).json == "\"blocked\""
+                }
+                #expect(try await browser.evaluate(.init(page: page.page,
+                    script: "return document.documentElement.dataset.allowed;", inputJSON: "null")).json == "\"true\"")
+                #expect(try await browser.evaluate(.init(page: page.page,
+                    script: "return document.documentElement.dataset.forbidden ?? 'absent';", inputJSON: "null")).json == "\"absent\"")
+                await #expect(throws: (any Error).self) {
+                    try await browser.open(.init(target: .init(url: fixture.url("browser/cross-redirect").absoluteString)))
+                }
+                let requests = try #require(try await fixture.status()["requests"] as? [[String: String]])
+                #expect(requests.contains { $0["path"] == "browser/allowed-script" })
+                #expect(requests.contains { $0["path"] == "browser/control" })
+                #expect(requests.contains { $0["path"] == "browser/cross-redirect" })
+                #expect(!requests.contains { $0["path"]?.hasPrefix("browser/forbidden-") == true })
+            }
+        }
+    }
+
+    @Test func sourceBrowserRequiresMountAndCleansARegistrationOnFailure() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            try await withSourceBrowser(mounted: false) { browser, gate, ticket in
+                await #expect(throws: SourceBrowserFailure.notMounted) {
+                    try await browser.open(.init(target: .init(url: fixture.url("page").absoluteString)))
+                }
+                #expect(await gate.pageIDs(for: ticket).isEmpty)
+                let requests = try #require(try await fixture.status()["requests"] as? [[String: String]])
+                #expect(!requests.contains { $0["path"] == "page" })
+            }
+        }
+    }
+
     @Test func sourceWorkerCannotExecuteAnotherScriptOrInstallationTicket() async throws {
         try await withSourceWorker { worker in
             let (gate, policy) = try sourceWorkerContext()
@@ -707,6 +841,38 @@ private final class WorkerExperiment {
             """, timeout: .seconds(1))
     }
 }
+@MainActor
+private func withSourceBrowser(mounted: Bool = true,
+    _ body: @MainActor (SourceBrowserSession, SourceOperationGate, SourceOperationGate.Ticket) async throws -> Void) async throws {
+    let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first { $0.isKeyWindow }
+    let window = UIWindow(windowScene: scene)
+    let controller = UIViewController()
+    window.rootViewController = controller
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true; previous?.makeKeyAndVisible() }
+    let installation = SourceInstallationID(), digest = String(repeating: "a", count: 64)
+    let manifest = YingxueWire.Manifest(protocolVersion: 1, sourceID: "org.example.browser", name: "Browser", scriptVersion: "1",
+        referenceVersion: 1, stateVersion: 1, capabilities: [.browser],
+        origins: [.init(scheme: .http, host: "127.0.0.1", port: 18731)], authentication: [], publicConfiguration: [])
+    let gate = try SourceOperationGate(installationID: installation, scriptSHA256: digest, configurationRevision: 0, sessionRevision: 0)
+    let policy = try SourceHostPolicy(installationID: installation, scriptSHA256: digest, manifest: manifest)
+    let ticket = try await gate.begin(.search(.init(kind: .search, input: .init(query: "fixture", cursor: nil))))
+    let browser = SourceBrowserSession(gate: gate, ticket: ticket, policy: policy, dataStore: .nonPersistent()) { view in
+        if mounted {
+            view.frame = window.bounds
+            view.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+            controller.view.addSubview(view)
+        }
+    }
+    do { try await body(browser, gate, ticket); try await browser.close(); await gate.cancel(ticket) }
+    catch {
+        do { try await browser.close() } catch { Issue.record(error, "Source browser cleanup failed") }
+        await gate.cancel(ticket)
+        throw error
+    }
+}
+
 @MainActor
 private func withSourceWorker(_ body: @MainActor (SourceWorkerSession) async throws -> Void) async throws {
     let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)

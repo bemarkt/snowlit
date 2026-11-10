@@ -161,6 +161,32 @@ export async function startFixture({ port = 0 } = {}) {
           setTimeout(() => { document.querySelector('#content').textContent = '动态合成正文';
             document.querySelector('#content').dataset.ready = 'true'; }, 30);
           </script>`, 'text/html; charset=utf-8');
+      case 'browser/cross-redirect':
+        return send(response, 302, '', 'text/plain', {
+          Location: `http://localhost:${server.address().port}${base}browser/forbidden-redirect`,
+        });
+      case 'browser/resources': {
+        const foreign = `http://localhost:${server.address().port}${base}browser/`;
+        return send(response, 200, `<!doctype html><main id="content">Browser resource fixture</main>
+          <script src="${base}browser/allowed-script"></script>
+          <script src="${foreign}forbidden-script"></script>
+          <img src="${foreign}forbidden-image">
+          <iframe src="${foreign}forbidden-frame"></iframe>
+          <script>fetch('${foreign}forbidden-fetch').then(() => {
+            document.body.dataset.fetch = 'allowed';
+          }, () => { document.body.dataset.fetch = 'blocked'; });</script>`, 'text/html; charset=utf-8');
+      }
+      case 'browser/allowed-script':
+        return send(response, 200, "document.documentElement.dataset.allowed = 'true';", 'text/javascript');
+      case 'browser/forbidden-script':
+        return send(response, 200, "document.documentElement.dataset.forbidden = 'true';", 'text/javascript');
+      case 'browser/forbidden-image':
+      case 'browser/forbidden-frame':
+      case 'browser/forbidden-fetch':
+      case 'browser/forbidden-redirect':
+      case 'browser/control':
+        return send(response, 200, '<!doctype html><main>Foreign origin reached</main>', 'text/html; charset=utf-8',
+          { 'Access-Control-Allow-Origin': '*' });
       case 'login':
         return send(response, 200, `<!doctype html><form method="post" action="${base}auth/login">
           <label>合成密码<input type="password" name="password"></label><button>登录</button></form>`, 'text/html; charset=utf-8');

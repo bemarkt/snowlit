@@ -48,6 +48,21 @@ test('health identifies the exact fixture instance that owns the listening port'
   assert.notEqual(health.instanceID, second.instanceID);
 });
 
+test('browser fixture exposes an observable reachable second origin without following redirects implicitly', async t => {
+  const { base } = await setup(t);
+  const response = await fetch(base + 'browser/cross-redirect', {redirect: 'manual'});
+  assert.equal(response.status, 302);
+  const target = response.headers.get('location');
+  assert.equal(new URL(target).hostname, 'localhost');
+  assert.equal(new URL(target).port, new URL(base).port);
+  assert.equal((await fetch(target)).status, 200);
+  const html = await (await fetch(base + 'browser/resources')).text();
+  for (const kind of ['script', 'image', 'frame', 'fetch']) assert.ok(html.includes('browser/forbidden-' + kind));
+  const {requests} = await (await fetch(base + 'status')).json();
+  assert.ok(requests.some(request => request.path === 'browser/cross-redirect'));
+  assert.ok(requests.some(request => request.path === 'browser/forbidden-redirect'));
+});
+
 test('ES module is self-contained and content preserves duplicate paragraphs and image roles', async t => {
   const { base } = await setup(t);
   const response = await fetch(`${base}module.mjs`);

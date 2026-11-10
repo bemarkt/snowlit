@@ -43,6 +43,25 @@ struct SourcePageTests {
         #expect(try await gate.acceptPageEvaluation(reply, page: ready.page, for: operation).json == "{\"text\":\"old\"}")
     }
 
+    @Test func cancelledNativeCleanupRemovesOnlyItsPageAndKeepsTheOperationUsable() async throws {
+        let (gate, policy) = try environment()
+        let operation = try await gate.begin(input)
+        let page = try await gate.createPage(for: operation, policy: policy)
+        let survivor = try await gate.createPage(for: operation, policy: policy)
+        let cleanup = Task {
+            withUnsafeCurrentTask { $0?.cancel() }
+            #expect(Task.isCancelled)
+            await gate.discardPage(page)
+        }
+        await cleanup.value
+        #expect(await gate.pageIDs(for: operation) == [survivor.id])
+        try await gate.check(operation)
+        await gate.cancel(operation)
+        await gate.discardPage(page)
+        await gate.discardPage(survivor)
+        #expect(await gate.pageIDs(for: operation).isEmpty)
+    }
+
     @Test func originsAreCheckedAtStartAndFinishWithoutLosingThePreviousRegistration() async throws {
         let (gate, policy) = try environment()
         let operation = try await gate.begin(input)

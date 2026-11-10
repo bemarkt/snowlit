@@ -110,6 +110,13 @@ extension SourceOperationGate {
         pages.filter { $0.value.requestID == ticket.call.context.requestID }.keys.sorted()
     }
 
+    /// Native cleanup is allowed after caller cancellation. The unforgeable
+    /// page token can only remove its own registration, never a newer page.
+    func discardPage(_ page: PageTicket) {
+        guard pages[page.id]?.requestID == page.operation.call.context.requestID else { return }
+        pages.removeValue(forKey: page.id)
+    }
+
     func discardPages(for requestID: String) { pages = pages.filter { $0.value.requestID != requestID } }
 
     private func pageState(_ page: PageTicket) throws -> SourcePageState {
