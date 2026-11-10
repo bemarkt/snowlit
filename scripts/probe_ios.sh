@@ -62,6 +62,13 @@ cleanup() {
   if [ "$result" -eq 0 ] && [ "$probe_complete" != true ]; then
     result=1
   fi
+  if [ "$mode" = reader-ui ] && [ -f "$evidence/RuntimeTests.xcresult/Info.plist" ]; then
+    if ! xcrun xcresulttool export attachments --path "$evidence/RuntimeTests.xcresult" \
+      --output-path "$evidence/attachments" > "$evidence/attachment-export.log" 2>&1; then
+      printf 'Reader screenshot export failed; see attachment-export.log\n' >&2
+      result=1
+    fi
+  fi
   if [ -n "$simulator" ]; then
     xcrun simctl shutdown "$simulator" || true
     xcrun simctl delete "$simulator" || true
