@@ -38,6 +38,7 @@ extension LibraryDatabase {
                                                    referenceVersion: item["reference_version"], key: item["remote_key"])
                 }
             return try SourceUpdateBookSnapshot(book: book, references: references,
+                chapterReferences: Self.savedChapterReferences(db, book.id),
                 catalog: Self.savedCatalog(db, book.id), checkpoint: Self.savedCheckpoint(db, book.id))
         }
         guard books.isEmpty || revision != nil else { throw Failure.inconsistentData }
@@ -57,7 +58,7 @@ extension LibraryDatabase {
             );
             INSERT INTO source_inventory_revision SELECT DISTINCT installation, 0 FROM library_book;
             """)
-        for (name, definition) in inventoryTriggers {
+        for (name, definition) in inventoryTriggers(for: ["library_book", "catalog_entry", "reading_checkpoint", "book_reference"]) {
             try db.execute(sql: "CREATE TRIGGER \(name) \(definition)")
         }
         try db.execute(sql: "PRAGMA user_version=6;")
@@ -65,16 +66,16 @@ extension LibraryDatabase {
 
     static func validateSourceInventoryRevisionSchema(_ db: Database) throws {
         _ = try Row.fetchAll(db, sql: "SELECT installation, revision FROM source_inventory_revision LIMIT 0")
-        for (name, _) in inventoryTriggers {
+        for (name, _) in inventoryTriggers(for: ["library_book", "catalog_entry", "reading_checkpoint", "book_reference"]) {
             guard try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type='trigger' AND name=?)", arguments: [name]) == true else {
                 throw Failure.inconsistentData
             }
         }
     }
 
-    private static var inventoryTriggers: [(String, String)] {
+    static func inventoryTriggers(for tables: [String]) -> [(String, String)] {
         var result: [(String, String)] = []
-        for table in ["library_book", "catalog_entry", "reading_checkpoint", "book_reference"] {
+        for table in tables {
             for action in ["INSERT", "UPDATE", "DELETE"] {
                 let owner = action == "DELETE" ? "OLD" : "NEW"
                 let selection = table == "library_book" || table == "book_reference"

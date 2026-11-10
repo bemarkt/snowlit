@@ -6,6 +6,7 @@ import Testing
 
 /// Reconstruct the actual earlier schema before testing an upgrade path.
 func removeSourceInventorySchema(_ db: Database) throws {
+    try removeChapterReferenceSchema(db)
     for table in ["library_book", "catalog_entry", "reading_checkpoint", "book_reference"] {
         for action in ["insert", "update", "delete"] {
             try db.execute(sql: "DROP TRIGGER inventory_\(table)_\(action)")
@@ -102,6 +103,7 @@ struct LibrarySourceUpdateSnapshotTests {
             let saved = try #require(after.books.first)
             #expect(saved.book.reference == updated && saved.references == [book.reference, updated])
             #expect(saved.catalog == catalog && saved.checkpoint?.position == position)
+            #expect(saved.chapterReferences == [chapter])
         }
     }
 

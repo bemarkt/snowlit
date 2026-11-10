@@ -5,20 +5,26 @@ import Foundation
 public struct SourceUpdateBookSnapshot: Equatable, Sendable {
     public let book: LibraryBook
     public let references: [SourceBookReference]
+    public let chapterReferences: [ChapterReference]
     public let catalog: CatalogSnapshot?
     public let checkpoint: ReadingCheckpoint?
 
-    public init(book: LibraryBook, references: [SourceBookReference], catalog: CatalogSnapshot?,
+    public init(book: LibraryBook, references: [SourceBookReference], chapterReferences: [ChapterReference], catalog: CatalogSnapshot?,
                 checkpoint: ReadingCheckpoint?) throws {
-        guard Set(references).count == references.count,
-              references.contains(book.reference),
+        let knownBooks = Set(references), knownChapters = Set(chapterReferences)
+        guard knownBooks.count == references.count,
+              knownChapters.count == chapterReferences.count,
+              knownBooks.contains(book.reference),
               references.allSatisfy({ $0.installationID == book.reference.installationID }),
-              catalog.map({ references.contains($0.book) }) ?? true,
+              chapterReferences.allSatisfy({ knownBooks.contains($0.book) }),
+              catalog.map({ knownBooks.contains($0.book) }) ?? true,
+              catalog.map({ $0.entries.allSatisfy { knownChapters.contains($0.reference) } }) ?? true,
               checkpoint.map({ $0.session.bookID == book.id }) ?? true,
-              checkpoint?.position.map({ references.contains($0.chapter.book) }) ?? true else {
+              checkpoint?.position.map({ knownChapters.contains($0.chapter) }) ?? true else {
             throw SourceUpdateFailure.invalidInventory
         }
-        self.book = book; self.references = references; self.catalog = catalog; self.checkpoint = checkpoint
+        self.book = book; self.references = references; self.chapterReferences = chapterReferences
+        self.catalog = catalog; self.checkpoint = checkpoint
     }
 }
 

@@ -44,7 +44,7 @@ struct LibrarySourceStateAdoptionTests {
         }
     }
 
-    enum ConcurrentWrite: CaseIterable, Sendable { case book, catalog, progress, publicState, targetState }
+    enum ConcurrentWrite: CaseIterable, Sendable { case book, catalog, progress, publicState, targetState, historicalChapter }
 
     @Test(arguments: ConcurrentWrite.allCases)
     func anotherConnectionChangingPreparedInputsRejectsAdoption(change: ConcurrentWrite) async throws {
@@ -67,6 +67,11 @@ struct LibrarySourceStateAdoptionTests {
             case .targetState:
                 try await second.queue.write { try $0.execute(sql: "INSERT INTO source_public_state VALUES (?, 2, 1, ?)",
                     arguments: [original.id.rawValue.uuidString, try JSONEncoder().encode([SourcePublicStateEntry]())]) }
+            case .historicalChapter:
+                try await second.queue.write {
+                    try LibraryDatabase.recordChapterReference($0, bookID: book.id,
+                        reference: .init(book: book.reference, key: "retained-history"))
+                }
             }
             let current = try await second.captureSourceUpdate(importID: candidate.id, expected: original)
             await #expect(throws: SourceUpdateFailure.staleInventory) {
