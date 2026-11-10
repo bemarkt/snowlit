@@ -9,6 +9,10 @@ final class ProbePageCurl: NSObject, UIPageViewControllerDataSource, UIPageViewC
     let pages: [ProbeViewport]
     private(set) var committedPage = 0
     private(set) var transitionInProgress = false
+    private(set) var interactiveTransitions = 0
+    private(set) var completedTransitions = 0
+    private(set) var cancelledTransitions = 0
+    var onTransitionChange: (() -> Void)?
 
     init(first: ProbeViewport, second: ProbeViewport) {
         pages = [first, second]
@@ -49,14 +53,21 @@ final class ProbePageCurl: NSObject, UIPageViewControllerDataSource, UIPageViewC
     func pageViewController(_ pageViewController: UIPageViewController,
                             willTransitionTo pendingViewControllers: [UIViewController]) {
         transitionInProgress = true
+        interactiveTransitions += 1
+        onTransitionChange?()
     }
 
     func pageViewController(_ pageViewController: UIPageViewController, didFinishAnimating finished: Bool,
                             previousViewControllers: [UIViewController], transitionCompleted completed: Bool) {
-        defer { transitionInProgress = false }
-        guard completed, let visible = pageViewController.viewControllers?.first,
+        defer {
+            transitionInProgress = false
+            onTransitionChange?()
+        }
+        guard completed else { cancelledTransitions += 1; return }
+        guard let visible = pageViewController.viewControllers?.first,
               let index = pages.firstIndex(where: { $0 === visible }) else { return }
         committedPage = index
+        completedTransitions += 1
     }
 }
 #endif

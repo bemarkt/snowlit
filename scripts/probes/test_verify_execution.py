@@ -32,6 +32,21 @@ class VerifyExecutionTests(unittest.TestCase):
             with self.assertRaises(ValueError):
                 verify(root, "integration")
 
+    def test_reader_ui_requires_the_exact_completed_xctest(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self.fixture(root)
+            with self.assertRaises(ValueError):
+                verify(root, "reader-ui")
+            path = root / "webkit-tests.log"
+            method = "testSystemCurlCommitsCompletedGesturesAndKeepsPageAfterCancellation"
+            path.write_text(f"Test Case '-[SnowlitUITests.ReaderInteractionUITests {method}]' passed\n"
+                            "Test Suite 'ReaderInteractionUITests' passed")
+            self.assertEqual(verify(root, "reader-ui")["reportedTests"], 1)
+            path.write_text(path.read_text().replace("' passed", "' failed", 1))
+            with self.assertRaises(ValueError):
+                verify(root, "reader-ui")
+
     def test_zero_tests_missing_suite_or_command_failure_is_rejected(self):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)

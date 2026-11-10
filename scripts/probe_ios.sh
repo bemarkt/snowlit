@@ -15,9 +15,11 @@ case "$kind" in
   tablet) device="iPad (A16)" ;;
   *) printf 'Usage: bash scripts/probe_ios.sh phone|tablet\n' >&2; exit 2 ;;
 esac
+test_timeout=60
 case "$mode" in
   integration) selection=(-only-testing:SnowlitAppTests/WebKitRuntimeProbeTests -only-testing:SnowlitAppTests/ReaderProbeTests) ;;
   recovery) selection=(-only-testing:SnowlitAppTests/WebKitRecoveryTests) ;;
+  reader-ui) selection=(-only-testing:SnowlitUITests/ReaderInteractionUITests); test_timeout=120 ;;
   *) printf 'Unknown probe mode: %s\n' "$mode" >&2; exit 2 ;;
 esac
 
@@ -109,7 +111,7 @@ fi
   -derivedDataPath "$root/build/app-$kind" -resultBundlePath "$evidence/RuntimeTests.xcresult" \
   "${selection[@]}" \
   -parallel-testing-enabled NO -test-timeouts-enabled YES \
-  -maximum-test-execution-time-allowance 60 CODE_SIGNING_ALLOWED=NO
+  -maximum-test-execution-time-allowance "$test_timeout" CODE_SIGNING_ALLOWED=NO
 python3 "$root/scripts/probes/verify_execution.py" "$evidence" "$mode"
 printf 'Selected integration tests passed at %s\n' "$(git rev-parse HEAD)" > "$evidence/result.txt"
 probe_complete=true

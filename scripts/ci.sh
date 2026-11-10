@@ -78,9 +78,9 @@ PY
   )
 fi
 
-test_selection=(-only-testing:SnowlitAppTests/StartupModelTests -only-testing:SnowlitUITests)
+test_selection=(-only-testing:SnowlitAppTests/StartupModelTests -only-testing:SnowlitUITests/StartupUITests)
 if [ "$kind" = tablet ]; then
-  test_selection=(-only-testing:SnowlitUITests)
+  test_selection=(-only-testing:SnowlitUITests/StartupUITests)
 fi
 xcodebuild test -project Snowlit.xcodeproj -scheme Snowlit \
   -configuration Debug -destination "$destination" \

@@ -12,6 +12,7 @@
 		A10000000000000000000004 /* StartupView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000004 /* StartupView.swift */; };
 		A10000000000000000000021 /* StartupModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000021 /* StartupModelTests.swift */; };
 		A10000000000000000000022 /* StartupUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000022 /* StartupUITests.swift */; };
+		A10000000000000000000027 /* ReaderInteractionUITests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000027 /* ReaderInteractionUITests.swift */; };
 		A10000000000000000000023 /* FixtureScenario.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000023 /* FixtureScenario.swift */; };
 		A10000000000000000000024 /* WebKitRuntimeProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000024 /* WebKitRuntimeProbeTests.swift */; };
 		A10000000000000000000025 /* WebKitRecoveryTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000025 /* WebKitRecoveryTests.swift */; };
@@ -40,6 +41,7 @@
 		A20000000000000000000013 /* SnowlitUITests.xctest */ = {isa = PBXFileReference; explicitFileType = wrapper.cfbundle; includeInIndex = 0; path = SnowlitUITests.xctest; sourceTree = BUILT_PRODUCTS_DIR; };
 		A20000000000000000000021 /* StartupModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/StartupModelTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000022 /* StartupUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitUITests/StartupUITests.swift; sourceTree = "<group>"; };
+		A20000000000000000000027 /* ReaderInteractionUITests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitUITests/ReaderInteractionUITests.swift; sourceTree = "<group>"; };
 		A20000000000000000000023 /* FixtureScenario.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/FixtureScenario.swift; sourceTree = "<group>"; };
 		A20000000000000000000024 /* WebKitRuntimeProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/WebKitRuntimeProbeTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000025 /* WebKitRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/WebKitRecoveryTests.swift; sourceTree = "<group>"; };
@@ -98,6 +100,7 @@
 			children = (
 				A20000000000000000000021 /* StartupModelTests.swift */,
 				A20000000000000000000022 /* StartupUITests.swift */,
+				A20000000000000000000027 /* ReaderInteractionUITests.swift */,
 				A20000000000000000000023 /* FixtureScenario.swift */,
 				A20000000000000000000024 /* WebKitRuntimeProbeTests.swift */,
 				A20000000000000000000025 /* WebKitRecoveryTests.swift */,
@@ -199,7 +202,7 @@
 
 /* Begin PBXSourcesBuildPhase section */
 		A30000000000000000000012 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000021, A10000000000000000000023, A10000000000000000000024, A10000000000000000000025, A10000000000000000000026,); runOnlyForDeploymentPostprocessing = 0; };
-		A30000000000000000000022 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000022,); runOnlyForDeploymentPostprocessing = 0; };
+		A30000000000000000000022 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000022, A10000000000000000000027,); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;

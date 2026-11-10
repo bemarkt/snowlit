@@ -72,11 +72,17 @@ def verify(evidence, mode):
     bundle = evidence / "RuntimeTests.xcresult"
     if not bundle.is_dir() or not (bundle / "Info.plist").is_file():
         raise ValueError("The actual xcresult bundle is missing")
+    log = (evidence / "webkit-tests.log").read_text(encoding="utf-8")
+    if mode == "reader-ui":
+        tests = re.findall(r"Test Case '-\[SnowlitUITests\.ReaderInteractionUITests (\w+)\]' passed", log)
+        expected = ["testSystemCurlCommitsCompletedGesturesAndKeepsPageAfterCancellation"]
+        if tests != expected or "Test Suite 'ReaderInteractionUITests' passed" not in log:
+            raise ValueError("The actual Reader interaction UI test did not pass")
+        return {"mode": mode, "suites": ["ReaderInteractionUITests"], "reportedTests": 1, "result": "passed"}
     suites = {
         "integration": ["WebKitRuntimeProbeTests", "ReaderProbeTests"],
         "recovery": ["WebKitRecoveryTests"],
     }[mode]
-    log = (evidence / "webkit-tests.log").read_text(encoding="utf-8")
     counts = [int(count) for count in re.findall(r"Test run with (\d+) tests? in \d+ suites? passed", log)]
     if not counts or sum(counts) == 0:
         raise ValueError("No nonempty successful Swift Testing run was recorded")
@@ -96,7 +102,7 @@ def verify(evidence, mode):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("evidence", type=Path)
-    parser.add_argument("mode", choices=["integration", "recovery"])
+    parser.add_argument("mode", choices=["integration", "recovery", "reader-ui"])
     args = parser.parse_args()
     result = verify(args.evidence, args.mode)
     (args.evidence / "execution-verification.json").write_text(json.dumps(result, indent=2) + "\n")
