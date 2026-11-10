@@ -9,10 +9,19 @@ import YingxueKit
 struct AppComposition {
     let startup: StartupModel
     let sources: SourceLibraryModel
+    let management: SourceManagementModel
+    let candidateValidator: SourceCandidateValidator
 
     init() {
         let storage = LibraryBootstrap()
         let files = SourceFileReader()
+        let validator = SourceCandidateValidator()
+        candidateValidator = validator
+        management = SourceManagementModel(openLibrary: { try await storage.open() },
+            digest: { bytes in SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() },
+            validate: { try await validator.validate($0) },
+            invalidate: { try await validator.invalidate($0) },
+            cleanup: { try await validator.cleanup($0, token: $1) })
         sources = SourceLibraryModel(openLibrary: { try await storage.open() },
             inspect: { source, requirements in try await SourceFileInspector.inspect(source, requirements: requirements) },
             digest: { bytes in SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() },

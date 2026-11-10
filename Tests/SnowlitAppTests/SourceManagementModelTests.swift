@@ -373,11 +373,33 @@ struct SourceManagementModelTests {
         }
     }
 
+    @Test func failedRuntimeInvalidationPreventsManagementAndCandidateAdoption() async throws {
+        try await withLibrary { _, library in
+            let current = try await Self.install(library)
+            var attempts = 0
+            let model = Self.model(library, invalidate: { _ in
+                attempts += 1
+                throw FixtureFailure.requested
+            })
+            await model.perform(.disable, expected: current)
+            #expect(model.problem != nil && model.changed == 0)
+            #expect(try await library.sourceInstallations() == [current])
+            let newer = try await Self.stage(library, version: 2)
+            await model.prepare(importID: newer.id)
+            let candidate = try #require(model.candidate)
+            await model.confirm(candidateID: candidate.id, allowCredentialRead: false,
+                restoreAssociation: false, configuration: [])
+            #expect(attempts == 2 && model.problem != nil && model.changed == 0)
+            #expect(model.candidate?.id == candidate.id)
+            #expect(try await library.sourceInstallations() == [current])
+        }
+    }
+
     private enum FixtureFailure: Error { case requested }
 
     private static func model(_ library: LibraryDatabase,
         validate: @escaping SourceManagementModel.Validator = { request in try request.candidate.plan?.validate(references: [], state: nil) },
-        invalidate: @escaping @MainActor (SourceInstallationID) async -> Void = { _ in },
+        invalidate: @escaping @MainActor (SourceInstallationID) async throws -> Void = { _ in },
         cleanup: @escaping @MainActor (SourceInstallationID, SourceSessionCleanup) async throws -> Void = { _, _ in }) -> SourceManagementModel {
         .init(openLibrary: { library }, digest: digest, validate: validate, invalidate: invalidate, cleanup: cleanup)
     }

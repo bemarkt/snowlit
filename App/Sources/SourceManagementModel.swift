@@ -63,7 +63,7 @@ final class SourceManagementModel {
     @ObservationIgnored private let openLibrary: @Sendable () async throws -> LibraryDatabase
     @ObservationIgnored private let digest: SourceScriptSnapshot.Digest
     @ObservationIgnored private let validate: Validator
-    @ObservationIgnored private let invalidate: @MainActor (SourceInstallationID) async -> Void
+    @ObservationIgnored private let invalidate: @MainActor (SourceInstallationID) async throws -> Void
     @ObservationIgnored private let cleanup: @MainActor (SourceInstallationID, SourceSessionCleanup) async throws -> Void
     @ObservationIgnored private var preparationID: UUID?
     @ObservationIgnored private var validationID: UUID?
@@ -75,7 +75,7 @@ final class SourceManagementModel {
     init(openLibrary: @escaping @Sendable () async throws -> LibraryDatabase,
          digest: @escaping SourceScriptSnapshot.Digest,
          validate: @escaping Validator,
-         invalidate: @escaping @MainActor (SourceInstallationID) async -> Void,
+         invalidate: @escaping @MainActor (SourceInstallationID) async throws -> Void,
          cleanup: @escaping @MainActor (SourceInstallationID, SourceSessionCleanup) async throws -> Void) {
         self.openLibrary = openLibrary; self.digest = digest; self.validate = validate
         self.invalidate = invalidate; self.cleanup = cleanup
@@ -173,7 +173,7 @@ final class SourceManagementModel {
             if let existing = candidate.existing {
                 // Stop old operations before changing the installation. Storage
                 // repeats the complete CAS and revokes persistent write permits.
-                await invalidate(existing.id)
+                try await invalidate(existing.id)
                 try Task.checkCancellation()
                 guard let prepared = candidate.prepared, let migrations else {
                     throw Failure.inconsistentValidation
@@ -208,7 +208,7 @@ final class SourceManagementModel {
         defer { isChanging = false }
         do {
             let library = try await openLibrary()
-            await invalidate(expected.id)
+            try await invalidate(expected.id)
             try Task.checkCancellation()
             let updated: SourceInstallationSnapshot
             switch action {

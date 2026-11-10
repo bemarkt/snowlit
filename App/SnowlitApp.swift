@@ -21,10 +21,12 @@ struct SnowlitApp: App {
             } else if ProcessInfo.processInfo.arguments.contains("-snowlit-probe-runtime-lifecycle") {
                 RuntimeLifecycleProbeView()
             } else {
-                StartupView(model: composition.startup, sources: composition.sources)
+                StartupView(model: composition.startup, sources: composition.sources,
+                    management: composition.management, candidateValidator: composition.candidateValidator)
             }
             #else
-            StartupView(model: composition.startup, sources: composition.sources)
+            StartupView(model: composition.startup, sources: composition.sources,
+                management: composition.management, candidateValidator: composition.candidateValidator)
             #endif
         }
     }

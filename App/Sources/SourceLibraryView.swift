@@ -5,6 +5,8 @@ import YingxueKit
 
 struct SourceLibraryView: View {
     let model: SourceLibraryModel
+    let management: SourceManagementModel
+    let candidateValidator: SourceCandidateValidator
     @State private var showImporter = false
     @State private var showPreview = false
     @State private var selection: Selection?
@@ -81,7 +83,7 @@ struct SourceLibraryView: View {
             }
             .navigationDestination(for: UUID.self) { id in
                 if let item = model.imports.first(where: { $0.id == id }) {
-                    SourceScriptDetailView(script: item.script, receipt: item.receipt)
+                    SourceManagementView(item: item, library: model, management: management, candidateValidator: candidateValidator)
                 }
             }
             .refreshable { model.clearProblem(); await model.refresh() }

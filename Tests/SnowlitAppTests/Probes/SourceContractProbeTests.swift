@@ -84,7 +84,8 @@ private final class NativeContractProbe: NSObject, WKScriptMessageHandlerWithRep
     private let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
     private let world = WKContentWorld.world(name: "Snowlit.ContractProbe")
     private let credentials: KeychainCredentialStore
-    private let transport = SourceHTTPTransport()
+    private let website = SourceWebsiteSession(dataStore: .nonPersistent())
+    private var nativeHost: SourceNativeHost?
     private var operation: SourceOperationGate.Ticket?
     private let worker: SourceWorkerSession?
     private var window: UIWindow?
@@ -148,11 +149,20 @@ private final class NativeContractProbe: NSObject, WKScriptMessageHandlerWithRep
     func invoke(_ input: YingxueWire.OperationInput) async throws -> YingxueWire.OperationReply {
         let ticket = try await gate.begin(input)
         operation = ticket
+        let configuration = try SourceConfiguration(policy: policy, revision: ticket.call.context.configurationRevision)
+        let nativeHost = SourceNativeHost(gate: gate, ticket: ticket, policy: policy, configuration: configuration,
+            website: website, credentials: credentials, mount: { [weak self] view in
+                guard let container = self?.window?.rootViewController?.view else { return }
+                view.frame = container.bounds; container.addSubview(view)
+            }, interact: { [self] request in try await interaction(request, operation: ticket) },
+            readState: { _ in throw SourceHostFailure.undeclaredCapability },
+            writeState: { _ in throw SourceHostFailure.undeclaredCapability })
+        self.nativeHost = nativeHost
         do {
             let reply: YingxueWire.OperationReply
             if let worker {
                 reply = try await worker.invoke(ticket, gate: gate, policy: policy) { [self] host in
-                    try await hostReply(for: host.call, operation: ticket)
+                    try await hostReply(for: host)
                 }
             } else {
                 let json = try await probe.evaluate("""
@@ -181,11 +191,15 @@ private final class NativeContractProbe: NSObject, WKScriptMessageHandlerWithRep
                     """, arguments: ["callJSON": String(decoding: try YingxueWireCodec.encode(ticket.call), as: UTF8.self)], contentWorld: world)
                 reply = try await gate.validateReply(Data(json.utf8), for: ticket)
             }
+            try await nativeHost.close()
             try await gate.finish(ticket)
+            self.nativeHost = nil
             operation = nil
             return reply
         } catch {
             await gate.cancel(ticket)
+            try await nativeHost.close()
+            self.nativeHost = nil
             operation = nil
             throw error
         }
@@ -196,7 +210,7 @@ private final class NativeContractProbe: NSObject, WKScriptMessageHandlerWithRep
               let json = message.body as? String, let operation else { return (nil, "Invalid contract invocation") }
         do {
             let ticket = try await gate.acceptHostCall(Data(json.utf8), for: operation, policy: policy)
-            let reply = try await hostReply(for: ticket.call, operation: operation)
+            let reply = try await hostReply(for: ticket)
             let bytes = try YingxueWireCodec.encode(reply)
             _ = try await gate.validateHostReply(bytes, for: ticket)
             try await gate.finish(ticket)
@@ -209,48 +223,37 @@ private final class NativeContractProbe: NSObject, WKScriptMessageHandlerWithRep
         }
     }
 
-    private func hostReply(for call: YingxueWire.HostCall, operation: SourceOperationGate.Ticket) async throws -> YingxueWire.HostReply {
+    private func hostReply(for host: SourceOperationGate.HostTicket) async throws -> YingxueWire.HostReply {
+        let call = host.call
         methods.insert(call.request.method)
-        let reply: YingxueWire.HostReply
-        switch call.request {
-        case .http(let request):
-            let value = try await transport.perform(request.input, policy: policy, gate: gate,
-                ticket: operation, credentials: credentials)
-            reply = .http(.init(kind: .http, id: call.id, context: call.context, value: value))
-        case .decodeText(let request):
-            reply = .decodeText(.init(kind: .decodeText, id: call.id, context: call.context, value: try SourceTextDecoder.decode(request.input)))
-        case .dom(let request):
-            reply = .dom(.init(kind: .dom, id: call.id, context: call.context, value: try SourceDOMContract.query(request.input)))
-        case .readConfiguration:
-            let configuration = try SourceConfiguration(policy: policy, revision: call.context.configurationRevision)
-            reply = .readConfiguration(.init(kind: .readConfiguration, id: call.id, context: call.context, value: try configuration.read(for: call.context)))
-        case .interact(let request):
-            let presentation = try await gate.beginInteraction(request.input, for: operation, policy: policy)
-            let result: YingxueWire.InteractionResult
-            if cancelForm { result = .cancelled(.init(kind: .cancelled)) }
-            else {
-                let id = StoredCredentialID(installationID: installation)
-                try await credentials.write(.init(utf8: "fixture-password"), for: id)
-                let handle = try await gate.issueCredential(id, origins: manifest.origins, for: operation)
-                submittedCredentialHandles += 1
-                result = .submitted(.init(kind: .submitted, fields: [.credential(.init(kind: .credential, key: "password", handle: handle))]))
-            }
-            let value = try await gate.completeInteraction(.init(id: presentation.id, result: result), for: operation)
-            reply = .interact(.init(kind: .interact, id: call.id, context: call.context, value: value))
-        default: throw SourceHostFailure.undeclaredCapability
-        }
+        let reply = try await #require(nativeHost).reply(to: host)
         let encoded = String(decoding: try YingxueWireCodec.encode(reply), as: UTF8.self)
         replyContainsSecret = replyContainsSecret || encoded.contains("fixture-password")
         return reply
     }
 
+    private func interaction(_ request: YingxueWire.InteractionRequest, operation: SourceOperationGate.Ticket) async throws -> YingxueWire.InteractionResult {
+        let presentation = try await gate.beginInteraction(request, for: operation, policy: policy)
+        let result: YingxueWire.InteractionResult
+        if cancelForm { result = .cancelled(.init(kind: .cancelled)) }
+        else {
+            let id = StoredCredentialID(installationID: installation)
+            try await credentials.write(.init(utf8: "fixture-password"), for: id)
+            let handle = try await gate.issueCredential(id, origins: manifest.origins, for: operation)
+            submittedCredentialHandles += 1
+            result = .submitted(.init(kind: .submitted, fields: [.credential(.init(kind: .credential, key: "password", handle: handle))]))
+        }
+        return try await gate.completeInteraction(.init(id: presentation.id, result: result), for: operation)
+    }
+
     func close() async throws {
         await gate.close()
         if let worker { try await worker.close() }
+        try await nativeHost?.close()
         window?.isHidden = true; window = nil; previousWindow?.makeKeyAndVisible()
         probe.webView.configuration.userContentController.removeScriptMessageHandler(forName: "contractHost", contentWorld: world)
         probe.close()
-        await transport.close()
+        try await website.erase()
         try await credentials.removeAll(for: installation)
     }
 }

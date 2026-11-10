@@ -20,7 +20,7 @@ case "$kind" in
 esac
 test_timeout=60
 case "$mode" in
-  integration) selection=(-only-testing:SnowlitAppTests/WebKitRuntimeProbeTests -only-testing:SnowlitAppTests/ReaderProbeTests -only-testing:SnowlitAppTests/SourceContractProbeTests) ;;
+  integration) selection=(-only-testing:SnowlitAppTests/WebKitRuntimeProbeTests -only-testing:SnowlitAppTests/ReaderProbeTests -only-testing:SnowlitAppTests/SourceContractProbeTests -only-testing:SnowlitAppTests/SourceCandidateValidatorTests) ;;
   recovery) selection=(-only-testing:SnowlitAppTests/WebKitRecoveryTests) ;;
   reader-ui) selection=(-only-testing:SnowlitUITests/ReaderInteractionUITests); test_timeout=120 ;;
   *) printf 'Unknown probe mode: %s\n' "$mode" >&2; exit 2 ;;

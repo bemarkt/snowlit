@@ -6,6 +6,7 @@ struct SourceManagementView: View {
     let item: SourceLibraryModel.SavedImport
     let library: SourceLibraryModel
     let management: SourceManagementModel
+    let candidateValidator: SourceCandidateValidator
     @State private var adoption: SourceManagementModel.Candidate?
     @State private var showRemoval = false
     @State private var removalExpected: SourceInstallationSnapshot?
@@ -86,7 +87,7 @@ struct SourceManagementView: View {
         .task(id: management.changed) { await library.refresh() }
         .onDisappear { management.cancelPreparation() }
         .sheet(item: $adoption, onDismiss: { management.cancelPreparation() }) { candidate in
-            SourceAdoptionView(candidate: candidate, management: management)
+            SourceAdoptionView(candidate: candidate, management: management, validator: candidateValidator)
         }
         .confirmationDialog("删除这个书源？", isPresented: $showRemoval, titleVisibility: .visible) {
             if let installed = removalExpected {
@@ -115,6 +116,7 @@ struct SourceManagementView: View {
 private struct SourceAdoptionView: View {
     let candidate: SourceManagementModel.Candidate
     let management: SourceManagementModel
+    let validator: SourceCandidateValidator
     @Environment(\.dismiss) private var dismiss
     @State private var allowCredentialRead = false
     @State private var restoreAssociation = false
@@ -122,8 +124,8 @@ private struct SourceAdoptionView: View {
     @State private var acknowledgedChanges: Set<Data> = []
     @State private var confirmRequest = 0
 
-    init(candidate: SourceManagementModel.Candidate, management: SourceManagementModel) {
-        self.candidate = candidate; self.management = management
+    init(candidate: SourceManagementModel.Candidate, management: SourceManagementModel, validator: SourceCandidateValidator) {
+        self.candidate = candidate; self.management = management; self.validator = validator
         _configuration = State(initialValue: candidate.configuration)
     }
 
@@ -257,6 +259,11 @@ private struct SourceAdoptionView: View {
             }
         }
         .interactiveDismissDisabled()
+        .sheet(item: Binding(get: { validator.active }, set: { value in
+            if value == nil { validator.cancel() }
+        })) { session in
+            SourceCandidateView(validator: validator, session: session)
+        }
         .task(id: confirmRequest) {
             guard confirmRequest > 0 else { return }
             await management.confirm(candidateID: candidate.id, allowCredentialRead: allowCredentialRead,
