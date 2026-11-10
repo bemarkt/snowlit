@@ -134,7 +134,7 @@ extension LibraryDatabase: SourceInstallationStore {
         }
     }
 
-    private func changeSource(_ expected: SourceInstallationSnapshot,
+    func changeSource(_ expected: SourceInstallationSnapshot,
                               body: (Database, SourceInstallationSnapshot) throws -> Void) throws -> SourceInstallationSnapshot {
         try checkOpen()
         try Task.checkCancellation()
@@ -164,7 +164,7 @@ extension LibraryDatabase: SourceInstallationStore {
                        arguments: [UUID().uuidString, try JSONEncoder().encode(cleanup), current.id.rawValue.uuidString])
     }
 
-    private static func credentialRead(_ consent: SourceCredentialReadConsent) -> Bool {
+    static func credentialRead(_ consent: SourceCredentialReadConsent) -> Bool {
         switch consent { case .managedOnly: false; case .approvedForCandidate: true }
     }
 

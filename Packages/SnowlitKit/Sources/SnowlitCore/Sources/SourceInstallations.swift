@@ -91,6 +91,12 @@ public protocol SourceInstallationStore: Sendable {
     /// Read-only preparation; candidate scripts receive adapted values, never
     /// these host-owned IDs or a live database access token.
     func captureSourceUpdate(importID: UUID, expected: SourceInstallationSnapshot) async throws -> SourceUpdateSnapshot
+    /// Adopts a prepared state migration while reference semantics are unchanged.
+    /// The migrated value is validated by the source adapter; nil means no change.
+    func updateSource(prepared: SourceUpdateSnapshot, migratedState: SourcePublicState?,
+                      configuration: [SourceSettingValue], consent: SourceCredentialReadConsent) async throws -> SourceInstallationSnapshot
+    func restoreSource(confirmed prepared: SourceUpdateSnapshot, migratedState: SourcePublicState?,
+                       configuration: [SourceSettingValue], consent: SourceCredentialReadConsent) async throws -> SourceInstallationSnapshot
     func installSource(importID: UUID, id: SourceInstallationID, configuration: [SourceSettingValue],
                        consent: SourceCredentialReadConsent) async throws -> SourceInstallationSnapshot
     /// Version changes require a complete migration transaction, not this path.

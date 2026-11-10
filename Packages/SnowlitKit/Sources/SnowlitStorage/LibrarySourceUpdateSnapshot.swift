@@ -7,40 +7,44 @@ extension LibraryDatabase {
         try checkOpen()
         try Task.checkCancellation()
         return try queue.read { db in
-            let current = try Self.installation(db, expected.id)
-            guard current == expected else { throw SourceInstallationFailure.staleInstallation }
-            guard current.pendingCleanup == nil else { throw SourceInstallationFailure.cleanupPending }
-            guard let row = try Row.fetchOne(db, sql: "SELECT * FROM source_import WHERE id=?",
-                                            arguments: [importID.uuidString]) else { throw SourceInstallationFailure.missingImport }
-            let candidate = try Self.decodeSourceImport(row)
-            let metadata = try Self.importedMetadata(db, importID)
-            guard metadata.sourceID.utf8.elementsEqual(current.metadata.sourceID.utf8) else {
-                throw SourceInstallationFailure.differentSource
-            }
-            guard metadata.protocolVersion == current.metadata.protocolVersion else { throw SourceUpdateFailure.unsupportedProtocol }
-            guard current.state == .removed || candidate.scriptSHA256 != current.scriptSHA256 else { throw SourceInstallationFailure.alreadyCurrent }
-            let id = current.id.rawValue.uuidString
-            let revision = try Int64.fetchOne(db, sql: "SELECT revision FROM source_inventory_revision WHERE installation=?", arguments: [id])
-            let books = try Row.fetchAll(db, sql: "SELECT * FROM library_book WHERE installation=? ORDER BY id", arguments: [id]).map { row in
-                let book = try Self.decodeBook(row)
-                let references = try Row.fetchAll(db, sql: """
-                    SELECT installation, reference_version, remote_key FROM book_reference
-                    WHERE book_id=? ORDER BY reference_version, remote_key
-                    """, arguments: [book.id.rawValue.uuidString]).map { item in
-                        let raw: String = item["installation"]
-                        guard let installation = UUID(uuidString: raw) else { throw Failure.inconsistentData }
-                        return try SourceBookReference(installationID: SourceInstallationID(installation),
-                                                       referenceVersion: item["reference_version"], key: item["remote_key"])
-                    }
-                return try SourceUpdateBookSnapshot(book: book, references: references,
-                    catalog: Self.savedCatalog(db, book.id), checkpoint: Self.savedCheckpoint(db, book.id))
-            }
-            guard books.isEmpty || revision != nil else { throw Failure.inconsistentData }
-            return try SourceUpdateSnapshot(installation: current, candidate: candidate, candidateMetadata: metadata,
-                inventoryRevision: revision ?? 0, books: books,
-                currentState: Self.publicState(db, installationID: current.id, version: current.metadata.stateVersion),
-                targetState: Self.publicState(db, installationID: current.id, version: metadata.stateVersion))
+            try Self.sourceUpdateSnapshot(db, importID: importID, expected: expected)
         }
+    }
+
+    static func sourceUpdateSnapshot(_ db: Database, importID: UUID, expected: SourceInstallationSnapshot) throws -> SourceUpdateSnapshot {
+        let current = try Self.installation(db, expected.id)
+        guard current == expected else { throw SourceInstallationFailure.staleInstallation }
+        guard current.pendingCleanup == nil else { throw SourceInstallationFailure.cleanupPending }
+        guard let row = try Row.fetchOne(db, sql: "SELECT * FROM source_import WHERE id=?",
+                                        arguments: [importID.uuidString]) else { throw SourceInstallationFailure.missingImport }
+        let candidate = try Self.decodeSourceImport(row)
+        let metadata = try Self.importedMetadata(db, importID)
+        guard metadata.sourceID.utf8.elementsEqual(current.metadata.sourceID.utf8) else {
+            throw SourceInstallationFailure.differentSource
+        }
+        guard metadata.protocolVersion == current.metadata.protocolVersion else { throw SourceUpdateFailure.unsupportedProtocol }
+        guard current.state == .removed || candidate.scriptSHA256 != current.scriptSHA256 else { throw SourceInstallationFailure.alreadyCurrent }
+        let id = current.id.rawValue.uuidString
+        let revision = try Int64.fetchOne(db, sql: "SELECT revision FROM source_inventory_revision WHERE installation=?", arguments: [id])
+        let books = try Row.fetchAll(db, sql: "SELECT * FROM library_book WHERE installation=? ORDER BY id", arguments: [id]).map { row in
+            let book = try Self.decodeBook(row)
+            let references = try Row.fetchAll(db, sql: """
+                SELECT installation, reference_version, remote_key FROM book_reference
+                WHERE book_id=? ORDER BY reference_version, remote_key
+                """, arguments: [book.id.rawValue.uuidString]).map { item in
+                    let raw: String = item["installation"]
+                    guard let installation = UUID(uuidString: raw) else { throw Failure.inconsistentData }
+                    return try SourceBookReference(installationID: SourceInstallationID(installation),
+                                                   referenceVersion: item["reference_version"], key: item["remote_key"])
+                }
+            return try SourceUpdateBookSnapshot(book: book, references: references,
+                catalog: Self.savedCatalog(db, book.id), checkpoint: Self.savedCheckpoint(db, book.id))
+        }
+        guard books.isEmpty || revision != nil else { throw Failure.inconsistentData }
+        return try SourceUpdateSnapshot(installation: current, candidate: candidate, candidateMetadata: metadata,
+            inventoryRevision: revision ?? 0, books: books,
+            currentState: Self.publicState(db, installationID: current.id, version: current.metadata.stateVersion),
+            targetState: Self.publicState(db, installationID: current.id, version: metadata.stateVersion))
     }
 
     /// SQLite owns invalidation, including writes made by another connection.

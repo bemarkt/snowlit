@@ -23,7 +23,7 @@ public struct SourceUpdateBookSnapshot: Equatable, Sendable {
 }
 
 public enum SourceUpdateFailure: Error, Equatable, Sendable {
-    case invalidInventory, unsupportedProtocol, staleInventory
+    case invalidInventory, unsupportedProtocol, staleInventory, invalidMigration
 }
 
 /// An immutable SQL read snapshot for preparing a candidate. Adoption must
