@@ -108,7 +108,7 @@ if [ "$kind" = phone ]; then
 fi
 
 printf 'Package checks completed. Starting App startup and credential tests.\n'
-test_selection=(-only-testing:SnowlitAppTests/StartupModelTests -only-testing:SnowlitAppTests/CredentialStoreTests -only-testing:SnowlitAppTests/SourceLibraryModelTests -only-testing:SnowlitAppTests/SourceManagementModelTests -only-testing:SnowlitAppTests/SourceAuthenticationModelTests -only-testing:SnowlitAppTests/SourceFormModelTests -only-testing:SnowlitAppTests/SourceFileInspectorTests -only-testing:SnowlitAppTests/SourceBrowsingModelTests -only-testing:SnowlitAppTests/ChapterAccessServiceTests -only-testing:SnowlitUITests/StartupUITests)
+test_selection=(-only-testing:SnowlitAppTests/StartupModelTests -only-testing:SnowlitAppTests/CredentialStoreTests -only-testing:SnowlitAppTests/SourceLibraryModelTests -only-testing:SnowlitAppTests/SourceManagementModelTests -only-testing:SnowlitAppTests/SourceAuthenticationModelTests -only-testing:SnowlitAppTests/SourceFormModelTests -only-testing:SnowlitAppTests/SourceFileInspectorTests -only-testing:SnowlitAppTests/SourceBrowsingModelTests -only-testing:SnowlitAppTests/ChapterAccessServiceTests -only-testing:SnowlitAppTests/ReaderModelTests -only-testing:SnowlitUITests/StartupUITests)
 if [ "$kind" = tablet ]; then
   test_selection=(-only-testing:SnowlitUITests/StartupUITests)
 fi

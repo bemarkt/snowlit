@@ -51,12 +51,13 @@ public actor LibraryDatabase: LibraryStore {
                 try Self.migrateChapterReferences(db)
                 try Self.migrateSourceReferenceHistory(db)
                 try Self.migrateChapterCache(db)
+                try Self.migrateReadingActivity(db)
             }
         } else {
             let version = try queue.read { db in
                 let version = try Int.fetchOne(db, sql: "PRAGMA user_version")
                 guard try Int.fetchOne(db, sql: "PRAGMA application_id") == 0x534e4c54,
-                      let version, (1...9).contains(version) else {
+                      let version, (1...10).contains(version) else {
                     throw Failure.unsupportedSchema
                 }
                 guard try String.fetchOne(db, sql: "PRAGMA quick_check") == "ok",
@@ -87,12 +88,13 @@ public actor LibraryDatabase: LibraryStore {
                 if version >= 7 { try Self.validateChapterReferenceSchema(db) }
                 if version >= 8 { try Self.validateSourceReferenceHistorySchema(db) }
                 if version >= 9 { try Self.validateChapterCacheSchema(db) }
+                if version >= 10 { _ = try Row.fetchAll(db, sql: "SELECT book_id, ordinal FROM reading_activity LIMIT 0") }
                 return version
             }
-            if version != 9 {
+            if version != 10 {
                 guard !readOnly else { throw Failure.migrationRequired }
                 try queue.write { db in
-                    guard let current = try Int.fetchOne(db, sql: "PRAGMA user_version"), (1...9).contains(current) else {
+                    guard let current = try Int.fetchOne(db, sql: "PRAGMA user_version"), (1...10).contains(current) else {
                         throw Failure.unsupportedSchema
                     }
                     if current == 1 { try db.execute(sql: Self.publicStateSchema) }
@@ -103,6 +105,7 @@ public actor LibraryDatabase: LibraryStore {
                     if current < 7 { try Self.migrateChapterReferences(db) }
                     if current < 8 { try Self.migrateSourceReferenceHistory(db) }
                     if current < 9 { try Self.migrateChapterCache(db) }
+                    if current < 10 { try Self.migrateReadingActivity(db) }
                 }
             }
         }
@@ -140,7 +143,10 @@ public actor LibraryDatabase: LibraryStore {
     public func books() throws -> [LibraryBook] {
         try checkOpen()
         return try queue.read { db in
-            try Row.fetchAll(db, sql: "SELECT * FROM library_book ORDER BY rowid").map(Self.decodeBook)
+            try Row.fetchAll(db, sql: """
+                SELECT b.* FROM library_book b LEFT JOIN reading_activity a ON a.book_id=b.id
+                ORDER BY COALESCE(a.ordinal, 0) DESC, b.rowid
+                """).map(Self.decodeBook)
         }
     }
 
@@ -222,7 +228,10 @@ public actor LibraryDatabase: LibraryStore {
                 WHERE book_id=? AND session_id=? AND sequence < ?
                 """, arguments: [sequence, encoded, session.bookID.rawValue.uuidString, session.id.uuidString, sequence])
             let saved = db.changesCount == 1
-            if saved { try Self.recordChapterReference(db, bookID: session.bookID, reference: position.chapter) }
+            if saved {
+                try Self.recordChapterReference(db, bookID: session.bookID, reference: position.chapter)
+                try Self.markRecentlyRead(db, bookID: session.bookID.rawValue.uuidString)
+            }
             return saved
         }
     }

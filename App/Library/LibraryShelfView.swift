@@ -53,12 +53,15 @@ private struct LibraryCatalogView: View {
     @State private var problem: SourceBrowsingProblem?
     @State private var isLoading = true
     @State private var retry = 0
+    @State private var reader: ReaderModel?
 
     var body: some View {
         List {
             Section {
                 Text(book.title).font(.title2.bold()).accessibilityIdentifier("library.book.title")
                 if let author = book.author { Text(author).foregroundStyle(.secondary) }
+                Button("继续阅读") { reader = model.makeReader?(book, nil) }
+                    .frame(minHeight: 44).accessibilityIdentifier("library.resume")
             }
             if isLoading { ProgressView("正在读取目录…") }
             if let problem {
@@ -70,7 +73,8 @@ private struct LibraryCatalogView: View {
             } else if let catalog {
                 Section("目录 · \(catalog.entries.count) 章") {
                     ForEach(Array(catalog.entries.enumerated()), id: \.offset) { index, entry in
-                        Text(entry.title).frame(minHeight: 44).accessibilityIdentifier("library.chapter.\(index)")
+                        Button(entry.title) { reader = model.makeReader?(book, entry.reference) }
+                            .frame(minHeight: 44).accessibilityIdentifier("library.chapter.\(index)")
                     }
                 }
             } else if !isLoading {
@@ -79,6 +83,10 @@ private struct LibraryCatalogView: View {
         }
         .navigationTitle("本地目录")
         .navigationBarTitleDisplayMode(.inline)
+        .navigationDestination(isPresented: Binding(get: { reader != nil }, set: { if !$0 { reader = nil } })) {
+            if let reader { ReaderView(model: reader) }
+        }
+        .onChange(of: reader?.id) { _, value in if value == nil { Task { await model.refresh() } } }
         .task(id: retry) {
             isLoading = true; problem = nil
             defer { isLoading = false }

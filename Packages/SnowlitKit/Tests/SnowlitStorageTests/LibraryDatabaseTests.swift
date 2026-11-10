@@ -5,6 +5,61 @@ import Testing
 @testable import SnowlitStorage
 
 struct LibraryDatabaseTests {
+    @Test func recentReadingOrderCommitsWithProgressAndRejectsStaleOrFailedWrites() async throws {
+        try await withDirectory { root in
+            let path = root.appendingPathComponent("library.sqlite")
+            let database = try LibraryDatabase.create(at: path)
+            let first = try await database.addBook(reference: reference(), title: "First", author: nil)
+            let second = try await database.addBook(reference: reference(), title: "Second", author: nil)
+            let old = try await database.startReading(first.id)
+            let active = try await database.startReading(first.id)
+            let other = try await database.startReading(second.id)
+            #expect(try await database.books() == [first, second])
+            #expect(try await database.saveCheckpoint(position(second.reference, offset: 0), session: other, sequence: 1))
+            #expect(try await database.books() == [second, first])
+            #expect(try await !database.saveCheckpoint(position(first.reference, offset: 1), session: old, sequence: 2))
+            #expect(try await database.books() == [second, first])
+            try await database.queue.write { try $0.execute(sql: "CREATE TRIGGER reject_recent BEFORE INSERT ON reading_activity BEGIN SELECT RAISE(ABORT, 'fixture'); END;") }
+            await #expect(throws: DatabaseError.self) {
+                try await database.saveCheckpoint(position(first.reference, offset: 2), session: active, sequence: 1)
+            }
+            #expect(try await database.checkpoint(for: first.id)?.position == nil)
+            #expect(try await database.books() == [second, first])
+            try await database.queue.write { try $0.execute(sql: "DROP TRIGGER reject_recent") }
+            #expect(try await database.saveCheckpoint(position(first.reference, offset: 2), session: active, sequence: 1))
+            #expect(try await database.books() == [first, second])
+            try await database.close()
+            let reopened = try LibraryDatabase(existingAt: path)
+            #expect(try await reopened.books() == [first, second])
+            try await reopened.close()
+        }
+    }
+
+    @Test func schemaNineAddsRecentReadingWithoutInventingOldReadTimes() async throws {
+        try await withDirectory { root in
+            let path = root.appendingPathComponent("library.sqlite")
+            let database = try LibraryDatabase.create(at: path)
+            let book = try await database.addBook(reference: reference(), title: "Retained", author: nil)
+            let session = try await database.startReading(book.id)
+            let anchor = try position(book.reference, offset: 3)
+            #expect(try await database.saveCheckpoint(anchor, session: session, sequence: 1))
+            try await database.close()
+            let raw = try DatabaseQueue(path: path.path)
+            try await raw.write { try $0.execute(sql: "DROP TABLE reading_activity; PRAGMA user_version=9;") }
+            #expect(throws: LibraryDatabase.Failure.migrationRequired) { try LibraryDatabase(existingAt: path, readOnly: true) }
+            try await raw.write { try $0.execute(sql: "CREATE TABLE reading_activity(sentinel TEXT); INSERT INTO reading_activity VALUES ('keep');") }
+            #expect(throws: DatabaseError.self) { try LibraryDatabase(existingAt: path) }
+            #expect(try await raw.read { try Int.fetchOne($0, sql: "PRAGMA user_version") } == 9)
+            try await raw.write { try $0.execute(sql: "DROP TABLE reading_activity") }
+            try raw.close()
+            let upgraded = try LibraryDatabase(existingAt: path)
+            #expect(try await upgraded.checkpoint(for: book.id)?.position == anchor)
+            #expect(try await upgraded.books() == [book])
+            #expect(try await upgraded.queue.read { try Int.fetchOne($0, sql: "SELECT COUNT(*) FROM reading_activity") } == 0)
+            try await upgraded.close()
+        }
+    }
+
     @Test func sqliteCapacityFailureRollsBackProductionCatalogProgressAndBooks() async throws {
         try await withDirectory { root in
             let path = root.appendingPathComponent("library.sqlite")

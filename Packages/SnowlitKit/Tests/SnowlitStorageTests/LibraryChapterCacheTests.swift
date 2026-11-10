@@ -105,7 +105,7 @@ struct LibraryChapterCacheTests {
         try await withLibrary { path, db, _, book, _ in
             try await db.close()
             let sql = try DatabaseQueue(path: path.path)
-            try await sql.write { try $0.execute(sql: "DROP TABLE chapter_request; DROP TABLE chapter_cache; PRAGMA user_version=8;") }
+            try await sql.write { try $0.execute(sql: "DROP TABLE reading_activity; DROP TABLE chapter_request; DROP TABLE chapter_cache; PRAGMA user_version=8;") }
             #expect(throws: LibraryDatabase.Failure.migrationRequired) { try LibraryDatabase(existingAt: path, readOnly: true) }
             try await sql.write { try $0.execute(sql: "CREATE TABLE chapter_cache (sentinel TEXT); INSERT INTO chapter_cache VALUES ('retain');") }
             #expect(throws: DatabaseError.self) { try LibraryDatabase(existingAt: path) }

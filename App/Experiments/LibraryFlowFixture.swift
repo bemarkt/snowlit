@@ -9,7 +9,7 @@ import YingxueKit
 /// saved import is seeded; adoption, execution and book persistence use the UI.
 enum LibraryFlowFixture {
     static func directory(arguments: [String]) -> URL? {
-        guard let index = arguments.firstIndex(of: "-snowlit-test-library-flow"),
+        guard let index = arguments.firstIndex(where: { $0 == "-snowlit-test-library-flow" || $0 == "-snowlit-test-reader-flow" }),
               arguments.indices.contains(index + 1), let id = UUID(uuidString: arguments[index + 1]) else { return nil }
         return FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
             .appendingPathComponent("SnowlitUITests", isDirectory: true)
@@ -30,6 +30,20 @@ enum LibraryFlowFixture {
         try await library.stageSourceScript(script, receipt: receipt)
     }
 
+    /// Reading scenarios start at a known local catalog. The separate library
+    /// flow still adopts, searches and saves this source through the product UI.
+    @MainActor
+    static func prepareReading(_ library: LibraryDatabase) async throws {
+        try await prepare(library)
+        guard try await library.books().isEmpty, let receipt = try await library.sourceImports().first else { return }
+        let installed = try await library.installSource(importID: receipt.id, id: .init(), configuration: [], consent: .managedOnly)
+        let reference = try SourceBookReference(installationID: installed.id, referenceVersion: 1, key: "book")
+        let catalog = try CatalogSnapshot(book: reference, revision: "catalog-1", entries: [
+            .init(reference: .init(book: reference, key: "c1"), title: "Chapter One"),
+            .init(reference: .init(book: reference, key: "c2"), title: "Chapter Two")])
+        _ = try await library.addBook(reference: reference, title: "Fixture Novel", author: "Fixture Author", catalog: catalog, expectedInstallation: installed)
+    }
+
     private static let source = """
     /* @yingxue
     {"protocolVersion":1,"sourceID":"org.example.reading-fixture","name":"Reading fixture","scriptVersion":"1","referenceVersion":1,"stateVersion":1,"capabilities":[],"origins":[],"authentication":[],"publicConfiguration":[]}
@@ -47,7 +61,12 @@ enum LibraryFlowFixture {
         items: input.cursor === null ? [{key: 'c1', title: 'Chapter One'}] : [{key: 'c2', title: 'Chapter Two'}],
         nextCursor: input.cursor === null ? 'page-2' : null};
     }
-    export async function chapter(ctx, input) { throw new Error('No reading content in this fixture'); }
+    export async function chapter(ctx, input) {
+      const label = input.reference.key === 'c1' ? 'Chapter One' : 'Chapter Two';
+      return {reference: input.reference, revision: 'text-1', body: {kind: 'structured', blocks:
+        Array.from({length: 36}, (_, i) => ({kind: 'paragraph', id: 'p' + i, runs:
+          [{kind: 'text', text: label + ' paragraph ' + i + ': ' + '中文 👩🏽‍💻 reading text. '.repeat(8), strong: i === 0, emphasis: false}]}))}};
+    }
     """
 }
 #endif

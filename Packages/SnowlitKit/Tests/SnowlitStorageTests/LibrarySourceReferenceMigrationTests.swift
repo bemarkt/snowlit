@@ -6,7 +6,7 @@ import Testing
 
 /// Rebuild schema 7, including its absence of migration history and reasons.
 func removeSourceReferenceHistorySchema(_ db: Database) throws {
-    try db.execute(sql: "DROP TABLE chapter_request; DROP TABLE chapter_cache;")
+    try db.execute(sql: "DROP TABLE reading_activity; DROP TABLE chapter_request; DROP TABLE chapter_cache;")
     for action in ["insert", "update", "delete"] {
         try db.execute(sql: "DROP TRIGGER inventory_source_reference_transition_\(action)")
     }
@@ -210,7 +210,7 @@ struct LibrarySourceReferenceMigrationTests {
             let upgraded = try LibraryDatabase(existingAt: path)
             #expect(try await upgraded.books() == [book])
             #expect(try await upgraded.sourceInstallations() == [initial])
-            #expect(try await upgraded.queue.read { try Int.fetchOne($0, sql: "PRAGMA user_version") } == 9)
+            #expect(try await upgraded.queue.read { try Int.fetchOne($0, sql: "PRAGMA user_version") } == 10)
             try await upgraded.close()
         }
     }

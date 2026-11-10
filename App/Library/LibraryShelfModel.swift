@@ -10,11 +10,13 @@ final class LibraryShelfModel {
     private(set) var problem: SourceBrowsingProblem?
     @ObservationIgnored private let load: @Sendable () async throws -> [LibraryBook]
     @ObservationIgnored private let loadCatalog: @Sendable (LocalBookID) async throws -> CatalogSnapshot?
+    @ObservationIgnored let makeReader: (@MainActor (LibraryBook, ChapterReference?) -> ReaderModel)?
     @ObservationIgnored private var generation: UUID?
 
     init(load: @escaping @Sendable () async throws -> [LibraryBook],
-         loadCatalog: @escaping @Sendable (LocalBookID) async throws -> CatalogSnapshot?) {
-        self.load = load; self.loadCatalog = loadCatalog
+         loadCatalog: @escaping @Sendable (LocalBookID) async throws -> CatalogSnapshot?,
+         makeReader: (@MainActor (LibraryBook, ChapterReference?) -> ReaderModel)? = nil) {
+        self.load = load; self.loadCatalog = loadCatalog; self.makeReader = makeReader
     }
 
     func refresh() async {

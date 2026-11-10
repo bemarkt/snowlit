@@ -56,9 +56,9 @@ final class LibraryFlowUITests: XCTestCase {
         XCTAssertTrue(retained.waitForExistence(timeout: 5))
         XCTAssertEqual(app.buttons.matching(identifier: "library.book").count, 1)
         retained.tap()
-        XCTAssertTrue(app.staticTexts["library.chapter.1"].waitForExistence(timeout: 5))
-        XCTAssertEqual(app.staticTexts["library.chapter.0"].label, "Chapter One")
-        XCTAssertEqual(app.staticTexts["library.chapter.1"].label, "Chapter Two")
+        XCTAssertTrue(app.buttons["library.chapter.1"].waitForExistence(timeout: 5))
+        XCTAssertEqual(app.buttons["library.chapter.0"].label, "Chapter One")
+        XCTAssertEqual(app.buttons["library.chapter.1"].label, "Chapter Two")
         XCTAssertEqual(app.staticTexts["library.book.title"].label, "Fixture Novel")
         attachScreenshot("Reopened local catalog")
     }

@@ -51,7 +51,13 @@ struct AppComposition {
         let invoke: SourceInvocation = { input, expected in try await runtime.invoke(input, expected: expected) }
         search = SourceSearchModel(invoke: invoke)
         let shelf = LibraryShelfModel(load: { try await storage.open().books() },
-            loadCatalog: { try await storage.open().catalog(for: $0) })
+            loadCatalog: { try await storage.open().catalog(for: $0) },
+            makeReader: { book, chapter in
+                ReaderModel(book: book, chapter: chapter, openLibrary: { try await storage.open() }, makeService: { library in
+                    ChapterAccessService(library: library, invoke: invoke,
+                        digest: { SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined() })
+                })
+            })
         self.shelf = shelf
         makeBook = { item in
             SourceBookModel(item: item, invoke: invoke) { installed, details, catalog in
@@ -77,7 +83,8 @@ struct AppComposition {
         startup = StartupModel {
             #if DEBUG
             let library = try await storage.open()
-            if fixtureDirectory != nil { try await LibraryFlowFixture.prepare(library) }
+            if ProcessInfo.processInfo.arguments.contains("-snowlit-test-reader-flow") { try await LibraryFlowFixture.prepareReading(library) }
+            else if fixtureDirectory != nil { try await LibraryFlowFixture.prepare(library) }
             #else
             _ = try await storage.open()
             #endif
