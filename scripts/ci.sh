@@ -26,6 +26,9 @@ mkdir -p "$evidence"
   printf 'Run attempt: %s\n' "${GITHUB_RUN_ATTEMPT:-local}"
 } > "$evidence/environment.txt"
 cat "$evidence/environment.txt"
+runtime_version="${SNOWLIT_IOS_RUNTIME:-26.5}"
+bash scripts/prepare_runtime.sh "$runtime_version" "$evidence"
+runtime_id="com.apple.CoreSimulator.SimRuntime.iOS-${runtime_version//./-}"
 
 python3 scripts/check_structure.py | tee "$evidence/structure.log"
 core_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
@@ -44,7 +47,7 @@ cleanup() {
 }
 trap cleanup EXIT
 simulator="$(python3 scripts/create_simulator.py "$device" \
-  "com.apple.CoreSimulator.SimRuntime.iOS-26-5" "$evidence/simulator.json")"
+  "$runtime_id" "$evidence/simulator.json")"
 xcrun simctl boot "$simulator"
 xcrun simctl bootstatus "$simulator" -b
 destination="platform=iOS Simulator,id=$simulator"

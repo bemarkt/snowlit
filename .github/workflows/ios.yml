@@ -5,6 +5,12 @@ on:
     branches: [main]
   pull_request:
   workflow_dispatch:
+    inputs:
+      ios_runtime:
+        description: iPhone simulator runtime to verify
+        type: choice
+        options: ['26.5', '26.0']
+        default: '26.5'
 
 permissions:
   contents: read
@@ -24,6 +30,7 @@ jobs:
         device: [phone]
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+      SNOWLIT_IOS_RUNTIME: ${{ inputs.ios_runtime || '26.5' }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

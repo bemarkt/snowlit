@@ -5,6 +5,11 @@ cd "$(dirname "$0")/.."
 root="$PWD"
 kind="${1:-}"
 mode="${2:-integration}"
+runtime_version="${SNOWLIT_IOS_RUNTIME:-26.5}"
+case "$runtime_version" in
+  26.0|26.5) runtime_id="com.apple.CoreSimulator.SimRuntime.iOS-${runtime_version//./-}" ;;
+  *) printf 'Unsupported simulator runtime: %s\n' "$runtime_version" >&2; exit 2 ;;
+esac
 case "$kind" in
   phone) device="iPhone 17" ;;
   tablet) device="iPad (A16)" ;;
@@ -86,7 +91,7 @@ while True:
         time.sleep(0.05)
 PY
 simulator="$(python3 scripts/create_simulator.py "$device" \
-  "com.apple.CoreSimulator.SimRuntime.iOS-26-5" "$evidence/simulator.json")"
+  "$runtime_id" "$evidence/simulator.json")"
 xcrun simctl boot "$simulator"
 xcrun simctl bootstatus "$simulator" -b
 
