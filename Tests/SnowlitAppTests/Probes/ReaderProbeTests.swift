@@ -29,7 +29,7 @@ struct ReaderProbeTests {
             let measured = try viewport.visibleOffset(of: visible.anchor)
             #expect(abs(measured - visible.verticalOffset) <= 1)
             #expect(viewport.textView.selectedRange.location == 0)
-            let rectangle = viewport.view.convert(try viewport.caret(at: visible.anchor), from: viewport.textView.textInputView)
+            let rectangle = try viewport.caretInViewport(at: visible.anchor)
             #expect(rectangle.intersects(viewport.view.bounds))
             print("VisibleAnchorObservation width=\(width) font=\(size) expectedY=\(visible.verticalOffset) observedY=\(measured)")
         }
@@ -40,7 +40,7 @@ struct ReaderProbeTests {
         let end = ProbeTextAnchor(documentID: document.id, revision: document.revision,
                                   paragraphID: "long", utf16Offset: document.paragraphs[2].text.utf16.count)
         try viewport.restoreVisible(.init(anchor: end, verticalOffset: -400))
-        let lastRectangle = viewport.view.convert(try viewport.caret(at: end), from: viewport.textView.textInputView)
+        let lastRectangle = try viewport.caretInViewport(at: end)
         #expect(lastRectangle.intersects(viewport.view.bounds))
         #expect(lastRectangle.maxY <= viewport.textView.frame.maxY + 1)
         // Real drag gestures, cross-chapter windows and device frame timing remain separate probes.

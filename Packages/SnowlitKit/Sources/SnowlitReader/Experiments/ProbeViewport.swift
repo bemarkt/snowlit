@@ -18,6 +18,10 @@ final class ProbeViewport: UIViewController {
     private(set) var commentButtons: [String: UIButton] = [:]
     private(set) var lastCommentTarget: String?
     private var renderOffsets: [String: [Int: Int]] = [:]
+    private var textCoordinateView: UIView {
+        let input: any UITextInput = textView
+        return input.textInputView ?? textView
+    }
 
     init(document: ProbeDocument) {
         projection = ProbeTextProjection(document: document)
@@ -132,7 +136,7 @@ final class ProbeViewport: UIViewController {
         let point = CGPoint(x: textView.bounds.minX + textView.textContainerInset.left
                                 + textView.textContainer.lineFragmentPadding + 1,
                             y: textView.bounds.minY + textView.adjustedContentInset.top + 1)
-        let inputPoint = textView.textInputView.convert(point, from: textView)
+        let inputPoint = textCoordinateView.convert(point, from: textView)
         guard let position = textView.closestPosition(to: inputPoint) else { throw Failure.positionUnavailable }
         let offset = textView.offset(from: textView.beginningOfDocument, to: position)
         let anchor = try anchor(atLayoutOffset: offset)
@@ -140,8 +144,12 @@ final class ProbeViewport: UIViewController {
     }
 
     func visibleOffset(of anchor: ProbeTextAnchor) throws -> CGFloat {
-        let rectangle = view.convert(try caret(at: anchor), from: textView.textInputView)
+        let rectangle = try caretInViewport(at: anchor)
         return rectangle.minY - textView.frame.minY
+    }
+
+    func caretInViewport(at anchor: ProbeTextAnchor) throws -> CGRect {
+        view.convert(try caret(at: anchor), from: textCoordinateView)
     }
 
     func restoreVisible(_ position: VisiblePosition) throws {
