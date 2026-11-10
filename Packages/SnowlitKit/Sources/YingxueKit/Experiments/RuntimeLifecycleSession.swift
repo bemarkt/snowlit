@@ -11,7 +11,7 @@ public final class RuntimeLifecycleSession: NSObject, WKScriptMessageHandler {
     public override init() { super.init() }
 
     public func prepare() async throws {
-        try await probe.load(URL(string: "http://127.0.0.1:18731/health")!)
+        try await probe.loadHTML("<!doctype html><html><head><title>Lifecycle probe</title></head><body></body></html>")
         guard try await probe.evaluate("return 'ready';") == "ready" else { throw Failure.invalidResult }
     }
 

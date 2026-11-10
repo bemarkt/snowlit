@@ -33,6 +33,16 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
     }
 
     func load(_ url: URL, timeout: Duration = .seconds(10)) async throws {
+        try await navigate(timeout: timeout) { webView.load(URLRequest(url: url)) }
+    }
+
+    /// Lifecycle-only fixtures need an actual document/JS context, not a network
+    /// readiness dependency. HTTP and website loading have separate probes.
+    func loadHTML(_ html: String, timeout: Duration = .seconds(10)) async throws {
+        try await navigate(timeout: timeout) { webView.loadHTMLString(html, baseURL: nil) }
+    }
+
+    private func navigate(timeout: Duration, start: () -> WKNavigation?) async throws {
         guard !isClosed else { throw Failure.closed }
         navigations.invalidate(because: .contextRebuilt)
         results.invalidate(because: .contextRebuilt)
@@ -40,14 +50,14 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
         webView.stopLoading()
         do {
             _ = try await navigations.perform(timeout: timeout) { ticket in
-                if let started = webView.load(URLRequest(url: url)) {
+                if let started = start() {
                     navigation = (started, ticket)
                 } else {
                     navigations.resolve(ticket, with: .failure(Failure.navigationNotStarted))
                 }
             }
         } catch {
-            observeFailure(operation: "load", sequence: 0)
+            observeFailure(operation: "load", sequence: 0, error: error)
             throw error
         }
     }
@@ -81,7 +91,7 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
                 }
             }
         } catch {
-            observeFailure(operation: "evaluate", sequence: sequence)
+            observeFailure(operation: "evaluate", sequence: sequence, error: error)
             throw error
         }
     }
@@ -120,9 +130,10 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
         results.invalidate(because: .webContentTerminated)
     }
 
-    private func observeFailure(operation: String, sequence: Int) {
+    private func observeFailure(operation: String, sequence: Int, error: any Error) {
         // Probe metadata only: no scripts, arguments, URLs, cookies or website content.
-        print("WebKitProbeObservation id=\(observationID) operation=\(operation) sequence=\(sequence) loading=\(webView.isLoading) inWindow=\(webView.window != nil) inactiveScheduling=\(webView.configuration.preferences.inactiveSchedulingPolicy.rawValue) terminations=\(terminationCount) pending=\(results.pendingCount) epochSeconds=\(Date().timeIntervalSince1970)")
+        let failure = error as NSError
+        print("WebKitProbeObservation id=\(observationID) operation=\(operation) sequence=\(sequence) errorType=\(String(reflecting: type(of: error))) errorDomain=\(failure.domain) errorCode=\(failure.code) loading=\(webView.isLoading) inWindow=\(webView.window != nil) inactiveScheduling=\(webView.configuration.preferences.inactiveSchedulingPolicy.rawValue) terminations=\(terminationCount) pending=\(results.pendingCount) epochSeconds=\(Date().timeIntervalSince1970)")
     }
 
     private func settleNavigation(_ completed: WKNavigation?, with result: Result<String, any Error>) {

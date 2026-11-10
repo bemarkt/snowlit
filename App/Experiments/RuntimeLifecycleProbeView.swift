@@ -13,6 +13,7 @@ struct RuntimeLifecycleProbeView: UIViewControllerRepresentable {
 /// its finite tasks and WebViews; no library or website credentials are involved.
 @MainActor
 private final class RuntimeLifecycleProbe: UIViewController {
+    private enum Phase: String { case inactive, preparing, ready, pending, failed }
     private let status = UILabel()
     private let start = UIButton(type: .system)
     private var runtime: RuntimeLifecycleSession?
@@ -24,6 +25,8 @@ private final class RuntimeLifecycleProbe: UIViewController {
     private var discarded = 0
     private var writes = 0
     private var failures = 0
+    private var phase = Phase.inactive
+    private var lastFailure = "none"
 
     override func viewDidLoad() {
         super.viewDidLoad()
@@ -54,25 +57,29 @@ private final class RuntimeLifecycleProbe: UIViewController {
     }
 
     @objc private func didActivate() {
-        guard runtime == nil, isViewLoaded, view.window != nil else { return }
+        guard UIApplication.shared.applicationState == .active,
+              runtime == nil, isViewLoaded, view.window != nil else { return }
         let current = generation
         let probe = RuntimeLifecycleSession()
         runtime = probe
+        phase = .preparing
+        render()
         work = Task { [weak self] in
             do {
                 try await probe.prepare()
                 guard let self, generation == current else { return }
-                ready += 1; render()
+                ready += 1; phase = .ready; render()
             } catch {
                 guard let self, generation == current else { return }
-                failures += 1; render()
+                recordFailure(error, operation: "prepare")
             }
         }
     }
 
     @objc private func beginPending() {
-        guard let runtime, start.isEnabled else { return }
-        start.isEnabled = false
+        guard let runtime, phase == .ready else { return }
+        phase = .pending
+        render()
         let current = generation
         work = Task { [weak self] in
             do {
@@ -85,7 +92,7 @@ private final class RuntimeLifecycleProbe: UIViewController {
                 render()
             } catch {
                 guard let self else { return }
-                if generation == current { failures += 1 } else { discarded += 1 }
+                if generation == current { recordFailure(error, operation: "pending") } else { discarded += 1 }
                 render()
             }
         }
@@ -98,11 +105,21 @@ private final class RuntimeLifecycleProbe: UIViewController {
         runtime?.close()
         runtime = nil
         work?.cancel(); work = nil
+        phase = .inactive
+    }
+
+    private func recordFailure(_ error: any Error, operation: String) {
+        failures += 1
+        phase = .failed
+        let native = error as NSError
+        // Keep failure category available to UI assertions without website data.
+        lastFailure = "\(operation):\(native.domain):\(native.code)"
+        render()
     }
 
     private func render() {
-        status.text = "ready=\(ready);entered=\(entered);background=\(background);discarded=\(discarded);writes=\(writes);failures=\(failures);"
-        start.isEnabled = runtime != nil && ready > entered
+        status.text = "ready=\(ready);entered=\(entered);background=\(background);discarded=\(discarded);writes=\(writes);failures=\(failures);phase=\(phase.rawValue);lastFailure=\(lastFailure);"
+        start.isEnabled = phase == .ready
     }
 }
 #endif

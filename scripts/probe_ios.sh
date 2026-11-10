@@ -109,6 +109,7 @@ simulator="$(python3 scripts/create_simulator.py "$device" \
   "$runtime_id" "$evidence/simulator.json")"
 xcrun simctl boot "$simulator"
 xcrun simctl bootstatus "$simulator" -b
+printf 'Simulator boot completed. Starting %s tests; test output follows.\n' "$mode"
 
 supervision=(python3 "$root/scripts/probes/supervise.py" --timeout 900 --log "$evidence/webkit-tests.log")
 if [ "$mode" = recovery ]; then

@@ -1,6 +1,13 @@
 import XCTest
 
 final class ReaderInteractionUITests: XCTestCase {
+    override func setUpWithError() throws {
+        try super.setUpWithError()
+        // Later gestures depend on the previous checkpoint. Stop this scenario
+        // immediately on failure; XCTest still runs the other independent test.
+        continueAfterFailure = false
+    }
+
     @MainActor
     func testBackgroundClosesPendingRuntimeAndForegroundStartsFreshWork() {
         let app = XCUIApplication()
