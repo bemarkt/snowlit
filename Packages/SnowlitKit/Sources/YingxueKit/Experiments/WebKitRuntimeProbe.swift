@@ -27,7 +27,10 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
         // suspends tasks; active source work requires normal scheduling. This
         // does not bypass operation deadlines or establish process termination.
         configuration.preferences.inactiveSchedulingPolicy = .none
-        webView = WKWebView(frame: .zero, configuration: configuration)
+        // Use explicit phone geometry to test whether the previous zero-size
+        // viewport affected navigation. Window attachment remains under each
+        // test's control; operation deadlines and cleanup are unchanged.
+        webView = WKWebView(frame: CGRect(x: 0, y: 0, width: 390, height: 844), configuration: configuration)
         super.init()
         webView.navigationDelegate = self
     }
