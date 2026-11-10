@@ -264,6 +264,14 @@ struct ProbeFileStoreTests {
             try await writer.save(key: "chapter", data: Data("committed content".utf8))
             try await writer.close()
             let sidecar = root.appendingPathComponent(name)
+            let retained = directory.appendingPathComponent("retained-\(name)")
+            let hadSidecar = FileManager.default.fileExists(atPath: sidecar.path)
+            // Closing SQLite need not remove WAL/SHM. Preserve the closed fixture's
+            // files while substituting a directory to exercise pre-open validation.
+            if hadSidecar {
+                try #require(sidecar.resourceValues(forKeys: [.isRegularFileKey]).isRegularFile == true)
+                try FileManager.default.moveItem(at: sidecar, to: retained)
+            }
             try FileManager.default.createDirectory(at: sidecar, withIntermediateDirectories: false)
             try Data("must remain unchanged".utf8).write(to: sidecar.appendingPathComponent("sentinel.txt"))
             let before = try fileSnapshot(root)
@@ -272,6 +280,11 @@ struct ProbeFileStoreTests {
                 try await candidate.close()
             }
             #expect(try fileSnapshot(root) == before)
+            try FileManager.default.moveItem(at: sidecar, to: directory.appendingPathComponent("rejected-\(name)"))
+            if hadSidecar { try FileManager.default.moveItem(at: retained, to: sidecar) }
+            let reopened = try ProbeFileStore(root: root, create: false, readOnly: true, digest: Self.sha256)
+            #expect(try await reopened.load(key: "chapter") == Data("committed content".utf8))
+            try await reopened.close()
         }
     }
 
