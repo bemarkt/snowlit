@@ -2,6 +2,7 @@ import SwiftUI
 
 struct StartupView: View {
     let model: StartupModel
+    let sources: SourceLibraryModel
     @State private var retry = 0
 
     var body: some View {
@@ -10,17 +11,7 @@ struct StartupView: View {
             case .idle, .preparing:
                 ProgressView("正在打开…")
             case .ready:
-                VStack(spacing: 16) {
-                    Image(systemName: "book.closed")
-                        .font(.system(size: 48))
-                        .foregroundStyle(.tint)
-                        .accessibilityHidden(true)
-                    Text("Snowlit")
-                        .font(.largeTitle.bold())
-                        .accessibilityIdentifier("startup.ready")
-                    Text("从一本好书开始")
-                        .foregroundStyle(.secondary)
-                }
+                SourceLibraryView(model: sources)
             case .failed(let operationID):
                 VStack(spacing: 16) {
                     Text("暂时无法打开")
@@ -39,9 +30,9 @@ struct StartupView: View {
                     .frame(minHeight: 44)
                     .accessibilityIdentifier("startup.retry")
                 }
+                .padding()
             }
         }
-        .padding()
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .task(id: retry) {
             await model.start()

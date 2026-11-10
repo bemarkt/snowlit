@@ -6,7 +6,7 @@ import UIKit
 
 @main
 struct SnowlitApp: App {
-    @State private var startup = AppComposition.makeStartup()
+    @State private var composition = AppComposition()
     #if DEBUG
     @UIApplicationDelegateAdaptor(StorageProcessProbeDelegate.self) private var storageProbe
     #endif
@@ -21,10 +21,10 @@ struct SnowlitApp: App {
             } else if ProcessInfo.processInfo.arguments.contains("-snowlit-probe-runtime-lifecycle") {
                 RuntimeLifecycleProbeView()
             } else {
-                StartupView(model: startup)
+                StartupView(model: composition.startup, sources: composition.sources)
             }
             #else
-            StartupView(model: startup)
+            StartupView(model: composition.startup, sources: composition.sources)
             #endif
         }
     }

@@ -33,6 +33,24 @@ final class StartupUITests: XCTestCase {
     }
 
     @MainActor
+    func testSourceFilePickerCanBeCancelledWithoutSavingAnImport() {
+        let app = XCUIApplication()
+        app.launch()
+        let importFile = app.buttons["sources.import"]
+        XCTAssertTrue(importFile.waitForExistence(timeout: 10))
+        XCTAssertTrue(importFile.isHittable)
+        importFile.tap()
+        let cancel = app.buttons.matching(NSPredicate(format: "label IN %@", ["Cancel", "取消"])).firstMatch
+        XCTAssertTrue(cancel.waitForExistence(timeout: 10))
+        attachScreenshot(name: "Source file picker")
+        cancel.tap()
+        XCTAssertTrue(importFile.waitForExistence(timeout: 10))
+        XCTAssertTrue(importFile.isHittable)
+        XCTAssertFalse(app.buttons["sources.save"].exists)
+        attachScreenshot(name: "Source library after cancelling import")
+    }
+
+    @MainActor
     private func attachScreenshot(name: String) {
         let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
         attachment.name = name
