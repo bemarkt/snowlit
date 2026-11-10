@@ -1,4 +1,5 @@
 #if os(iOS)
+import CoreText
 import SnowlitCore
 import Testing
 import UIKit
@@ -7,6 +8,61 @@ import UIKit
 @Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct ReaderProbeTests {
+    @Test func textKit2AndCoreTextLocateTheSameTextAtMultipleWidths() throws {
+        let document = try fixture()
+        let viewport = ProbeViewport(document: document)
+        viewport.loadViewIfNeeded()
+        for width in [CGFloat(390), 600, 820] {
+            for size in [CGFloat(18), 32] {
+                viewport.view.frame = CGRect(x: 0, y: 0, width: width, height: 700)
+                try viewport.render(fontSize: size)
+                let text = try #require(viewport.textView.attributedText)
+                let lineWidth = viewport.textView.bounds.width
+                    - viewport.textView.textContainerInset.left - viewport.textView.textContainerInset.right
+                    - 2 * viewport.textView.textContainer.lineFragmentPadding
+                try #require(lineWidth > 0)
+                let framesetter = CTFramesetterCreateWithAttributedString(text as CFAttributedString)
+                var fitted = CFRange()
+                let extent = CTFramesetterSuggestFrameSizeWithConstraints(
+                    framesetter, CFRange(location: 0, length: 0), nil,
+                    CGSize(width: lineWidth, height: .greatestFiniteMagnitude), &fitted)
+                try #require(extent.height.isFinite && extent.height > 0)
+                let path = CGPath(rect: CGRect(x: 0, y: 0, width: lineWidth, height: ceil(extent.height) + 1), transform: nil)
+                let frame = CTFramesetterCreateFrame(framesetter, CFRange(location: 0, length: 0), path, nil)
+                let visible = CTFrameGetVisibleStringRange(frame)
+                #expect(fitted.location == 0 && fitted.length == text.length)
+                #expect(visible.location == 0 && visible.length == text.length)
+                let lines = try #require(CTFrameGetLines(frame) as? [CTLine])
+                try #require(!lines.isEmpty)
+                for paragraph in document.paragraphs {
+                    for logical in [0, paragraph.text.utf16.count] {
+                        let anchor = ProbeTextAnchor(documentID: document.id, revision: document.revision,
+                                                     paragraphID: paragraph.id, utf16Offset: logical)
+                        let offset = try viewport.layoutOffset(of: anchor)
+                        try viewport.restore(anchor)
+                        #expect(try viewport.selectedAnchor() == anchor)
+                        #expect(try viewport.caret(at: anchor).height > 0)
+                        let line = try #require(lines.first { candidate in
+                            let range = CTLineGetStringRange(candidate)
+                            return offset >= range.location && offset <= range.location + range.length
+                        })
+                        #expect(CTLineGetOffsetForStringIndex(line, offset, nil).isFinite)
+                    }
+                }
+                let layout = try #require(viewport.textView.textLayoutManager)
+                let content = try #require(layout.textContentManager)
+                var textKitLines = 0
+                _ = layout.enumerateTextLayoutFragments(from: content.documentRange.location, options: [.ensuresLayout]) { fragment in
+                    textKitLines += fragment.textLineFragments.filter { $0.characterRange.length > 0 }.count
+                    return true
+                }
+                #expect(textKitLines > 0)
+                print("LayoutComparison width=\(lineWidth) font=\(size) utf16=\(text.length) textKitLines=\(textKitLines) coreTextLines=\(lines.count) textKitHeight=\(viewport.textView.contentSize.height) coreTextHeight=\(extent.height)")
+                // These are coverage/geometry observations, not a rendering-quality or speed verdict.
+            }
+        }
+    }
+
     @Test func textKit2KeepsTheSameAnchorAcrossPhoneTabletAndFontChanges() throws {
         let document = try fixture()
         let viewport = ProbeViewport(document: document)
