@@ -91,6 +91,9 @@ final class SourceFormModel: Identifiable {
             work = nil; attempt = nil
             if Task.isCancelled || error is CancellationError || error is SourceOperationGate.Failure {
                 finish(.failure(error))
+            } else if error as? SourceFormCapture.Failure == .cleanupPending {
+                values.removeAll(); phase = .cancelling
+                message = "临时凭据清理未完成，请重试清理。"
             } else {
                 phase = .editing
                 message = "未能提交，请重试。登录状态尚未确认。"

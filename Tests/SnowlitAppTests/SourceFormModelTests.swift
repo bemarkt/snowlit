@@ -1,6 +1,7 @@
 import Foundation
 import Testing
 import SnowlitCore
+import SnowlitStorage
 import YingxueKit
 @testable import Snowlit
 
@@ -144,6 +145,108 @@ struct SourceFormModelTests {
         await #expect(throws: SourceOperationGate.Failure.closed) { try await model.response() }
     }
 
+    @Test func uncertainWriteRollsBackOnlyThisFormsRecordsAndCanRetry() async throws {
+        let host = try await FormHost()
+        let unrelated = StoredCredentialID(installationID: .init())
+        try await host.store.write(.init(utf8: "unrelated"), for: unrelated)
+        await host.store.failNextWriteAfterPersistence()
+        let model = try host.model()
+        fill(model)
+        await model.submit()
+        #expect(model.phase == .editing && model.message != nil && host.submissions == 1)
+        #expect(await host.store.count == 1)
+        await model.submit()
+        #expect(model.isFinished && host.submissions == 2)
+        #expect(await host.store.count == 2)
+        try await host.capture.finish()
+        #expect(await host.store.count == 1)
+        #expect(await host.store.read(unrelated)?.bytes == Data("unrelated".utf8))
+    }
+
+    @Test func cancelWaitsForALateCredentialWriteBeforeRemovingIt() async throws {
+        let host = try await FormHost()
+        let pending = FormPendingWork()
+        await host.store.holdNextWrite(pending)
+        let model = try host.model()
+        fill(model)
+        let submitting = Task { await model.submit() }
+        await pending.waitUntilStarted()
+        await model.cancel()
+        await submitting.value
+        #expect(await host.store.observedWriteCancellation)
+        #expect(await host.store.count == 0)
+        #expect(try await model.response() == .cancelled(.init(kind: .cancelled)))
+    }
+
+    @Test func failedCaptureCleanupLocksTheFormAndRetriesExactPendingRecords() async throws {
+        let host = try await FormHost()
+        await host.store.failNextWriteAfterPersistence()
+        await host.store.failRemovals(1)
+        let model = try host.model()
+        fill(model)
+        await model.submit()
+        #expect(model.phase == .cancelling && model.value(for: "password").isEmpty)
+        #expect(await host.store.count == 1)
+        await model.submit()
+        #expect(host.submissions == 1)
+        await model.retryCancellation()
+        #expect(await host.store.count == 0)
+        #expect(try await model.response() == .cancelled(.init(kind: .cancelled)))
+        #expect(await host.store.removedIDs.count == 2)
+        #expect(await Set(host.store.removedIDs).count == 1)
+    }
+
+    @Test func invalidationDuringCredentialWriteRollsBackBeforeReturning() async throws {
+        let host = try await FormHost()
+        let pending = FormPendingWork()
+        await host.store.holdNextWrite(pending)
+        let model = try host.model()
+        fill(model)
+        let submitting = Task { await model.submit() }
+        await pending.waitUntilStarted()
+        _ = await host.gate.close()
+        pending.finish(); await submitting.value
+        #expect(model.isFinished)
+        #expect(await host.store.count == 0)
+        await #expect(throws: SourceOperationGate.Failure.closed) { try await model.response() }
+    }
+
+    @Test func captureRejectsInvalidNativeFieldsBeforeAnyStorageWrite() async throws {
+        let host = try await FormHost()
+        let publicUser: SourceFormModel.Submission.Field = .publicText(key: "user", value: "reader")
+        let secret: SourceFormModel.Submission.Field = .secret(key: "password", value: .init(utf8: "secret"))
+        for fields: [SourceFormModel.Submission.Field] in [[], [publicUser], [publicUser, publicUser, secret],
+            [publicUser, .publicText(key: "password", value: "plain")], [publicUser, secret, .publicText(key: "unknown", value: "extra")]] {
+            await #expect(throws: SourceFormCapture.Failure.invalidSubmission) {
+                try await host.capture.submit(.init(presentationID: host.presentation.id, fields: fields))
+            }
+            #expect(await host.store.count == 0)
+        }
+    }
+
+    #if canImport(Security)
+    @Test func capturedNativeFormUsesKeychainAndRemovesItsSecretWhenTheOperationEnds() async throws {
+        let host = try await FormHost()
+        let keychain = try KeychainCredentialStore(servicePrefix: "io.github.bemarkt.snowlit.tests.form.\(UUID().uuidString)")
+        let capture = try SourceFormCapture(presentation: host.presentation, gate: host.gate, ticket: host.ticket, store: keychain)
+        do {
+            let model = try host.model(submit: { try await capture.submit($0) }, cancel: { try await capture.cancel() })
+            fill(model); await model.submit()
+            guard case .submitted(let submitted) = try await model.response(),
+                  case .credential(let credential) = submitted.fields[1] else { throw FixtureFailure.requested }
+            let value = try await host.gate.credentialForHost(credential.handle, destination: URL(string: "https://forms.invalid/login")!, for: host.ticket, store: keychain)
+            #expect(value.bytes == Data("fixture-private-password".utf8))
+            try await capture.finish()
+            await #expect(throws: SourceCredentialFailure.missingCredential) {
+                try await host.gate.credentialForHost(credential.handle, destination: URL(string: "https://forms.invalid/login")!, for: host.ticket, store: keychain)
+            }
+        } catch {
+            try await capture.finish()
+            throw error
+        }
+    }
+    #endif
+
     private func fill(_ model: SourceFormModel) {
         model.setValue("reader", for: "user"); model.setValue("fixture-private-password", for: "password")
     }
@@ -158,6 +261,7 @@ private final class FormHost {
     let installation: SourceInstallationID
     let origins: [YingxueWire.Origin]
     let store = FormCredentialStore()
+    let capture: SourceFormCapture
     private(set) var submissions = 0
 
     init(fields: [YingxueWire.InteractionField]? = nil) async throws {
@@ -174,43 +278,54 @@ private final class FormHost {
         presentation = try await gate.beginInteraction(.form(.init(kind: .form, title: "Sign in", fields: fields ?? [
             .publicText(.init(kind: .publicText, key: "user", label: "User", required: true)),
             .secret(.init(kind: .secret, key: "password", label: "Password", required: true))], credentialOrigins: origins)), for: ticket, policy: policy)
+        capture = try .init(presentation: presentation, gate: gate, ticket: ticket, store: store)
     }
 
     func model(submit: (@MainActor (SourceFormModel.Submission) async throws -> YingxueWire.InteractionResult)? = nil,
                cancel: (@MainActor () async throws -> Void)? = nil) throws -> SourceFormModel {
         try .init(presentation: presentation, sourceName: "Forms", sourceID: "org.example.forms", allowsCredentialRead: false,
             submit: submit ?? { try await self.submit($0) }, cancel: cancel ?? {
-                _ = try await self.gate.completeInteraction(.init(id: self.presentation.id,
-                    result: .cancelled(.init(kind: .cancelled))), for: self.ticket)
+                try await self.capture.cancel()
             })
     }
 
     func submit(_ input: SourceFormModel.Submission) async throws -> YingxueWire.InteractionResult {
-        try await gate.check(ticket)
         submissions += 1
-        var fields: [YingxueWire.FieldSubmission] = []
-        for field in input.fields {
-            switch field {
-            case .publicText(let key, let value): fields.append(.publicText(.init(kind: .publicText, key: key, value: value)))
-            case .secret(let key, let value):
-                let record = StoredCredentialID(installationID: installation)
-                try await store.write(value, for: record)
-                let handle = try await gate.issueCredential(record, origins: origins, for: ticket)
-                fields.append(.credential(.init(kind: .credential, key: key, handle: handle)))
-            }
-        }
-        return try await gate.completeInteraction(.init(id: input.presentationID,
-            result: .submitted(.init(kind: .submitted, fields: fields))), for: ticket)
+        return try await capture.submit(input)
     }
 }
 
 private actor FormCredentialStore: CredentialStore {
     private var values: [StoredCredentialID: CredentialSecret] = [:]
+    private var failAfterWrite = false
+    private var removalFailures = 0
+    private var heldWrite: FormPendingWork?
+    private(set) var observedWriteCancellation = false
+    private(set) var removedIDs: [StoredCredentialID] = []
     var count: Int { values.count }
     func read(_ id: StoredCredentialID) -> CredentialSecret? { values[id] }
-    func write(_ value: CredentialSecret, for id: StoredCredentialID) { values[id] = value }
-    func remove(_ id: StoredCredentialID) { values.removeValue(forKey: id) }
+    func write(_ value: CredentialSecret, for id: StoredCredentialID) async throws {
+        if let pending = heldWrite {
+            heldWrite = nil
+            await withTaskCancellationHandler { await pending.run() } onCancel: {
+                Task { @MainActor in pending.finish() }
+            }
+            observedWriteCancellation = Task.isCancelled
+        }
+        // Deliberately writes even after cancellation to expose cleanup races.
+        values[id] = value
+        if failAfterWrite { failAfterWrite = false; throw CredentialStoreFailure.unavailable }
+    }
+    func remove(_ id: StoredCredentialID) throws {
+        try Task.checkCancellation()
+        removedIDs.append(id)
+        if removalFailures > 0 { removalFailures -= 1; throw CredentialStoreFailure.unavailable }
+        values.removeValue(forKey: id)
+    }
     func removeAll(for installationID: SourceInstallationID) { values = values.filter { $0.key.installationID != installationID } }
+    func failNextWriteAfterPersistence() { failAfterWrite = true }
+    func failRemovals(_ count: Int) { removalFailures = count }
+    func holdNextWrite(_ pending: FormPendingWork) { heldWrite = pending }
 }
 
 @MainActor

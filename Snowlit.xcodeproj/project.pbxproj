@@ -35,6 +35,7 @@
 		A1000000000000000000000C /* SourceManagementView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000C /* SourceManagementView.swift */; };
 		A1000000000000000000000D /* SourceFormModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000D /* SourceFormModel.swift */; };
 		A1000000000000000000000E /* SourceFormView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000E /* SourceFormView.swift */; };
+		A1000000000000000000000F /* SourceFormCapture.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000F /* SourceFormCapture.swift */; };
 		A10000000000000000000038 /* SourceFormModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000038 /* SourceFormModelTests.swift */; };
 		A10000000000000000000008 /* SourceFileInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* SourceFileInspector.swift */; };
 		A10000000000000000000009 /* SourceFileReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* SourceFileReader.swift */; };
@@ -74,6 +75,7 @@
 		A2000000000000000000000C /* SourceManagementView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceManagementView.swift; sourceTree = "<group>"; };
 		A2000000000000000000000D /* SourceFormModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceFormModel.swift; sourceTree = "<group>"; };
 		A2000000000000000000000E /* SourceFormView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceFormView.swift; sourceTree = "<group>"; };
+		A2000000000000000000000F /* SourceFormCapture.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceFormCapture.swift; sourceTree = "<group>"; };
 		A20000000000000000000038 /* SourceFormModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/SourceFormModelTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* SourceFileInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceFileInspector.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* SourceFileReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceFileReader.swift; sourceTree = "<group>"; };
@@ -126,6 +128,7 @@
 				A2000000000000000000000C /* SourceManagementView.swift */,
 				A2000000000000000000000D /* SourceFormModel.swift */,
 				A2000000000000000000000E /* SourceFormView.swift */,
+				A2000000000000000000000F /* SourceFormCapture.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -273,6 +276,7 @@
 				A1000000000000000000000C /* SourceManagementView.swift in Sources */,
 				A1000000000000000000000D /* SourceFormModel.swift in Sources */,
 				A1000000000000000000000E /* SourceFormView.swift in Sources */,
+				A1000000000000000000000F /* SourceFormCapture.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
