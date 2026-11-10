@@ -3,6 +3,46 @@ import Testing
 @testable import SnowlitCore
 
 struct ProbeDocumentTests {
+    @Test func stylesRoundTripWithoutChangingTextOrSplittingGraphemes() throws {
+        let image = ProbeImage(id: "image", resourceReference: "retained.png")
+        let document = try ProbeDocument(id: "styled", paragraphs: [
+            ProbeParagraph(id: "p", runs: [.text("e"), .styledText("\u{301}", style: .emphasis),
+                .styledText("👩🏽‍💻", style: .strong), .image(image),
+                .styledText("中文 Bold Italic", style: .strongEmphasis)]),
+        ])
+        let restored = try JSONDecoder().decode(ProbeDocument.self, from: JSONEncoder().encode(document))
+        #expect(restored == document)
+        let projection = ProbeTextProjection(document: restored)
+        #expect(projection.text == "e\u{301}👩🏽‍💻中文 Bold Italic")
+        #expect(throws: ProbeDocumentError.invalidTextBoundary) { try projection.anchor(atUTF16Offset: 1) }
+        for offset in 3..<9 {
+            #expect(throws: ProbeDocumentError.invalidTextBoundary) { try projection.anchor(atUTF16Offset: offset) }
+        }
+        var offset = 0
+        for character in projection.text {
+            let anchor = try projection.anchor(atUTF16Offset: offset)
+            #expect(try projection.utf16Offset(of: anchor) == offset)
+            offset += character.utf16.count
+        }
+        #expect(try projection.anchor(atUTF16Offset: offset).utf16Offset == offset)
+        #expect(restored.paragraphs[0].runs[3] == .image(image))
+    }
+
+    @Test func styleOnlyRevisionRejectsAnchorsFromThePreviousDocument() throws {
+        let original = try ProbeDocument(id: "chapter", paragraphs: [
+            ProbeParagraph(id: "p", runs: [.styledText("same text", style: .strong)]),
+        ])
+        let changed = try ProbeDocument(id: "chapter", paragraphs: [
+            ProbeParagraph(id: "p", runs: [.styledText("same text", style: .emphasis)]),
+        ])
+        let before = ProbeTextProjection(document: original)
+        let after = ProbeTextProjection(document: changed)
+        #expect(before.text == after.text)
+        let anchor = try before.anchor(atUTF16Offset: 4)
+        #expect(throws: ProbeDocumentError.differentRevision) { try after.utf16Offset(of: anchor) }
+        #expect(try JSONEncoder().encode(original) != JSONEncoder().encode(changed))
+    }
+
     @Test func repeatedParagraphsKeepDistinctTargetsAcrossEncodingAndTextProjection() throws {
         let image = ProbeImage(id: "illustration", resourceReference: "image.png", alternateText: "图")
         let comment = ProbeImage(id: "comment-entry", resourceReference: "comment.svg",

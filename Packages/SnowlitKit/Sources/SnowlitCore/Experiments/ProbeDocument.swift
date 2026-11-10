@@ -57,13 +57,22 @@ package struct ProbeParagraph: Codable, Equatable, Sendable {
 
     package var text: String {
         runs.reduce(into: "") { text, run in
-            if case .text(let value) = run { text += value }
+            switch run {
+            case .text(let value), .styledText(let value, _): text += value
+            case .image: break
+            }
         }
     }
 }
 
+/// Candidate inline styles; HTML mapping and unsupported-style policy are separate probes.
+package enum ProbeTextStyle: String, Codable, Equatable, Sendable {
+    case strong, emphasis, strongEmphasis
+}
+
 package enum ProbeInline: Codable, Equatable, Sendable {
     case text(String)
+    case styledText(String, style: ProbeTextStyle)
     case image(ProbeImage)
 }
 

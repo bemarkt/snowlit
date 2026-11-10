@@ -8,6 +8,48 @@ import UIKit
 @Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct ReaderProbeTests {
+    @Test func inlineStylesRemainAttachedToTheirTextThroughFontAndAttachmentReflow() throws {
+        let labels: [(String, ProbeTextStyle, UIFontDescriptor.SymbolicTraits)] = [
+            ("Bold Latin ", .strong, .traitBold), ("Italic Latin ", .emphasis, .traitItalic),
+            ("Both Latin ", .strongEmphasis, [.traitBold, .traitItalic]),
+        ]
+        let prefix = String(repeating: "中文 👩🏽‍💻 e\u{301}。", count: 150)
+        let document = try ProbeDocument(id: "styled-layout", paragraphs: [
+            ProbeParagraph(id: "first", runs: [.text("before"),
+                .image(ProbeImage(id: "image", resourceReference: "synthetic.png"))]),
+            ProbeParagraph(id: "styled", runs: [.text(prefix)] + labels.map {
+                .styledText($0.0, style: $0.1)
+            } + [.text(prefix)]),
+        ])
+        let viewport = ProbeViewport(document: document)
+        viewport.loadViewIfNeeded()
+        viewport.view.frame = CGRect(x: 0, y: 0, width: 390, height: 500)
+        try viewport.render(fontSize: 20)
+        let middle = ProbeTextAnchor(documentID: document.id, revision: document.revision,
+                                     paragraphID: "styled", utf16Offset: prefix.utf16.count)
+        try viewport.restoreVisible(.init(anchor: middle, verticalOffset: 80))
+        let visible = try viewport.captureVisiblePosition()
+        let changes: [(CGFloat, CGFloat, CGFloat?)] = [(390, 28, 40), (844, 18, 160), (390, 20, nil)]
+        for (width, size, height) in changes {
+            viewport.view.frame.size.width = width
+            try viewport.render(fontSize: size, attachmentHeight: height, maintaining: visible)
+            #expect(abs(try viewport.visibleOffset(of: visible.anchor) - visible.verticalOffset) <= 1)
+            var logical = prefix.utf16.count
+            for (label, _, traits) in labels {
+                let anchor = ProbeTextAnchor(documentID: document.id, revision: document.revision,
+                                             paragraphID: "styled", utf16Offset: logical)
+                let offset = try viewport.layoutOffset(of: anchor)
+                let font = try #require(viewport.textView.attributedText.attribute(.font, at: offset, effectiveRange: nil) as? UIFont)
+                #expect(font.fontDescriptor.symbolicTraits.intersection([.traitBold, .traitItalic]) == traits)
+                #expect(abs(font.pointSize - size) <= 0.01)
+                #expect((viewport.textView.text as NSString).substring(with: NSRange(location: offset, length: label.utf16.count)) == label)
+                logical += label.utf16.count
+            }
+            #expect(viewport.projection.document == document)
+            #expect(viewport.textView.textLayoutManager != nil)
+        }
+    }
+
     @Test func chapterWindowPreservesVisibleIdentityAcrossForwardAndReverseReplacement() throws {
         let documents = try (0..<5).map { number in
             try ProbeDocument(id: "window-chapter-\(number)", paragraphs: (0..<24).map { paragraph in

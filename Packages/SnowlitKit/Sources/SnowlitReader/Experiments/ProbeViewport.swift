@@ -5,7 +5,7 @@ import UIKit
 /// Bounded layout experiment, not the production chapter/window/pagination implementation.
 @MainActor
 final class ProbeViewport: UIViewController {
-    enum Failure: Error { case textKit2Unavailable, positionUnavailable }
+    enum Failure: Error { case textKit2Unavailable, positionUnavailable, fontUnavailable }
 
     /// Ephemeral display state. Only the semantic anchor belongs in persistent reading state.
     struct VisiblePosition {
@@ -54,13 +54,17 @@ final class ProbeViewport: UIViewController {
         commentButtons.removeAll()
         renderOffsets.removeAll()
         let attributed = NSMutableAttributedString(string: "")
+        var styledRanges: [(NSRange, ProbeTextStyle)] = []
         for (index, paragraph) in projection.document.paragraphs.enumerated() {
             if index > 0 { attributed.append(NSAttributedString(string: "\n")) }
             var logical = 0
             var offsets = [0: attributed.length]
             for run in paragraph.runs {
                 switch run {
-                case .text(let text):
+                case .text(let text), .styledText(let text, _):
+                    if case .styledText(_, let style) = run {
+                        styledRanges.append((NSRange(location: attributed.length, length: text.utf16.count), style))
+                    }
                     for offset in 0...text.utf16.count { offsets[logical + offset] = attributed.length + offset }
                     attributed.append(NSAttributedString(string: text))
                     logical += text.utf16.count
@@ -91,6 +95,18 @@ final class ProbeViewport: UIViewController {
         attributed.addAttributes([.font: UIFont.systemFont(ofSize: fontSize),
                                   .foregroundColor: UIColor.label, .paragraphStyle: style],
                                  range: NSRange(location: 0, length: attributed.length))
+        for (range, style) in styledRanges {
+            let traits: UIFontDescriptor.SymbolicTraits
+            switch style {
+            case .strong: traits = .traitBold
+            case .emphasis: traits = .traitItalic
+            case .strongEmphasis: traits = [.traitBold, .traitItalic]
+            }
+            guard let descriptor = UIFont.systemFont(ofSize: fontSize).fontDescriptor.withSymbolicTraits(traits) else {
+                throw Failure.fontUnavailable
+            }
+            attributed.addAttribute(.font, value: UIFont(descriptor: descriptor, size: fontSize), range: range)
+        }
         textView.attributedText = attributed
         view.layoutIfNeeded()
         guard let layout = textView.textLayoutManager, let content = layout.textContentManager else {
