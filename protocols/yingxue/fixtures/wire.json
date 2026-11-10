@@ -292,5 +292,113 @@
     "type": "CredentialHandle",
     "json": "{\"id\":\"01234567-1234-1234-1234-123456789abc\",\"installationID\":\"01234567-1234-1234-1234-123456789abc\"}",
     "valid": false
+  },
+  {
+    "name": "http-managed-credentials",
+    "type": "HTTPRequest",
+    "json": "{\"target\":{\"url\":\"../login\",\"baseURL\":\"https://fixture.invalid/books/\"},\"method\":\"post\",\"headers\":[{\"name\":\"Authorization\",\"value\":{\"kind\":\"credential\",\"handle\":{\"id\":\"01234567-1234-1234-1234-123456789abc\"},\"prefix\":\"Bearer \",\"suffix\":\"\"}}],\"body\":{\"kind\":\"form\",\"fields\":[{\"name\":\"username\",\"value\":{\"kind\":\"literal\",\"value\":\"fixture\"}},{\"name\":\"password\",\"value\":{\"kind\":\"credential\",\"handle\":{\"id\":\"01234567-1234-1234-1234-123456789abc\"},\"prefix\":\"\",\"suffix\":\"\"}}]}}",
+    "valid": true
+  },
+  {
+    "name": "http-get-empty",
+    "type": "HTTPRequest",
+    "json": "{\"target\":{\"url\":\"https://fixture.invalid/\"},\"method\":\"get\",\"headers\":[],\"body\":{\"kind\":\"none\"}}",
+    "valid": true
+  },
+  {
+    "name": "http-malformed-header-name",
+    "type": "HTTPResponseHeader",
+    "json": "{\"name\":\"name\\r\\nOther\",\"value\":\"x\"}",
+    "valid": false
+  },
+  {
+    "name": "http-malformed-header-value",
+    "type": "HTTPResponseHeader",
+    "json": "{\"name\":\"Content-Type\",\"value\":\"x\\r\\nOther: x\"}",
+    "valid": false
+  },
+  {
+    "name": "http-response-bytes",
+    "type": "HTTPResponse",
+    "json": "{\"status\":200,\"finalURL\":\"https://fixture.invalid/\",\"headers\":[],\"base64\":\"1tDOxA==\"}",
+    "valid": true
+  },
+  {
+    "name": "http-invalid-base64",
+    "type": "DecodeTextRequest",
+    "json": "{\"base64\":\"not-base64!!\",\"encoding\":\"utf8\"}",
+    "valid": false
+  },
+  {
+    "name": "http-explicit-non-utf8",
+    "type": "DecodeTextRequest",
+    "json": "{\"base64\":\"1tDOxA==\",\"encoding\":\"gb18030\"}",
+    "valid": true
+  },
+  {
+    "name": "http-unknown-encoding",
+    "type": "DecodeTextRequest",
+    "json": "{\"base64\":\"\",\"encoding\":\"guess\"}",
+    "valid": false
+  },
+  {
+    "name": "dom-missing-attribute-preserves-null",
+    "type": "DOMResult",
+    "json": "{\"selections\":[{\"key\":\"links\",\"values\":[\"/a\",null,\"\"]}]}",
+    "valid": true
+  },
+  {
+    "name": "dom-text-and-attributes",
+    "type": "DOMQuery",
+    "json": "{\"html\":\"<p>x</p>\",\"selections\":[{\"kind\":\"text\",\"key\":\"p\",\"selector\":\"p\"},{\"kind\":\"attribute\",\"key\":\"a\",\"selector\":\"a\",\"attribute\":\"href\"}]}",
+    "valid": true
+  },
+  {
+    "name": "interaction-native-form",
+    "type": "InteractionRequest",
+    "json": "{\"kind\":\"form\",\"title\":\"Sign in\",\"fields\":[{\"kind\":\"publicText\",\"key\":\"user\",\"label\":\"User\",\"required\":true},{\"kind\":\"secret\",\"key\":\"password\",\"label\":\"Password\",\"required\":true}],\"credentialOrigins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}]}",
+    "valid": true
+  },
+  {
+    "name": "interaction-form-handles",
+    "type": "InteractionResult",
+    "json": "{\"kind\":\"submitted\",\"fields\":[{\"kind\":\"publicText\",\"key\":\"user\",\"value\":\"fixture\"},{\"kind\":\"credential\",\"key\":\"password\",\"handle\":{\"id\":\"01234567-1234-1234-1234-123456789abc\"}}]}",
+    "valid": true
+  },
+  {
+    "name": "interaction-secret-cannot-return-plaintext",
+    "type": "InteractionResult",
+    "json": "{\"kind\":\"submitted\",\"fields\":[{\"kind\":\"credential\",\"key\":\"password\",\"value\":\"synthetic-secret\"}]}",
+    "valid": false
+  },
+  {
+    "name": "interaction-user-cancelled",
+    "type": "InteractionResult",
+    "json": "{\"kind\":\"cancelled\"}",
+    "valid": true
+  },
+  {
+    "name": "interaction-browser-completed-not-authenticated",
+    "type": "InteractionResult",
+    "json": "{\"kind\":\"completed\"}",
+    "valid": true
+  },
+  {
+    "name": "interaction-web-verification",
+    "type": "InteractionRequest",
+    "json": "{\"kind\":\"web\",\"title\":\"Verify\",\"target\":{\"url\":\"https://fixture.invalid/verify\"},\"purpose\":\"verification\"}",
+    "valid": true
+  },
+  {
+    "name": "auth-login-result",
+    "type": "AuthenticationResult",
+    "json": "{\"status\":\"authenticated\"}",
+    "valid": true
+  },
+  {
+    "name": "auth-invalid-session-key",
+    "type": "AuthenticationResult",
+    "json": "{\"status\":\"authenticated\",\"localBookID\":\"01234567-1234-1234-1234-123456789abc\"}",
+    "valid": false
   }
 ]

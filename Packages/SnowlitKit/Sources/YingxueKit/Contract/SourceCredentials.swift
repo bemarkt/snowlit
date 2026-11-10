@@ -71,7 +71,7 @@ extension SourceOperationGate {
     public func credentialForHost(_ handle: YingxueWire.CredentialHandle, destination: URL,
                                   for ticket: Ticket, store: any CredentialStore) async throws -> CredentialSecret {
         let lease = try credentialLease(handle, for: ticket)
-        guard let origin = Self.credentialOrigin(destination), lease.origins.contains(origin),
+        guard let origin = SourceOrigin.key(for: destination), lease.origins.contains(origin),
               credentialPolicy?.origins.contains(origin) == true else { throw SourceCredentialFailure.originDenied }
         let value = try await loadCredential(handle, for: ticket, store: store, plaintext: false)
         try check(ticket)
@@ -101,7 +101,7 @@ extension SourceOperationGate {
         credentialHandles = credentialHandles.filter { $0.value.requestID != requestID }
     }
 
-    private func credentialLease(_ handle: YingxueWire.CredentialHandle, for ticket: Ticket) throws -> SourceCredentialLease {
+    func credentialLease(_ handle: YingxueWire.CredentialHandle, for ticket: Ticket) throws -> SourceCredentialLease {
         try check(ticket)
         _ = try YingxueWireCodec.encode(handle)
         guard let id = UUID(uuidString: handle.id), let lease = credentialHandles[id],
@@ -133,14 +133,4 @@ extension SourceOperationGate {
         }
     }
 
-    private static func credentialOrigin(_ url: URL) -> String? {
-        guard let parts = URLComponents(url: url, resolvingAgainstBaseURL: true),
-              let scheme = parts.scheme?.lowercased(), ["http", "https"].contains(scheme),
-              let host = parts.host?.lowercased(), !host.isEmpty,
-              parts.user == nil, parts.password == nil,
-              parts.percentEncodedHost?.contains("%") == false else { return nil }
-        let port = parts.port ?? (scheme == "https" ? 443 : 80)
-        guard (1...65535).contains(port) else { return nil }
-        return "\(scheme)://\(host):\(port)"
-    }
 }

@@ -18,7 +18,7 @@ DEPENDENCIES = {
 IMPORTS = {
     "SnowlitCore": {"Foundation"},
     "SnowlitStorage": {"Foundation", "SnowlitCore", "GRDB", "Security"},
-    "YingxueKit": {"Foundation", "SnowlitCore", "WebKit", "SwiftSoup"},
+    "YingxueKit": {"Foundation", "CoreFoundation", "SnowlitCore", "WebKit", "SwiftSoup"},
     "SnowlitReader": {"Foundation", "SnowlitCore", "UIKit"},
 }
 GRDB_URL = "https://github.com/groue/GRDB.swift.git"

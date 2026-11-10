@@ -41,7 +41,7 @@ Public settings support text, boolean, and explicit choices. Keys are unique exa
 
 ## Reading operations
 
-The generated declarations describe `search`, `book`, `chapters`, and `chapter` inputs and outputs. Source references are opaque exact UTF-8 keys within the installation and `referenceVersion` captured by the host. Redirected URLs and display titles do not silently replace them.
+The generated declarations describe `search`, `book`, `chapters`, `chapter`, and optional `authenticate` inputs and outputs. `YingxueSource` and `SourceContext` signatures are generated from the schema's `x-operations` and `x-host` tables. Source references are opaque exact UTF-8 keys within the installation and `referenceVersion` captured by the host. Redirected URLs and display titles do not silently replace them.
 
 `SearchInput.cursor`, `ChaptersInput.cursor`, and page `nextCursor` are required fields. JSON `null` begins or ends pagination explicitly; an omitted field or empty string is invalid. An empty search is valid. Only an explicitly ended directory becomes a complete catalog; repeated cursors, repeated chapter identities, or a changed catalog revision invalidate the assembly.
 
@@ -71,11 +71,27 @@ Native secret values are not Codable and redact printing/reflection. The dedicat
 
 The host creates an `OperationCall` with a protocol version, a typed request, and an `OperationContext`. Context contains a host request UUID, installation UUID, exact script SHA-256, public configuration revision, website session revision, and generation UUID. These identify execution validity; they do not become local book or reading-position keys. UUIDs and digests use canonical lowercase spelling.
 
-`OperationReply` discriminates the four reading results and a structured failure. Every reply echoes the complete context and names the operation. Failures preserve a code, stage, and retryability hint; arbitrary error strings, scripts, HTML, and credentials are not shareable diagnostic fields. A retryability hint does not authorize replaying a website write.
+`OperationReply` discriminates the four reading results, authentication result, and a structured failure. Every reply echoes the complete context and names the operation. Failures preserve a code, stage, and retryability hint; arbitrary error strings, scripts, HTML, and credentials are not shareable diagnostic fields. A retryability hint does not authorize replaying a website write.
 
 `SourceOperationGate` owns active tickets for one installation. It validates a response against the host's ticket before returning it. Source replacement, configuration changes, login/logout, or disablement invalidate all tickets and return their request IDs so the backend owner can cancel network, browser, and UI resources. Closing is terminal. Cancellation of one ticket does not cancel another consumer, and a finished ticket cannot accept another result. An invalid replacement cannot destroy the current gate state.
 
 Validating a reply keeps its ticket active while the caller normalizes or saves it. Check the ticket again after every suspension, then finish it explicitly. The receiving reader/search service also checks its navigation generation. Storage must keep its own transactional request/version predicates; a gate check before an asynchronous database call is not an atomic commit guard. This actor rejects stale results; it makes no claim to terminate JavaScript or reclaim WebContent CPU.
+
+## Host calls
+
+`HostCall` contains a call UUID, complete operation context, and a typed host request. `HostReply` echoes both IDs and returns that method's typed result or a classified failure. The operation gate rejects duplicate call IDs, mismatched replies, and replies after operation cancellation. Completing a host call reserves its ID until the enclosing operation ends, preventing replay of a website write. Backend dispatch must use the gate's host ticket and recheck it before sending a reply. An accepted envelope alone does not perform the requested capability.
+
+`ctx.http` accepts an HTTP(S) URL/reference, an explicit method, headers, and an empty/byte/form body. Header and form values may use a credential handle with a prefix/suffix. The native preparer resolves those values against the credential audience, rejects control characters and host-owned transport/session headers, and encodes forms in UTF-8. Duplicate headers are rejected without regard to ASCII case; repeated form fields retain order. GET/HEAD cannot carry a body. Prepared native requests redact diagnostics and are not wire-serializable.
+
+The transport disables automatic redirect forwarding. `SourceHTTPRedirects` resolves each Location against the preceding URL, checks the new declared origin, and enforces the caller's finite redirect budget. 303 changes methods other than HEAD to GET; 301/302 changes POST to GET; 307/308 preserve method/body. A cross-origin hop drops source headers and rejects a preserved body. A body intended for another authorized origin must be sent as a separate explicit source request. Each hop is prepared again so credential audiences and the current operation are rechecked. The transport handles cookies with its installation session before returning a response; `Set-Cookie` is omitted from source-visible headers. Status, final URL, other repeated headers, and raw bytes remain available. Errors are not silently replaced with successful empty content.
+
+`ctx.decodeText` explicitly decodes base64 response bytes as UTF-8, UTF-16LE/BE, Windows-1252, Latin-1, GB18030, or Big5. Native decoding is strict; there is no automatic fallback that repairs invalid bytes. These encodings remain candidates pending Apple corpus verification. Decoding and parsing have separate contracts.
+
+`ctx.dom` parses supplied HTML once and applies named CSS selections for text, inner HTML, or attributes. Results preserve document order. No matches return an empty array; a missing attribute returns null, while an explicitly empty attribute returns an empty string. Duplicate query keys or invalid selectors fail with categories, without echoing page text. The parser does not execute scripts or load resources; no DOM nodes cross the wire. Native execution uses the reviewed SwiftSoup dependency.
+
+`ctx.interact` requests a native form or a website browser presentation. Forms declare public text/secret fields and credential origins; secret results contain operation-scoped handles. Required/mismatched/duplicate fields are checked before the reply is accepted. The host distinguishes user cancellation, a submitted form, and a completed browser interaction. Browser completion does not prove authentication: `authenticate` must verify the website session and return `authenticated` or `anonymous`. Only the host advances the session revision and invalidates prior work after accepting the result. The native presentation ID can complete once; cancellation, logout, disablement, or source replacement prevents late UI results from being adopted.
+
+[fixture.source.js](examples/fixture.source.js) demonstrates search, detail, two-page catalog, a native credential form, session verification, and protected chapter extraction. The Node contract suite executes it with a deterministic host double and validates both operation and host messages. It is author-contract evidence, not a live website, native networking, WebKit, or App UI acceptance result.
 
 ## Local checks
 

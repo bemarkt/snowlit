@@ -108,10 +108,6 @@ def swift():
                 fields += [f'{key}: {ptype}' + ('? = nil' if optional else '')]
                 assignments += [f'            self.{key} = {key}']
             output += ['        public init(' + ', '.join(fields) + ') {', *assignments, '        }']
-            if schema.get('x-sensitive'):
-                output += ['        public var description: String { "[redacted]" }',
-                           '        public var debugDescription: String { description }',
-                           '        public var customMirror: Mirror { Mirror(self, children: [:]) }']
             output += ['        private enum CodingKeys: String, CodingKey { case ' + ', '.join(props) + ' }', '        public func encode(to encoder: any Encoder) throws {', '            var container = encoder.container(keyedBy: CodingKeys.self)']
             output += [f'            try container.' + ('encode' if key in required else 'encodeIfPresent') + f'({key}, forKey: .{key})' for key in props]
             output += ['        }', '    }']
@@ -131,9 +127,24 @@ def swift():
             raise ValueError(t)
         rules += [f'        "{name}": {rule},']
     output += ['}', '']
+    sensitive = {name for name, schema in DEFS.items() if schema.get('x-sensitive')}
+    def references(value):
+        if isinstance(value, dict):
+            if '$ref' in value: yield reference(value)
+            else:
+                for child in value.values(): yield from references(child)
+        elif isinstance(value, list):
+            for child in value: yield from references(child)
+    while True:
+        expanded = sensitive | {name for name, schema in DEFS.items() if sensitive.intersection(references(schema))}
+        if expanded == sensitive: break
+        sensitive = expanded
     for name, schema in DEFS.items():
-        if schema.get('x-sensitive'):
-            output += [f'extension YingxueWire.{name}: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {{}}']
+        if name in sensitive and kind(schema) in ('object', 'union'):
+            output += [f'extension YingxueWire.{name}: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {{',
+                       '    public var description: String { "[redacted]" }',
+                       '    public var debugDescription: String { description }',
+                       '    public var customMirror: Mirror { Mirror(self, children: [:]) }', '}']
     output += ['', 'enum GeneratedWireSchema {', '    static let rules: [String: WireRule] = [', *rules, '    ]', '}',
                'enum GeneratedModulePolicy {', '    static let requiredExports = [' + ', '.join(map(quote,SCHEMA['x-module']['requiredExports'])) + ']', '}', '']
     return '\n'.join(output)
@@ -156,6 +167,17 @@ def typescript():
             output += [f'export interface {name} {{', *fields, '}', '']
             continue
         output += [f'export type {name} = {result};', '']
+    output += ['export interface SourceContext {', '  readonly identity: OperationContext;']
+    for name, method in SCHEMA['x-host'].items():
+        assert method['input'] in DEFS and method['output'] in DEFS
+        assert method['capability'] is None or method['capability'] in DEFS['Capability']['enum']
+        output += [f"  {name}(input: {method['input']}): Promise<{method['output']}>;"]
+    output += ['}', '', 'export interface YingxueSource {']
+    for name, operation in SCHEMA['x-operations'].items():
+        assert name in DEFS['ExportName']['enum'] and operation['input'] in DEFS and operation['output'] in DEFS
+        optional='' if operation['required'] else '?'
+        output += [f"  {name}{optional}(ctx: SourceContext, input: {operation['input']}): Promise<{operation['output']}>;"]
+    output += ['}', '']
     return '\n'.join(output)
 
 

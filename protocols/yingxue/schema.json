@@ -1042,7 +1042,8 @@
         "search",
         "book",
         "chapters",
-        "chapter"
+        "chapter",
+        "authenticate"
       ]
     },
     "OperationContext": {
@@ -1324,6 +1325,9 @@
         },
         {
           "$ref": "#/$defs/ChapterOperation"
+        },
+        {
+          "$ref": "#/$defs/AuthenticateOperation"
         }
       ]
     },
@@ -1363,6 +1367,9 @@
         },
         {
           "$ref": "#/$defs/FailureReply"
+        },
+        {
+          "$ref": "#/$defs/AuthenticateReply"
         }
       ]
     },
@@ -1402,6 +1409,1242 @@
       ],
       "additionalProperties": false,
       "x-sensitive": true
+    },
+    "URLReference": {
+      "type": "object",
+      "properties": {
+        "url": {
+          "$ref": "#/$defs/Label"
+        },
+        "baseURL": {
+          "$ref": "#/$defs/Label"
+        }
+      },
+      "required": [
+        "url"
+      ],
+      "additionalProperties": false
+    },
+    "HeaderName": {
+      "type": "string",
+      "pattern": "^[!#$%&'*+.^_`|~0-9A-Za-z-]+$(?![\\s\\S])"
+    },
+    "HeaderText": {
+      "type": "string",
+      "pattern": "^[^\\u0000-\\u0008\\u000a-\\u001f\\u007f]*$(?![\\s\\S])"
+    },
+    "Base64": {
+      "type": "string",
+      "pattern": "^(?:[A-Za-z0-9+/]{4})*(?:[A-Za-z0-9+/]{2}==|[A-Za-z0-9+/]{3}=)?$(?![\\s\\S])"
+    },
+    "HTTPStatus": {
+      "type": "integer",
+      "minimum": 100,
+      "maximum": 599
+    },
+    "HTTPMethod": {
+      "type": "string",
+      "enum": [
+        "get",
+        "head",
+        "post",
+        "put",
+        "patch",
+        "delete"
+      ]
+    },
+    "LiteralKind": {
+      "type": "string",
+      "const": "literal"
+    },
+    "CredentialKind": {
+      "type": "string",
+      "const": "credential"
+    },
+    "NoneKind": {
+      "type": "string",
+      "const": "none"
+    },
+    "BytesKind": {
+      "type": "string",
+      "const": "bytes"
+    },
+    "FormKind": {
+      "type": "string",
+      "const": "form"
+    },
+    "LiteralValue": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/LiteralKind"
+        },
+        "value": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "kind",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "CredentialValue": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CredentialKind"
+        },
+        "handle": {
+          "$ref": "#/$defs/CredentialHandle"
+        },
+        "prefix": {
+          "$ref": "#/$defs/Text"
+        },
+        "suffix": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "kind",
+        "handle",
+        "prefix",
+        "suffix"
+      ],
+      "additionalProperties": false
+    },
+    "HTTPValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/LiteralValue"
+        },
+        {
+          "$ref": "#/$defs/CredentialValue"
+        }
+      ]
+    },
+    "HTTPRequestHeader": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/HeaderName"
+        },
+        "value": {
+          "$ref": "#/$defs/HTTPValue"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "HTTPRequestHeaders": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/HTTPRequestHeader"
+      }
+    },
+    "HTTPFormField": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "value": {
+          "$ref": "#/$defs/HTTPValue"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "HTTPFormFields": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/HTTPFormField"
+      }
+    },
+    "EmptyHTTPBody": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/NoneKind"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "BytesHTTPBody": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/BytesKind"
+        },
+        "base64": {
+          "$ref": "#/$defs/Base64"
+        },
+        "contentType": {
+          "$ref": "#/$defs/HeaderText"
+        }
+      },
+      "required": [
+        "kind",
+        "base64",
+        "contentType"
+      ],
+      "additionalProperties": false
+    },
+    "FormHTTPBody": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/FormKind"
+        },
+        "fields": {
+          "$ref": "#/$defs/HTTPFormFields"
+        }
+      },
+      "required": [
+        "kind",
+        "fields"
+      ],
+      "additionalProperties": false
+    },
+    "HTTPBody": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/EmptyHTTPBody"
+        },
+        {
+          "$ref": "#/$defs/BytesHTTPBody"
+        },
+        {
+          "$ref": "#/$defs/FormHTTPBody"
+        }
+      ]
+    },
+    "HTTPRequest": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/URLReference"
+        },
+        "method": {
+          "$ref": "#/$defs/HTTPMethod"
+        },
+        "headers": {
+          "$ref": "#/$defs/HTTPRequestHeaders"
+        },
+        "body": {
+          "$ref": "#/$defs/HTTPBody"
+        }
+      },
+      "required": [
+        "target",
+        "method",
+        "headers",
+        "body"
+      ],
+      "additionalProperties": false
+    },
+    "HTTPResponseHeader": {
+      "type": "object",
+      "properties": {
+        "name": {
+          "$ref": "#/$defs/HeaderName"
+        },
+        "value": {
+          "$ref": "#/$defs/HeaderText"
+        }
+      },
+      "required": [
+        "name",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "HTTPResponseHeaders": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/HTTPResponseHeader"
+      }
+    },
+    "HTTPResponse": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/HTTPStatus"
+        },
+        "finalURL": {
+          "$ref": "#/$defs/Label"
+        },
+        "headers": {
+          "$ref": "#/$defs/HTTPResponseHeaders"
+        },
+        "base64": {
+          "$ref": "#/$defs/Base64"
+        }
+      },
+      "required": [
+        "status",
+        "finalURL",
+        "headers",
+        "base64"
+      ],
+      "additionalProperties": false
+    },
+    "TextEncoding": {
+      "type": "string",
+      "enum": [
+        "utf8",
+        "utf16LE",
+        "utf16BE",
+        "windows1252",
+        "latin1",
+        "gb18030",
+        "big5"
+      ]
+    },
+    "DecodeTextRequest": {
+      "type": "object",
+      "properties": {
+        "base64": {
+          "$ref": "#/$defs/Base64"
+        },
+        "encoding": {
+          "$ref": "#/$defs/TextEncoding"
+        }
+      },
+      "required": [
+        "base64",
+        "encoding"
+      ],
+      "additionalProperties": false
+    },
+    "DecodeTextResult": {
+      "type": "object",
+      "properties": {
+        "text": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "additionalProperties": false
+    },
+    "DOMTextKind": {
+      "type": "string",
+      "const": "text"
+    },
+    "DOMHTMLKind": {
+      "type": "string",
+      "const": "html"
+    },
+    "DOMAttributeKind": {
+      "type": "string",
+      "const": "attribute"
+    },
+    "DOMTextSelection": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DOMTextKind"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "selector": {
+          "$ref": "#/$defs/Label"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "selector"
+      ],
+      "additionalProperties": false
+    },
+    "DOMHTMLSelection": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DOMHTMLKind"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "selector": {
+          "$ref": "#/$defs/Label"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "selector"
+      ],
+      "additionalProperties": false
+    },
+    "DOMAttributeSelection": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DOMAttributeKind"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "selector": {
+          "$ref": "#/$defs/Label"
+        },
+        "attribute": {
+          "$ref": "#/$defs/Label"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "selector",
+        "attribute"
+      ],
+      "additionalProperties": false
+    },
+    "DOMSelection": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/DOMTextSelection"
+        },
+        {
+          "$ref": "#/$defs/DOMHTMLSelection"
+        },
+        {
+          "$ref": "#/$defs/DOMAttributeSelection"
+        }
+      ]
+    },
+    "DOMSelections": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DOMSelection"
+      }
+    },
+    "DOMQuery": {
+      "type": "object",
+      "properties": {
+        "html": {
+          "$ref": "#/$defs/Text"
+        },
+        "selections": {
+          "$ref": "#/$defs/DOMSelections"
+        }
+      },
+      "required": [
+        "html",
+        "selections"
+      ],
+      "additionalProperties": false
+    },
+    "NullableText": {
+      "type": [
+        "string",
+        "null"
+      ]
+    },
+    "DOMStrings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/NullableText"
+      }
+    },
+    "DOMSelectionResult": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "values": {
+          "$ref": "#/$defs/DOMStrings"
+        }
+      },
+      "required": [
+        "key",
+        "values"
+      ],
+      "additionalProperties": false
+    },
+    "DOMSelectionResults": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/DOMSelectionResult"
+      }
+    },
+    "DOMResult": {
+      "type": "object",
+      "properties": {
+        "selections": {
+          "$ref": "#/$defs/DOMSelectionResults"
+        }
+      },
+      "required": [
+        "selections"
+      ],
+      "additionalProperties": false
+    },
+    "AuthenticationReason": {
+      "type": "string",
+      "enum": [
+        "signIn",
+        "expired"
+      ]
+    },
+    "AuthenticationInput": {
+      "type": "object",
+      "properties": {
+        "reason": {
+          "$ref": "#/$defs/AuthenticationReason"
+        }
+      },
+      "required": [
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "AuthenticationStatus": {
+      "type": "string",
+      "enum": [
+        "authenticated",
+        "anonymous"
+      ]
+    },
+    "AuthenticationResult": {
+      "type": "object",
+      "properties": {
+        "status": {
+          "$ref": "#/$defs/AuthenticationStatus"
+        }
+      },
+      "required": [
+        "status"
+      ],
+      "additionalProperties": false
+    },
+    "AuthenticateKind": {
+      "type": "string",
+      "const": "authenticate"
+    },
+    "AuthenticateOperation": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/AuthenticateKind"
+        },
+        "input": {
+          "$ref": "#/$defs/AuthenticationInput"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "AuthenticateReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/AuthenticateKind"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/AuthenticationResult"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "PublicFieldKind": {
+      "type": "string",
+      "const": "publicText"
+    },
+    "SecretFieldKind": {
+      "type": "string",
+      "const": "secret"
+    },
+    "WebInteractionKind": {
+      "type": "string",
+      "const": "web"
+    },
+    "PublicInteractionField": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/PublicFieldKind"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "label": {
+          "$ref": "#/$defs/Label"
+        },
+        "required": {
+          "$ref": "#/$defs/Flag"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "label",
+        "required"
+      ],
+      "additionalProperties": false
+    },
+    "SecretInteractionField": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SecretFieldKind"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "label": {
+          "$ref": "#/$defs/Label"
+        },
+        "required": {
+          "$ref": "#/$defs/Flag"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "label",
+        "required"
+      ],
+      "additionalProperties": false
+    },
+    "InteractionField": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/PublicInteractionField"
+        },
+        {
+          "$ref": "#/$defs/SecretInteractionField"
+        }
+      ]
+    },
+    "InteractionFields": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/InteractionField"
+      }
+    },
+    "FormInteraction": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/FormKind"
+        },
+        "title": {
+          "$ref": "#/$defs/Label"
+        },
+        "fields": {
+          "$ref": "#/$defs/InteractionFields"
+        },
+        "credentialOrigins": {
+          "$ref": "#/$defs/Origins"
+        }
+      },
+      "required": [
+        "kind",
+        "title",
+        "fields",
+        "credentialOrigins"
+      ],
+      "additionalProperties": false
+    },
+    "WebInteractionPurpose": {
+      "type": "string",
+      "enum": [
+        "signIn",
+        "verification"
+      ]
+    },
+    "WebInteraction": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/WebInteractionKind"
+        },
+        "title": {
+          "$ref": "#/$defs/Label"
+        },
+        "target": {
+          "$ref": "#/$defs/URLReference"
+        },
+        "purpose": {
+          "$ref": "#/$defs/WebInteractionPurpose"
+        }
+      },
+      "required": [
+        "kind",
+        "title",
+        "target",
+        "purpose"
+      ],
+      "additionalProperties": false
+    },
+    "InteractionRequest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/FormInteraction"
+        },
+        {
+          "$ref": "#/$defs/WebInteraction"
+        }
+      ]
+    },
+    "PublicFieldSubmission": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/PublicFieldKind"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "value": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "value"
+      ],
+      "additionalProperties": false,
+      "x-sensitive": true
+    },
+    "SecretFieldSubmission": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CredentialKind"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "handle": {
+          "$ref": "#/$defs/CredentialHandle"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "handle"
+      ],
+      "additionalProperties": false
+    },
+    "FieldSubmission": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/PublicFieldSubmission"
+        },
+        {
+          "$ref": "#/$defs/SecretFieldSubmission"
+        }
+      ]
+    },
+    "FieldSubmissions": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/FieldSubmission"
+      }
+    },
+    "SubmittedKind": {
+      "type": "string",
+      "const": "submitted"
+    },
+    "CancelledKind": {
+      "type": "string",
+      "const": "cancelled"
+    },
+    "CompletedKind": {
+      "type": "string",
+      "const": "completed"
+    },
+    "FormSubmitted": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/SubmittedKind"
+        },
+        "fields": {
+          "$ref": "#/$defs/FieldSubmissions"
+        }
+      },
+      "required": [
+        "kind",
+        "fields"
+      ],
+      "additionalProperties": false,
+      "x-sensitive": true
+    },
+    "InteractionCancelled": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CancelledKind"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "WebInteractionCompleted": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/CompletedKind"
+        }
+      },
+      "required": [
+        "kind"
+      ],
+      "additionalProperties": false
+    },
+    "InteractionResult": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/FormSubmitted"
+        },
+        {
+          "$ref": "#/$defs/InteractionCancelled"
+        },
+        {
+          "$ref": "#/$defs/WebInteractionCompleted"
+        }
+      ]
+    },
+    "InteractionPresentation": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "request": {
+          "$ref": "#/$defs/InteractionRequest"
+        }
+      },
+      "required": [
+        "id",
+        "context",
+        "request"
+      ],
+      "additionalProperties": false
+    },
+    "InteractionCompletion": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "result": {
+          "$ref": "#/$defs/InteractionResult"
+        }
+      },
+      "required": [
+        "id",
+        "result"
+      ],
+      "additionalProperties": false
+    },
+    "HttpHostKind": {
+      "type": "string",
+      "const": "http"
+    },
+    "HttpHostRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/HttpHostKind"
+        },
+        "input": {
+          "$ref": "#/$defs/HTTPRequest"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "HttpHostReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/HttpHostKind"
+        },
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/HTTPResponse"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "DomHostKind": {
+      "type": "string",
+      "const": "dom"
+    },
+    "DomHostRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DomHostKind"
+        },
+        "input": {
+          "$ref": "#/$defs/DOMQuery"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "DomHostReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DomHostKind"
+        },
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/DOMResult"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "DecodeTextHostKind": {
+      "type": "string",
+      "const": "decodeText"
+    },
+    "DecodeTextHostRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DecodeTextHostKind"
+        },
+        "input": {
+          "$ref": "#/$defs/DecodeTextRequest"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "DecodeTextHostReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/DecodeTextHostKind"
+        },
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/DecodeTextResult"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "ReadCredentialHostKind": {
+      "type": "string",
+      "const": "readCredential"
+    },
+    "ReadCredentialHostRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ReadCredentialHostKind"
+        },
+        "input": {
+          "$ref": "#/$defs/CredentialReadRequest"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "ReadCredentialHostReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ReadCredentialHostKind"
+        },
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/CredentialReadResult"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "InteractHostKind": {
+      "type": "string",
+      "const": "interact"
+    },
+    "InteractHostRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/InteractHostKind"
+        },
+        "input": {
+          "$ref": "#/$defs/InteractionRequest"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "InteractHostReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/InteractHostKind"
+        },
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/InteractionResult"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "HostMethod": {
+      "type": "string",
+      "enum": [
+        "http",
+        "dom",
+        "decodeText",
+        "readCredential",
+        "interact"
+      ]
+    },
+    "HostRequest": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/HttpHostRequest"
+        },
+        {
+          "$ref": "#/$defs/DomHostRequest"
+        },
+        {
+          "$ref": "#/$defs/DecodeTextHostRequest"
+        },
+        {
+          "$ref": "#/$defs/ReadCredentialHostRequest"
+        },
+        {
+          "$ref": "#/$defs/InteractHostRequest"
+        }
+      ]
+    },
+    "HostCall": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "request": {
+          "$ref": "#/$defs/HostRequest"
+        }
+      },
+      "required": [
+        "id",
+        "context",
+        "request"
+      ],
+      "additionalProperties": false
+    },
+    "HostFailureReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/FailureKind"
+        },
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "method": {
+          "$ref": "#/$defs/HostMethod"
+        },
+        "error": {
+          "$ref": "#/$defs/OperationError"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "context",
+        "method",
+        "error"
+      ],
+      "additionalProperties": false
+    },
+    "HostReply": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/HttpHostReply"
+        },
+        {
+          "$ref": "#/$defs/DomHostReply"
+        },
+        {
+          "$ref": "#/$defs/DecodeTextHostReply"
+        },
+        {
+          "$ref": "#/$defs/ReadCredentialHostReply"
+        },
+        {
+          "$ref": "#/$defs/InteractHostReply"
+        },
+        {
+          "$ref": "#/$defs/HostFailureReply"
+        }
+      ]
+    }
+  },
+  "x-host": {
+    "http": {
+      "input": "HTTPRequest",
+      "output": "HTTPResponse",
+      "capability": "http"
+    },
+    "dom": {
+      "input": "DOMQuery",
+      "output": "DOMResult",
+      "capability": "dom"
+    },
+    "decodeText": {
+      "input": "DecodeTextRequest",
+      "output": "DecodeTextResult",
+      "capability": null
+    },
+    "readCredential": {
+      "input": "CredentialReadRequest",
+      "output": "CredentialReadResult",
+      "capability": "credentials.read"
+    },
+    "interact": {
+      "input": "InteractionRequest",
+      "output": "InteractionResult",
+      "capability": null
+    }
+  },
+  "x-operations": {
+    "search": {
+      "input": "SearchInput",
+      "output": "SearchPage",
+      "required": true
+    },
+    "book": {
+      "input": "BookInput",
+      "output": "BookDetails",
+      "required": true
+    },
+    "chapters": {
+      "input": "ChaptersInput",
+      "output": "ChaptersPage",
+      "required": true
+    },
+    "chapter": {
+      "input": "ChapterInput",
+      "output": "ChapterResult",
+      "required": true
+    },
+    "authenticate": {
+      "input": "AuthenticationInput",
+      "output": "AuthenticationResult",
+      "required": false
     }
   }
 }

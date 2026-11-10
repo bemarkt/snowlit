@@ -20,6 +20,14 @@ struct WireContractTests {
             case "CredentialHandle": _ = try YingxueWireCodec.decode(YingxueWire.CredentialHandle.self, from: bytes)
             case "CredentialReadRequest": _ = try YingxueWireCodec.decode(YingxueWire.CredentialReadRequest.self, from: bytes)
             case "CredentialReadResult": _ = try YingxueWireCodec.decode(YingxueWire.CredentialReadResult.self, from: bytes)
+            case "HTTPRequest": _ = try YingxueWireCodec.decode(YingxueWire.HTTPRequest.self, from: bytes)
+            case "HTTPResponse": _ = try YingxueWireCodec.decode(YingxueWire.HTTPResponse.self, from: bytes)
+            case "DecodeTextRequest": _ = try YingxueWireCodec.decode(YingxueWire.DecodeTextRequest.self, from: bytes)
+            case "DOMQuery": _ = try YingxueWireCodec.decode(YingxueWire.DOMQuery.self, from: bytes)
+            case "DOMResult": _ = try YingxueWireCodec.decode(YingxueWire.DOMResult.self, from: bytes)
+            case "InteractionRequest": _ = try YingxueWireCodec.decode(YingxueWire.InteractionRequest.self, from: bytes)
+            case "InteractionResult": _ = try YingxueWireCodec.decode(YingxueWire.InteractionResult.self, from: bytes)
+            case "AuthenticationResult": _ = try YingxueWireCodec.decode(YingxueWire.AuthenticationResult.self, from: bytes)
             default: Issue.record("Add typed decoding for this valid corpus model")
             }
         } else {

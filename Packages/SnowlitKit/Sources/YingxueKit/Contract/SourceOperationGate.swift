@@ -24,6 +24,9 @@ public actor SourceOperationGate {
     var credentialPolicy: SourceCredentialPolicy?
     var credentialHandles: [UUID: SourceCredentialLease] = [:]
     var revokedCredentialConsents: Set<UUID> = []
+    var interactions: [String: YingxueWire.InteractionPresentation] = [:]
+    var hostCalls: [String: YingxueWire.HostCall] = [:]
+    var hostCallIDs: Set<String> = []
 
     public init(installationID: SourceInstallationID, scriptSHA256: String,
                 configurationRevision: Int, sessionRevision: Int, enabled: Bool = true,
@@ -78,6 +81,8 @@ public actor SourceOperationGate {
         try check(ticket)
         pending.removeValue(forKey: ticket.id)
         discardCredentials(for: ticket.call.context.requestID)
+        discardInteractions(for: ticket.call.context.requestID)
+        discardHostCalls(for: ticket.call.context.requestID)
     }
 
     /// Cancels exactly this owned consumer. Backends still receive explicit cancellation.
@@ -86,6 +91,8 @@ public actor SourceOperationGate {
         guard pending[ticket.id] == ticket.call.context else { return false }
         pending.removeValue(forKey: ticket.id)
         discardCredentials(for: ticket.call.context.requestID)
+        discardInteractions(for: ticket.call.context.requestID)
+        discardHostCalls(for: ticket.call.context.requestID)
         return true
     }
 
@@ -115,6 +122,9 @@ public actor SourceOperationGate {
         let requests = pending.values.map(\.requestID).sorted()
         pending.removeAll()
         credentialHandles.removeAll()
+        interactions.removeAll()
+        hostCalls.removeAll()
+        hostCallIDs.removeAll()
         generation = UUID()
         return requests
     }
@@ -143,6 +153,7 @@ extension YingxueWire.OperationInput {
         case .book: .book
         case .chapters: .chapters
         case .chapter: .chapter
+        case .authenticate: .authenticate
         }
     }
 }
@@ -154,6 +165,7 @@ extension YingxueWire.OperationReply {
         case .book(let value): value.context
         case .chapters(let value): value.context
         case .chapter(let value): value.context
+        case .authenticate(let value): value.context
         case .failure(let value): value.context
         }
     }
@@ -163,6 +175,7 @@ extension YingxueWire.OperationReply {
         case .book: .book
         case .chapters: .chapters
         case .chapter: .chapter
+        case .authenticate: .authenticate
         case .failure(let value): value.operation
         }
     }
