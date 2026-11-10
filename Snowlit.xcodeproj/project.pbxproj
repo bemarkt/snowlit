@@ -31,10 +31,12 @@
 		A10000000000000000000013 /* YingxueKit in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000003 /* YingxueKit */; };
 		A10000000000000000000014 /* SnowlitReader in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000004 /* SnowlitReader */; };
 		A10000000000000000000007 /* SourceLibraryModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000007 /* SourceLibraryModel.swift */; };
+		A1000000000000000000000B /* SourceManagementModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000B /* SourceManagementModel.swift */; };
 		A10000000000000000000008 /* SourceFileInspector.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000008 /* SourceFileInspector.swift */; };
 		A10000000000000000000009 /* SourceFileReader.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000009 /* SourceFileReader.swift */; };
 		A1000000000000000000000A /* SourceLibraryView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A2000000000000000000000A /* SourceLibraryView.swift */; };
 		A10000000000000000000035 /* SourceLibraryModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000035 /* SourceLibraryModelTests.swift */; };
+		A10000000000000000000037 /* SourceManagementModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000037 /* SourceManagementModelTests.swift */; };
 		A10000000000000000000036 /* SourceFileInspectorTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000036 /* SourceFileInspectorTests.swift */; };
 /* End PBXBuildFile section */
 
@@ -64,10 +66,12 @@
 		A20000000000000000000025 /* WebKitRecoveryTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/WebKitRecoveryTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000026 /* ReaderProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/ReaderProbeTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000007 /* SourceLibraryModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceLibraryModel.swift; sourceTree = "<group>"; };
+		A2000000000000000000000B /* SourceManagementModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceManagementModel.swift; sourceTree = "<group>"; };
 		A20000000000000000000008 /* SourceFileInspector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceFileInspector.swift; sourceTree = "<group>"; };
 		A20000000000000000000009 /* SourceFileReader.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceFileReader.swift; sourceTree = "<group>"; };
 		A2000000000000000000000A /* SourceLibraryView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Sources/SourceLibraryView.swift; sourceTree = "<group>"; };
 		A20000000000000000000035 /* SourceLibraryModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/SourceLibraryModelTests.swift; sourceTree = "<group>"; };
+		A20000000000000000000037 /* SourceManagementModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/SourceManagementModelTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000036 /* SourceFileInspectorTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/SourceFileInspectorTests.swift; sourceTree = "<group>"; };
 /* End PBXFileReference section */
 
@@ -110,6 +114,7 @@
 				A20000000000000000000009 /* SourceFileReader.swift */,
 				A20000000000000000000008 /* SourceFileInspector.swift */,
 				A20000000000000000000007 /* SourceLibraryModel.swift */,
+				A2000000000000000000000B /* SourceManagementModel.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -139,6 +144,7 @@
 				A20000000000000000000030 /* SourceContractProbeTests.swift */,
 				A20000000000000000000036 /* SourceFileInspectorTests.swift */,
 				A20000000000000000000035 /* SourceLibraryModelTests.swift */,
+				A20000000000000000000037 /* SourceManagementModelTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -235,7 +241,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A30000000000000000000012 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000021, A10000000000000000000023, A10000000000000000000024, A10000000000000000000025, A10000000000000000000026, A10000000000000000000028, A10000000000000000000029, A10000000000000000000035, A10000000000000000000036, A10000000000000000000030,); runOnlyForDeploymentPostprocessing = 0; };
+		A30000000000000000000012 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000021, A10000000000000000000023, A10000000000000000000024, A10000000000000000000025, A10000000000000000000026, A10000000000000000000028, A10000000000000000000029, A10000000000000000000035, A10000000000000000000037, A10000000000000000000036, A10000000000000000000030,); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000022 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000022, A10000000000000000000027,); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -251,6 +257,7 @@
 				A10000000000000000000009 /* SourceFileReader.swift in Sources */,
 				A10000000000000000000008 /* SourceFileInspector.swift in Sources */,
 				A10000000000000000000007 /* SourceLibraryModel.swift in Sources */,
+				A1000000000000000000000B /* SourceManagementModel.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
