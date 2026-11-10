@@ -47,6 +47,13 @@ struct SourceCredentialLease: Sendable {
 }
 
 extension SourceOperationGate {
+    /// Native form disclosure reflects the same current consent checked at use.
+    public func allowsCredentialRead(for ticket: Ticket) throws -> Bool {
+        try check(ticket)
+        guard let id = credentialPolicy?.consentID else { return false }
+        return !revokedCredentialConsents.contains(id)
+    }
+
     /// Called only by the host after a native credential form or trusted secret
     /// capture. The source cannot submit a storage key or invent its audience.
     public func issueCredential(_ record: StoredCredentialID, origins: [YingxueWire.Origin],

@@ -247,6 +247,134 @@ struct SourceFormModelTests {
     }
     #endif
 
+    @Test func formSessionRetainsCredentialsUntilOperationSuccessThenClosesTheirGate() async throws {
+        let host = try await FormHost()
+        let session = host.session()
+        let operation = Task {
+            try await session.run {
+                let result = try await session.present(host.presentation)
+                guard case .submitted(let submitted) = result,
+                      case .credential(let credential) = submitted.fields[1] else { throw FixtureFailure.requested }
+                let value = try await host.gate.credentialForHost(credential.handle,
+                    destination: URL(string: "https://forms.invalid/login")!, for: host.ticket, store: host.store)
+                #expect(value.bytes == Data("fixture-private-password".utf8))
+                #expect(await host.store.count == 1)
+                return credential.handle
+            }
+        }
+        let model = try await presentedForm(session)
+        #expect(!model.allowsCredentialRead)
+        fill(model); await model.submit()
+        let handle = try await operation.value
+        #expect(session.phase == .finished && session.form == nil)
+        #expect(await host.store.count == 0)
+        #expect(await host.gate.pendingCount == 0)
+        await #expect(throws: SourceOperationGate.Failure.staleOperation) {
+            try await host.gate.credentialForHost(handle, destination: URL(string: "https://forms.invalid/login")!,
+                for: host.ticket, store: host.store)
+        }
+    }
+
+    @Test func cancelledSessionWaitClosesPresentedFormAndDoesNotLeaveCredentials() async throws {
+        let host = try await FormHost()
+        let session = host.session()
+        let operation = Task { try await session.run { try await session.present(host.presentation) } }
+        let model = try await presentedForm(session)
+        fill(model)
+        operation.cancel()
+        await #expect(throws: (any Error).self) { try await operation.value }
+        #expect(model.isFinished && model.value(for: "password").isEmpty)
+        #expect(session.phase == .finished && session.form == nil)
+        #expect(await host.store.count == 0)
+        #expect(await host.gate.pendingCount == 0)
+    }
+
+    @Test func explicitSessionCancellationWaitsForCredentialWriteAndRejectsLateResult() async throws {
+        let host = try await FormHost()
+        let pending = FormPendingWork()
+        await host.store.holdNextWrite(pending)
+        let session = host.session()
+        let operation = Task { try await session.run { try await session.present(host.presentation) } }
+        let model = try await presentedForm(session)
+        fill(model)
+        let submitting = Task { await model.submit() }
+        await pending.waitUntilStarted()
+        try await session.cancel()
+        await submitting.value
+        await #expect(throws: (any Error).self) { try await operation.value }
+        #expect(await host.store.observedWriteCancellation)
+        #expect(await host.store.count == 0)
+        #expect(await host.gate.pendingCount == 0)
+        #expect(session.phase == .finished && session.form == nil)
+    }
+
+    @Test func failedSessionCleanupPreservesItsOwnerAndCannotReturnOperationSuccess() async throws {
+        let host = try await FormHost()
+        await host.store.failRemovals(1)
+        let session = host.session()
+        let operation = Task { try await session.run { try await session.present(host.presentation) } }
+        let model = try await presentedForm(session)
+        fill(model); await model.submit()
+        await #expect(throws: SourceFormSession.Failure.cleanupRequired) { try await operation.value }
+        #expect(session.phase == .cleanupRequired && session.form == nil)
+        #expect(await host.store.count == 1)
+        #expect(await host.gate.pendingCount == 0)
+        await #expect(throws: SourceFormSession.Failure.alreadyStarted) { try await session.run { 1 } }
+        try await session.retryCleanup()
+        #expect(session.phase == .finished)
+        #expect(await host.store.count == 0)
+        #expect(await Set(host.store.removedIDs).count == 1)
+    }
+
+    @Test func backendFailureAfterSubmissionAlsoDeletesCredentials() async throws {
+        let host = try await FormHost()
+        let session = host.session()
+        let operation = Task {
+            try await session.run {
+                _ = try await session.present(host.presentation)
+                throw FixtureFailure.requested
+            }
+        }
+        let model = try await presentedForm(session)
+        fill(model); await model.submit()
+        await #expect(throws: FixtureFailure.requested) { try await operation.value }
+        #expect(session.phase == .finished)
+        #expect(await host.store.count == 0)
+        #expect(await host.gate.pendingCount == 0)
+    }
+
+    @Test func formSessionRejectsOverlappingPresentationWithoutReplacingCurrentInputs() async throws {
+        let host = try await FormHost()
+        let session = host.session()
+        let operation = Task { try await session.run { try await session.present(host.presentation) } }
+        let model = try await presentedForm(session)
+        fill(model)
+        await #expect(throws: SourceFormSession.Failure.interactionPending) { try await session.present(host.presentation) }
+        #expect(session.form === model && model.value(for: "user") == "reader")
+        await model.cancel()
+        #expect(try await operation.value == .cancelled(.init(kind: .cancelled)))
+        #expect(session.phase == .finished)
+    }
+
+    @Test func formSessionDisclosesCurrentCredentialConsentAndRevocationClosesAccess() async throws {
+        let host = try await FormHost(allowRead: true)
+        let session = host.session()
+        let operation = Task { try await session.run { try await session.present(host.presentation) } }
+        let model = try await presentedForm(session)
+        #expect(model.allowsCredentialRead)
+        _ = await host.gate.revokeCredentialRead()
+        try await session.cancel()
+        await #expect(throws: (any Error).self) { try await operation.value }
+        #expect(model.isFinished && session.phase == .finished)
+        #expect(await host.store.count == 0)
+    }
+
+    private func presentedForm(_ session: SourceFormSession) async throws -> SourceFormModel {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        while session.form == nil, ContinuousClock.now < deadline { await Task.yield() }
+        return try #require(session.form)
+    }
+
     private func fill(_ model: SourceFormModel) {
         model.setValue("reader", for: "user"); model.setValue("fixture-private-password", for: "password")
     }
@@ -264,14 +392,16 @@ private final class FormHost {
     let capture: SourceFormCapture
     private(set) var submissions = 0
 
-    init(fields: [YingxueWire.InteractionField]? = nil) async throws {
+    init(fields: [YingxueWire.InteractionField]? = nil, allowRead: Bool = false) async throws {
         installation = .init()
         origins = [.init(scheme: .https, host: "forms.invalid")]
         let manifest = YingxueWire.Manifest(protocolVersion: 1, sourceID: "org.example.forms", name: "Forms", scriptVersion: "1",
-            referenceVersion: 1, stateVersion: 1, capabilities: [.http], origins: origins, authentication: [.form], publicConfiguration: [])
+            referenceVersion: 1, stateVersion: 1, capabilities: allowRead ? [.http, .credentialsRead] : [.http],
+            origins: origins, authentication: [.form], publicConfiguration: [])
         let digest = String(repeating: "a", count: 64)
         let policy = try SourceHostPolicy(installationID: installation, scriptSHA256: digest, manifest: manifest)
-        let credentials = try SourceCredentialPolicy(installationID: installation, scriptSHA256: digest, manifest: manifest)
+        let consent = allowRead ? try YingxueKit.SourceCredentialReadConsent(confirmedFor: installation, scriptSHA256: digest) : nil
+        let credentials = try SourceCredentialPolicy(installationID: installation, scriptSHA256: digest, manifest: manifest, consent: consent)
         gate = try SourceOperationGate(installationID: installation, scriptSHA256: digest,
             configurationRevision: 0, sessionRevision: 0, credentialPolicy: credentials)
         ticket = try await gate.begin(.authenticate(.init(kind: .authenticate, input: .init(reason: .signIn))))
@@ -292,6 +422,10 @@ private final class FormHost {
     func submit(_ input: SourceFormModel.Submission) async throws -> YingxueWire.InteractionResult {
         submissions += 1
         return try await capture.submit(input)
+    }
+
+    func session() -> SourceFormSession {
+        .init(gate: gate, ticket: ticket, store: store, sourceName: "Forms", sourceID: "org.example.forms")
     }
 }
 

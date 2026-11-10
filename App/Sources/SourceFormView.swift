@@ -1,6 +1,21 @@
 import SwiftUI
 import YingxueKit
 
+/// Attach at the operation's presentation surface. Dismissal targets the model
+/// captured by that sheet, so a delayed dismiss cannot close a newer form.
+struct SourceFormPresentation: ViewModifier {
+    let session: SourceFormSession
+
+    func body(content: Content) -> some View {
+        let presented = session.form
+        return content.sheet(item: Binding(get: { presented }, set: { value in
+            if value == nil { presented?.invalidate() }
+        })) { model in
+            SourceFormView(model: model)
+        }
+    }
+}
+
 struct SourceFormView: View {
     let model: SourceFormModel
     @Environment(\.dismiss) private var dismiss
