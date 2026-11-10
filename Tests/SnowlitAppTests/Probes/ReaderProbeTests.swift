@@ -8,6 +8,44 @@ import UIKit
 @Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct ReaderProbeTests {
+    @Test func visibleTextPositionSurvivesReflowIndependentlyOfTheSelection() throws {
+        let document = try fixture(repetitions: 300)
+        let viewport = ProbeViewport(document: document)
+        viewport.loadViewIfNeeded()
+        viewport.view.frame = CGRect(x: 0, y: 0, width: 390, height: 500)
+        try viewport.render(fontSize: 20, attachmentHeight: 40)
+        viewport.textView.selectedRange = NSRange(location: 0, length: 0)
+        let middle = ProbeTextAnchor(documentID: document.id, revision: document.revision,
+                                     paragraphID: "long", utf16Offset: String(repeating: "中文 👩🏽‍💻 e\u{301} long text。", count: 150).utf16.count)
+        try viewport.restoreVisible(.init(anchor: middle, verticalOffset: 80))
+        let visible = try viewport.captureVisiblePosition()
+        #expect(visible.anchor.paragraphID == "long")
+        #expect(visible.anchor != (try viewport.selectedAnchor()))
+        #expect(viewport.textView.selectedRange.location == 0)
+        let changes: [(CGFloat, CGFloat, CGFloat?)] = [(820, 32, 200), (600, 18, nil), (390, 24, 80), (390, 20, 40)]
+        for (width, size, imageHeight) in changes {
+            viewport.view.frame.size.width = width
+            try viewport.render(fontSize: size, attachmentHeight: imageHeight, maintaining: visible)
+            let measured = try viewport.visibleOffset(of: visible.anchor)
+            #expect(abs(measured - visible.verticalOffset) <= 1)
+            #expect(viewport.textView.selectedRange.location == 0)
+            let rectangle = viewport.view.convert(try viewport.caret(at: visible.anchor), from: viewport.textView.textInputView)
+            #expect(rectangle.intersects(viewport.view.bounds))
+            print("VisibleAnchorObservation width=\(width) font=\(size) expectedY=\(visible.verticalOffset) observedY=\(measured)")
+        }
+        let beginning = ProbeTextAnchor(documentID: document.id, revision: document.revision,
+                                        paragraphID: "first", utf16Offset: 0)
+        try viewport.restoreVisible(.init(anchor: beginning, verticalOffset: 400))
+        #expect(abs(viewport.textView.contentOffset.y + viewport.textView.adjustedContentInset.top) <= 1)
+        let end = ProbeTextAnchor(documentID: document.id, revision: document.revision,
+                                  paragraphID: "long", utf16Offset: document.paragraphs[2].text.utf16.count)
+        try viewport.restoreVisible(.init(anchor: end, verticalOffset: -400))
+        let lastRectangle = viewport.view.convert(try viewport.caret(at: end), from: viewport.textView.textInputView)
+        #expect(lastRectangle.intersects(viewport.view.bounds))
+        #expect(lastRectangle.maxY <= viewport.textView.frame.maxY + 1)
+        // Real drag gestures, cross-chapter windows and device frame timing remain separate probes.
+    }
+
     @Test func textKit2AndCoreTextLocateTheSameTextAtMultipleWidths() throws {
         let document = try fixture()
         let viewport = ProbeViewport(document: document)

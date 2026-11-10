@@ -7,6 +7,12 @@ import UIKit
 final class ProbeViewport: UIViewController {
     enum Failure: Error { case textKit2Unavailable, positionUnavailable }
 
+    /// Ephemeral display state. Only the semantic anchor belongs in persistent reading state.
+    struct VisiblePosition {
+        let anchor: ProbeTextAnchor
+        let verticalOffset: CGFloat
+    }
+
     let projection: ProbeTextProjection
     let textView = UITextView(usingTextLayoutManager: true)
     private(set) var commentButtons: [String: UIButton] = [:]
@@ -118,7 +124,43 @@ final class ProbeViewport: UIViewController {
     }
 
     func selectedAnchor() throws -> ProbeTextAnchor {
-        let offset = textView.selectedRange.location
+        try anchor(atLayoutOffset: textView.selectedRange.location)
+    }
+
+    func captureVisiblePosition() throws -> VisiblePosition {
+        view.layoutIfNeeded()
+        let point = CGPoint(x: textView.bounds.minX + textView.textContainerInset.left
+                                + textView.textContainer.lineFragmentPadding + 1,
+                            y: textView.bounds.minY + textView.adjustedContentInset.top + 1)
+        let inputPoint = textView.textInputView.convert(point, from: textView)
+        guard let position = textView.closestPosition(to: inputPoint) else { throw Failure.positionUnavailable }
+        let offset = textView.offset(from: textView.beginningOfDocument, to: position)
+        let anchor = try anchor(atLayoutOffset: offset)
+        return VisiblePosition(anchor: anchor, verticalOffset: try visibleOffset(of: anchor))
+    }
+
+    func visibleOffset(of anchor: ProbeTextAnchor) throws -> CGFloat {
+        let rectangle = view.convert(try caret(at: anchor), from: textView.textInputView)
+        return rectangle.minY - textView.frame.minY
+    }
+
+    func restoreVisible(_ position: VisiblePosition) throws {
+        let delta = try visibleOffset(of: position.anchor) - position.verticalOffset
+        let insets = textView.adjustedContentInset
+        let minimum = -insets.top
+        let maximum = max(minimum, textView.contentSize.height - textView.bounds.height + insets.bottom)
+        let offset = min(maximum, max(minimum, textView.contentOffset.y + delta))
+        textView.setContentOffset(CGPoint(x: textView.contentOffset.x, y: offset), animated: false)
+        textView.layoutIfNeeded()
+    }
+
+    func render(fontSize: CGFloat, attachmentHeight: CGFloat? = nil,
+                maintaining position: VisiblePosition) throws {
+        try render(fontSize: fontSize, attachmentHeight: attachmentHeight)
+        try restoreVisible(position)
+    }
+
+    private func anchor(atLayoutOffset offset: Int) throws -> ProbeTextAnchor {
         for paragraph in projection.document.paragraphs {
             if let logical = renderOffsets[paragraph.id]?.first(where: { $0.value == offset })?.key {
                 let anchor = ProbeTextAnchor(documentID: projection.document.id, revision: projection.document.revision,
