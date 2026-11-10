@@ -26,9 +26,16 @@ struct WebKitRecoveryTests {
             #expect((probe.webView.window != nil) == attached)
             let start = clock.now
             print("PreparationStarted attached=\(attached) repetition=\(repetition)")
-            try await probe.loadHTML("<!doctype html><html><head><title>Preparation comparison</title></head><body></body></html>")
-            #expect(try await probe.evaluate("return document.readyState;") == "complete")
-            print("PreparationObservation attached=\(attached) repetition=\(repetition) elapsed=\(start.duration(to: clock.now))")
+            do {
+                try await probe.loadHTML("<!doctype html><html><head><title>Preparation comparison</title></head><body></body></html>")
+                #expect(try await probe.evaluate("return document.readyState;") == "complete")
+                print("PreparationObservation attached=\(attached) repetition=\(repetition) result=ready elapsed=\(start.duration(to: clock.now))")
+            } catch {
+                // Keep the failure and sample the remaining repetitions. This
+                // distinguishes a first-load failure from every offscreen load.
+                Issue.record(error, "Preparation failed: attached=\(attached), repetition=\(repetition)")
+                print("PreparationObservation attached=\(attached) repetition=\(repetition) result=failed elapsed=\(start.duration(to: clock.now))")
+            }
         }
     }
 
