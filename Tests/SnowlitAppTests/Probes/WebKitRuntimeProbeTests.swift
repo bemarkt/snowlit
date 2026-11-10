@@ -52,6 +52,8 @@ struct WebKitRuntimeProbeTests {
         try await FixtureScenario.withScenario { fixture in
             let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
             defer { probe.close() }
+            #expect(probe.webView.window == nil)
+            #expect(probe.webView.configuration.preferences.inactiveSchedulingPolicy == .none)
             try await probe.load(fixture.url("dynamic"))
             try await FixtureScenario.eventually {
                 try await probe.evaluate("return document.querySelector('#content').dataset.ready ?? '';") == "true"

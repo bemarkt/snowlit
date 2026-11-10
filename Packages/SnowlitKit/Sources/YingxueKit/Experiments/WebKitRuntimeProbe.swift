@@ -23,6 +23,10 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
     init(dataStore: WKWebsiteDataStore) {
         let configuration = WKWebViewConfiguration()
         configuration.websiteDataStore = dataStore
+        // This probe intentionally has no window. The default offscreen policy
+        // suspends tasks; active source work requires normal scheduling. This
+        // does not bypass operation deadlines or establish process termination.
+        configuration.preferences.inactiveSchedulingPolicy = .none
         webView = WKWebView(frame: .zero, configuration: configuration)
         super.init()
         webView.navigationDelegate = self
@@ -118,7 +122,7 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
 
     private func observeFailure(operation: String, sequence: Int) {
         // Probe metadata only: no scripts, arguments, URLs, cookies or website content.
-        print("WebKitProbeObservation id=\(observationID) operation=\(operation) sequence=\(sequence) loading=\(webView.isLoading) terminations=\(terminationCount) pending=\(results.pendingCount) epochSeconds=\(Date().timeIntervalSince1970)")
+        print("WebKitProbeObservation id=\(observationID) operation=\(operation) sequence=\(sequence) loading=\(webView.isLoading) inWindow=\(webView.window != nil) inactiveScheduling=\(webView.configuration.preferences.inactiveSchedulingPolicy.rawValue) terminations=\(terminationCount) pending=\(results.pendingCount) epochSeconds=\(Date().timeIntervalSince1970)")
     }
 
     private func settleNavigation(_ completed: WKNavigation?, with result: Result<String, any Error>) {
