@@ -17,7 +17,8 @@ final class SourceManagementModel {
         let manifest: YingxueWire.Manifest
         let existing: SourceInstallationSnapshot?
         let prepared: SourceUpdateSnapshot?
-        let migrations: SourceUpdateMigrationValues?
+        let upgrade: SourceUpgradeAssessment?
+        let plan: SourceUpdateMigrationPlan?
         let configuration: [SourceSettingValue]
         var retainedBooks: Int { prepared?.books.count ?? 0 }
         var restoresAssociation: Bool { existing?.state == .removed }
@@ -32,10 +33,19 @@ final class SourceManagementModel {
     enum Action { case enable, disable, remove, signOut, retryCleanup }
     enum Failure: Error { case confirmationRequired, inconsistentValidation }
 
-    typealias Validator = @MainActor (SourceScriptSnapshot, SourceUpgradeAssessment?, SourceUpdateMigrationPlan?) async throws -> SourceUpdateMigrationValues?
+    /// Exact native confirmation for an isolated candidate run. These values do
+    /// not grant the candidate write access to the active installation.
+    struct ValidationRequest {
+        let candidate: Candidate
+        let configuration: [SourceSettingValue]
+        let allowCredentialRead: Bool
+    }
+
+    typealias Validator = @MainActor (ValidationRequest) async throws -> SourceUpdateMigrationValues?
 
     private(set) var candidate: Candidate?
     private(set) var isPreparing = false
+    private(set) var isValidating = false
     private(set) var isChanging = false
     private(set) var problem: Problem?
     private(set) var changed = 0
@@ -46,6 +56,11 @@ final class SourceManagementModel {
     @ObservationIgnored private let invalidate: @MainActor (SourceInstallationID) async -> Void
     @ObservationIgnored private let cleanup: @MainActor (SourceInstallationID, SourceSessionCleanup) async throws -> Void
     @ObservationIgnored private var preparationID: UUID?
+    @ObservationIgnored private var validationID: UUID?
+    // Finite candidate work is owned here so native cancellation also cancels
+    // the backend task. Its identity prevents an uncooperative late result from
+    // affecting a newer confirmation. No task owns the active installation.
+    @ObservationIgnored private var validationTask: Task<SourceUpdateMigrationValues?, any Error>?
 
     init(openLibrary: @escaping @Sendable () async throws -> LibraryDatabase,
          digest: @escaping SourceScriptSnapshot.Digest,
@@ -57,7 +72,7 @@ final class SourceManagementModel {
     }
 
     func prepare(importID: UUID) async {
-        guard !isChanging else { return }
+        guard !isChanging, !isValidating else { return }
         let attempt = UUID()
         preparationID = attempt; candidate = nil; problem = nil; isPreparing = true
         defer { if preparationID == attempt { isPreparing = false } }
@@ -94,12 +109,8 @@ final class SourceManagementModel {
             let plan = try prepared.map { try SourceUpdateMigrationPlan(prepared: $0) }
             try Task.checkCancellation()
             guard preparationID == attempt else { return }
-            let migrations = try await validate(script, upgrade, plan)
-            guard (prepared == nil) == (migrations == nil) else { throw Failure.inconsistentValidation }
-            try Task.checkCancellation()
-            guard preparationID == attempt else { return }
             candidate = .init(installationID: installationID, receipt: receipt, script: script, manifest: manifest,
-                existing: existing, prepared: prepared, migrations: migrations, configuration: configuration)
+                existing: existing, prepared: prepared, upgrade: upgrade, plan: plan, configuration: configuration)
         } catch {
             guard preparationID == attempt, !(error is CancellationError), !Task.isCancelled else { return }
             problem = .init(message: Self.message(for: error))
@@ -108,14 +119,22 @@ final class SourceManagementModel {
 
     func cancelPreparation() {
         guard !isChanging else { return }
+        validationTask?.cancel(); validationTask = nil; validationID = nil; isValidating = false
         preparationID = nil; candidate = nil; isPreparing = false; problem = nil
     }
 
     func confirm(candidateID: UUID, allowCredentialRead: Bool, restoreAssociation: Bool,
                  configuration: [SourceSettingValue]) async {
-        guard !isChanging, let candidate, candidate.id == candidateID else { return }
-        isChanging = true; problem = nil
-        defer { isChanging = false }
+        guard !isChanging, !isValidating, let candidate, candidate.id == candidateID else { return }
+        let attempt = UUID()
+        validationID = attempt; isValidating = true; problem = nil
+        var adopting = false
+        defer {
+            if validationID == attempt {
+                validationTask = nil; validationID = nil; isValidating = false
+            }
+            if adopting { isChanging = false }
+        }
         do {
             guard !candidate.restoresAssociation || restoreAssociation,
                   !allowCredentialRead || candidate.requestsCredentialRead else { throw Failure.confirmationRequired }
@@ -123,6 +142,18 @@ final class SourceManagementModel {
                 scriptSHA256: candidate.script.sha256, manifest: candidate.manifest)
             let values = try SourceConfiguration(policy: policy, revision: 0, saved: configuration).storedValues
             let consent: SnowlitCore.SourceCredentialReadConsent = allowCredentialRead ? .approvedForCandidate : .managedOnly
+            let request = ValidationRequest(candidate: candidate, configuration: values, allowCredentialRead: allowCredentialRead)
+            let work = Task { @MainActor [validate] in try await validate(request) }
+            validationTask = work
+            let migrations = try await withTaskCancellationHandler {
+                try await work.value
+            } onCancel: {
+                work.cancel()
+            }
+            try Task.checkCancellation()
+            guard validationID == attempt, self.candidate?.id == candidateID else { return }
+            guard (candidate.prepared == nil) == (migrations == nil) else { throw Failure.inconsistentValidation }
+            isValidating = false; isChanging = true; adopting = true
             let library = try await openLibrary()
             try Task.checkCancellation()
             if let existing = candidate.existing {
@@ -130,7 +161,7 @@ final class SourceManagementModel {
                 // repeats the complete CAS and revokes persistent write permits.
                 await invalidate(existing.id)
                 try Task.checkCancellation()
-                guard let prepared = candidate.prepared, let migrations = candidate.migrations else {
+                guard let prepared = candidate.prepared, let migrations else {
                     throw Failure.inconsistentValidation
                 }
                 if candidate.restoresAssociation {
@@ -146,6 +177,7 @@ final class SourceManagementModel {
             }
             self.candidate = nil; preparationID = nil; changed += 1
         } catch {
+            guard validationID == attempt else { return }
             guard !(error is CancellationError), !Task.isCancelled else { return }
             if error as? SourceInstallationFailure == .staleInstallation || error as? SourceUpdateFailure == .staleInventory {
                 self.candidate = nil; preparationID = nil
@@ -157,7 +189,7 @@ final class SourceManagementModel {
     /// Call remove only from the native removal confirmation. Reading data is
     /// retained by the store; website/Keychain cleanup remains separately retryable.
     func perform(_ action: Action, expected: SourceInstallationSnapshot) async {
-        guard !isChanging, !isPreparing else { return }
+        guard !isChanging, !isPreparing, !isValidating else { return }
         isChanging = true; problem = nil; candidate = nil; preparationID = nil
         defer { isChanging = false }
         do {

@@ -41,6 +41,42 @@ struct SourceManagementModelTests {
         }
     }
 
+    @Test func validationUsesOnlyTheExplicitlyConfirmedConfigurationAndPermission() async throws {
+        try await withLibrary { _, library in
+            let receipt = try await Self.stage(library, withConfiguration: true)
+            var observed: SourceManagementModel.ValidationRequest?
+            let model = Self.model(library, validate: { request in observed = request; return nil })
+            await model.prepare(importID: receipt.id)
+            let candidate = try #require(model.candidate)
+            #expect(observed == nil)
+            #expect(candidate.configuration == [.text(key: "category", value: "all")])
+            let confirmed: [SourceSettingValue] = [.text(key: "category", value: "fiction")]
+            await model.confirm(candidateID: UUID(), allowCredentialRead: true, restoreAssociation: false, configuration: confirmed)
+            #expect(observed == nil)
+            await model.confirm(candidateID: candidate.id, allowCredentialRead: true, restoreAssociation: false, configuration: confirmed)
+            let request = try #require(observed)
+            #expect(request.candidate.id == candidate.id)
+            #expect(request.candidate.script.sha256 == candidate.script.sha256)
+            #expect(request.configuration == confirmed && request.allowCredentialRead)
+            let installed = try await library.sourceInstallations()
+            #expect(installed.first?.configuration == confirmed && installed.first?.allowsCredentialRead == true)
+        }
+    }
+
+    @Test func invalidConfigurationCannotStartCandidateCode() async throws {
+        try await withLibrary { _, library in
+            let receipt = try await Self.stage(library, withConfiguration: true)
+            var called = false
+            let model = Self.model(library, validate: { _ in called = true; return nil })
+            await model.prepare(importID: receipt.id)
+            let candidate = try #require(model.candidate)
+            await model.confirm(candidateID: candidate.id, allowCredentialRead: false, restoreAssociation: false,
+                configuration: [.boolean(key: "category", value: true)])
+            #expect(!called && model.problem != nil)
+            #expect(try await library.sourceInstallations().isEmpty)
+        }
+    }
+
     @Test func updateStopsOldExecutionAndDoesNotInheritCredentialConsent() async throws {
         try await withLibrary { _, library in
             let current = try await Self.install(library, consent: .approvedForCandidate)
@@ -63,9 +99,11 @@ struct SourceManagementModelTests {
         try await withLibrary { _, library in
             let current = try await Self.install(library, consent: .approvedForCandidate)
             let newer = try await Self.stage(library, version: 2)
-            let model = Self.model(library, validate: { _, _, _ in throw FixtureFailure.requested })
+            let model = Self.model(library, validate: { _ in throw FixtureFailure.requested })
             await model.prepare(importID: newer.id)
-            #expect(model.candidate == nil && model.problem != nil)
+            let candidate = try #require(model.candidate)
+            await model.confirm(candidateID: candidate.id, allowCredentialRead: true, restoreAssociation: false, configuration: [])
+            #expect(model.candidate?.id == candidate.id && model.problem != nil)
             #expect(try await library.sourceInstallations() == [current])
         }
     }
@@ -96,29 +134,76 @@ struct SourceManagementModelTests {
         try await withLibrary { _, library in
             let current = try await Self.install(library)
             let newer = try await Self.stage(library, version: 2)
-            let model = Self.model(library)
+            let pending = PendingCandidateValidation()
+            let model = Self.model(library, validate: { request in
+                await pending.run()
+                return try request.candidate.plan?.validate(references: [], state: nil)
+            })
             await model.prepare(importID: newer.id)
             let candidate = try #require(model.candidate)
+            let task = Task { await model.confirm(candidateID: candidate.id, allowCredentialRead: false,
+                restoreAssociation: false, configuration: []) }
+            await pending.waitUntilStarted()
             let book = try await library.addBook(reference: .init(installationID: current.id, referenceVersion: 1, key: "added-later"), title: "New local book", author: nil)
-            await model.confirm(candidateID: candidate.id, allowCredentialRead: false, restoreAssociation: false, configuration: [])
+            pending.finish()
+            await task.value
             #expect(model.candidate == nil && model.problem != nil)
             #expect(try await library.sourceInstallations() == [current])
             #expect(try await library.books() == [book])
         }
     }
 
-    @Test func cancelledValidationCannotPublishAConfirmation() async throws {
+    @Test func cancelledValidationCannotAdoptAfterDismissal() async throws {
         try await withLibrary { _, library in
             let receipt = try await Self.stage(library)
             let pending = PendingCandidateValidation()
-            let model = Self.model(library, validate: { _, _, _ in await pending.run(); return nil })
-            let task = Task { await model.prepare(importID: receipt.id) }
+            var backendWasCancelled = false
+            let model = Self.model(library, validate: { _ in
+                await pending.run()
+                backendWasCancelled = Task.isCancelled
+                return nil
+            })
+            await model.prepare(importID: receipt.id)
+            let candidate = try #require(model.candidate)
+            let task = Task { await model.confirm(candidateID: candidate.id, allowCredentialRead: false,
+                restoreAssociation: false, configuration: []) }
             await pending.waitUntilStarted()
             model.cancelPreparation()
             pending.finish()
             await task.value
-            #expect(model.candidate == nil && !model.isPreparing && model.problem == nil)
+            #expect(backendWasCancelled)
+            #expect(model.candidate == nil && !model.isPreparing && !model.isValidating && !model.isChanging && model.problem == nil)
             #expect(try await library.sourceInstallations().isEmpty)
+        }
+    }
+
+    @Test func lateCancelledValidationCannotReplaceANewerConfirmation() async throws {
+        try await withLibrary { _, library in
+            let receipt = try await Self.stage(library)
+            let pending = PendingCandidateValidation()
+            var calls = 0
+            let model = Self.model(library, validate: { _ in
+                calls += 1
+                if calls == 1 { await pending.run() }
+                return nil
+            })
+            await model.prepare(importID: receipt.id)
+            let first = try #require(model.candidate)
+            let task = Task { await model.confirm(candidateID: first.id, allowCredentialRead: true,
+                restoreAssociation: false, configuration: []) }
+            await pending.waitUntilStarted()
+            model.cancelPreparation()
+            await model.prepare(importID: receipt.id)
+            let second = try #require(model.candidate)
+            #expect(second.id != first.id && second.installationID != first.installationID)
+            await model.confirm(candidateID: second.id, allowCredentialRead: false, restoreAssociation: false, configuration: [])
+            pending.finish()
+            await task.value
+            let installed = try await library.sourceInstallations()
+            #expect(installed.count == 1 && installed.first?.id == second.installationID)
+            #expect(installed.first?.allowsCredentialRead == false)
+            #expect(calls == 2 && model.changed == 1 && model.problem == nil)
+            #expect(!model.isValidating && !model.isChanging)
         }
     }
 
@@ -160,7 +245,7 @@ struct SourceManagementModelTests {
     private enum FixtureFailure: Error { case requested }
 
     private static func model(_ library: LibraryDatabase,
-        validate: @escaping SourceManagementModel.Validator = { _, _, plan in try plan?.validate(references: [], state: nil) },
+        validate: @escaping SourceManagementModel.Validator = { request in try request.candidate.plan?.validate(references: [], state: nil) },
         invalidate: @escaping @MainActor (SourceInstallationID) async -> Void = { _ in },
         cleanup: @escaping @MainActor (SourceInstallationID, SourceSessionCleanup) async throws -> Void = { _, _ in }) -> SourceManagementModel {
         .init(openLibrary: { library }, digest: digest, validate: validate, invalidate: invalidate, cleanup: cleanup)
@@ -175,10 +260,12 @@ struct SourceManagementModelTests {
         String(repeating: String(decoding: data, as: UTF8.self).contains("\"scriptVersion\":\"2\"") ? "b" : "a", count: 64)
     }
 
-    private static func stage(_ library: LibraryDatabase, version: Int = 1, credentials: Bool = true) async throws -> SourceImportRecord {
+    private static func stage(_ library: LibraryDatabase, version: Int = 1, credentials: Bool = true,
+                              withConfiguration: Bool = false) async throws -> SourceImportRecord {
+        let configuration = withConfiguration ? #"[{"kind":"text","key":"category","label":"Category","initial":"all"}]"# : "[]"
         let bytes = Data("""
             /* @yingxue
-            {"protocolVersion":1,"sourceID":"org.example.management","name":"Fixture","scriptVersion":"\(version)","referenceVersion":1,"stateVersion":1,"capabilities":\(credentials ? "[\"credentials.read\"]" : "[]"),"origins":[],"authentication":[],"publicConfiguration":[]}
+            {"protocolVersion":1,"sourceID":"org.example.management","name":"Fixture","scriptVersion":"\(version)","referenceVersion":1,"stateVersion":1,"capabilities":\(credentials ? "[\"credentials.read\"]" : "[]"),"origins":[],"authentication":[],"publicConfiguration":\(configuration)}
             */
             export async function search(ctx, input) {}
             export async function book(ctx, input) {}

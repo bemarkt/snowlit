@@ -62,14 +62,14 @@ struct SourceManagementView: View {
                 }
             } else {
                 Section {
-                    Text(installed?.state == .removed ? "验证后可确认恢复本机保存的书籍关联。" : "验证通过后，再确认版本、访问范围和权限。")
+                    Text(installed?.state == .removed ? "核对并确认恢复本机保存的书籍关联，验证成功后生效。" : "先核对版本、设置与访问权限；确认后验证，通过才会采用。")
                         .foregroundStyle(.secondary)
-                    Button("验证并准备采用") { prepareRequest += 1 }
+                    Button("核对并准备采用") { prepareRequest += 1 }
                         .frame(minHeight: 44).accessibilityIdentifier("sources.prepare")
                 }
             }
             if management.isPreparing || management.isChanging {
-                Section { ProgressView(management.isPreparing ? "正在验证书源…" : "正在更新书源…") }
+                Section { ProgressView(management.isPreparing ? "正在准备确认…" : "正在更新书源…") }
             }
         }
         .navigationTitle("管理书源")
@@ -157,7 +157,7 @@ private struct SourceAdoptionView: View {
                         }
                     }
                 }
-                if candidate.migrations?.references != nil || candidate.migrations?.state != nil {
+                if candidate.plan?.referenceInputs.isEmpty == false || candidate.plan?.stateInput != nil {
                     Section("已有数据") {
                         Text("采用时将同时更新书源引用或公有状态。已保存正文与阅读位置保留原有身份。")
                             .font(.subheadline)
@@ -208,15 +208,16 @@ private struct SourceAdoptionView: View {
                 Section {
                     Button { confirmRequest += 1 } label: {
                         HStack {
-                            if management.isChanging { ProgressView() }
-                            Text(management.isChanging ? "正在采用…" : "确认采用此版本")
+                            if management.isChanging || management.isValidating { ProgressView() }
+                            Text(management.isValidating ? "正在验证…" : management.isChanging ? "正在采用…" : "验证并采用此版本")
                         }.frame(maxWidth: .infinity, minHeight: 44)
                     }
                     .buttonStyle(.borderedProminent)
-                    .disabled(management.isChanging || (candidate.restoresAssociation && !restoreAssociation) || management.candidate == nil)
+                    .disabled(management.isChanging || management.isValidating || (candidate.restoresAssociation && !restoreAssociation) || management.candidate == nil)
                     .accessibilityIdentifier("sources.confirm-adoption")
                 }
             }
+            .disabled(management.isChanging || management.isValidating)
             .scrollDismissesKeyboard(.interactively)
             .navigationTitle("确认书源")
             .navigationBarTitleDisplayMode(.inline)
