@@ -6,6 +6,7 @@ import Testing
 
 /// Rebuild schema 7, including its absence of migration history and reasons.
 func removeSourceReferenceHistorySchema(_ db: Database) throws {
+    try db.execute(sql: "DROP TABLE chapter_request; DROP TABLE chapter_cache;")
     for action in ["insert", "update", "delete"] {
         try db.execute(sql: "DROP TRIGGER inventory_source_reference_transition_\(action)")
     }
@@ -24,6 +25,10 @@ struct LibrarySourceReferenceMigrationTests {
             let reader = try await db.startReading(book.id)
             let position = try savedPosition(originalChapter)
             #expect(try await db.saveCheckpoint(position, session: reader, sequence: 1))
+            let originalDocument = try ChapterDocument(content: .init(chapter: originalChapter, sourceRevision: "original", blocks: [
+                .paragraph(.init(id: "p1", runs: [.text("Saved original text", .init())]))]), digest: ProbeFileStoreTests.sha256)
+            let originalWrite = try await db.beginChapterUpdate(bookID: book.id, chapter: originalChapter)
+            try await db.publishChapter(originalDocument, using: originalWrite, digest: ProbeFileStoreTests.sha256)
             var current = initial
             for version in [2, 3, 1, 2] {
                 let candidate = try await stage(db, version)
@@ -38,6 +43,15 @@ struct LibrarySourceReferenceMigrationTests {
                 #expect(try await db.checkpoint(for: book.id)?.position == position)
                 #expect(try await db.addBook(reference: book.reference, title: "Duplicate", author: nil).id == book.id)
                 #expect(try await db.saveCheckpoint(position, session: reader, sequence: Int64(current.revision)))
+                let newWrite = try await db.beginChapterUpdate(bookID: book.id, chapter: originalChapter)
+                #expect(newWrite.resolved.book == binding.reference)
+                #expect(newWrite.resolved.book.referenceVersion == version)
+                let content = try ChapterContent(chapter: newWrite.resolved, sourceRevision: "source-\(current.revision)", blocks: [
+                    .paragraph(.init(id: "p1", runs: [.text("Updated text", .init())]))])
+                let document = try ChapterDocument(content: content, digest: ProbeFileStoreTests.sha256)
+                try await db.publishChapter(document, using: newWrite, digest: ProbeFileStoreTests.sha256)
+                #expect(try await db.cachedChapter(bookID: book.id, chapter: originalChapter, digest: ProbeFileStoreTests.sha256) == document)
+                #expect(try await db.cachedChapter(bookID: book.id, chapter: originalChapter, revision: originalDocument.revision, digest: ProbeFileStoreTests.sha256) == originalDocument)
             }
             #expect(try await !db.publishCatalog(catalog, using: staleRequest))
             let history = try await db.queue.read { try LibraryDatabase.savedReferenceHistory($0, initial.id) }
@@ -196,7 +210,7 @@ struct LibrarySourceReferenceMigrationTests {
             let upgraded = try LibraryDatabase(existingAt: path)
             #expect(try await upgraded.books() == [book])
             #expect(try await upgraded.sourceInstallations() == [initial])
-            #expect(try await upgraded.queue.read { try Int.fetchOne($0, sql: "PRAGMA user_version") } == 8)
+            #expect(try await upgraded.queue.read { try Int.fetchOne($0, sql: "PRAGMA user_version") } == 9)
             try await upgraded.close()
         }
     }

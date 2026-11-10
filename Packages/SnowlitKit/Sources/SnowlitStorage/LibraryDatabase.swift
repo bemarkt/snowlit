@@ -17,6 +17,8 @@ public actor LibraryDatabase: LibraryStore {
     }
 
     let queue: DatabaseQueue
+    let chapterFiles: ChapterCacheFiles
+    let readOnly: Bool
     private var isClosed = false
 
     /// Dataset creation must be an explicit first-install/recovery decision.
@@ -48,12 +50,13 @@ public actor LibraryDatabase: LibraryStore {
                 try Self.migrateSourceInventoryRevision(db)
                 try Self.migrateChapterReferences(db)
                 try Self.migrateSourceReferenceHistory(db)
+                try Self.migrateChapterCache(db)
             }
         } else {
             let version = try queue.read { db in
                 let version = try Int.fetchOne(db, sql: "PRAGMA user_version")
                 guard try Int.fetchOne(db, sql: "PRAGMA application_id") == 0x534e4c54,
-                      let version, (1...8).contains(version) else {
+                      let version, (1...9).contains(version) else {
                     throw Failure.unsupportedSchema
                 }
                 guard try String.fetchOne(db, sql: "PRAGMA quick_check") == "ok",
@@ -83,12 +86,13 @@ public actor LibraryDatabase: LibraryStore {
                 if version >= 6 { try Self.validateSourceInventoryRevisionSchema(db) }
                 if version >= 7 { try Self.validateChapterReferenceSchema(db) }
                 if version >= 8 { try Self.validateSourceReferenceHistorySchema(db) }
+                if version >= 9 { try Self.validateChapterCacheSchema(db) }
                 return version
             }
-            if version != 8 {
+            if version != 9 {
                 guard !readOnly else { throw Failure.migrationRequired }
                 try queue.write { db in
-                    guard let current = try Int.fetchOne(db, sql: "PRAGMA user_version"), (1...8).contains(current) else {
+                    guard let current = try Int.fetchOne(db, sql: "PRAGMA user_version"), (1...9).contains(current) else {
                         throw Failure.unsupportedSchema
                     }
                     if current == 1 { try db.execute(sql: Self.publicStateSchema) }
@@ -98,10 +102,13 @@ public actor LibraryDatabase: LibraryStore {
                     if current < 6 { try Self.migrateSourceInventoryRevision(db) }
                     if current < 7 { try Self.migrateChapterReferences(db) }
                     if current < 8 { try Self.migrateSourceReferenceHistory(db) }
+                    if current < 9 { try Self.migrateChapterCache(db) }
                 }
             }
         }
         self.queue = queue
+        self.readOnly = readOnly
+        chapterFiles = ChapterCacheFiles(root: url.deletingPathExtension().appendingPathExtension("chapters"))
     }
 
     /// Exact remote binding is idempotent. Equal titles never merge different books.
