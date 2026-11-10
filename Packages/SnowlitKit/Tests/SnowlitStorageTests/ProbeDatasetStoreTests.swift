@@ -11,7 +11,6 @@ struct ProbeDatasetStoreTests {
             let incoming = Data("incoming dataset".utf8)
             let snapshot = directory.appendingPathComponent("snapshot")
             try await makeSnapshot(at: snapshot, data: incoming)
-            let entered = DispatchSemaphore(value: 0)
             let release = DispatchSemaphore(value: 0)
             let didBlock = Mutex(false)
             let store = try ProbeDatasetStore(root: directory.appendingPathComponent("active"), create: true) { data in
@@ -21,7 +20,6 @@ struct ProbeDatasetStoreTests {
                     return true
                 }
                 if block {
-                    entered.signal()
                     guard release.wait(timeout: .now() + 5) == .success else {
                         throw ProbeDatasetStore.Failure.busy
                     }
@@ -33,7 +31,8 @@ struct ProbeDatasetStoreTests {
             do {
                 let clock = ContinuousClock()
                 let deadline = clock.now.advanced(by: .seconds(3))
-                while entered.wait(timeout: .now()) != .success {
+                // Observe readiness without calling a blocking API from this async test.
+                while !didBlock.withLock({ $0 }) {
                     guard clock.now < deadline else { throw ProbeDatasetStore.Failure.busy }
                     try await Task.sleep(for: .milliseconds(10))
                 }
