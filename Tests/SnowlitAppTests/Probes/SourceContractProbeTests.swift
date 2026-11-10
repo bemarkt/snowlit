@@ -84,7 +84,7 @@ private final class NativeContractProbe: NSObject, WKScriptMessageHandlerWithRep
     private let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
     private let world = WKContentWorld.world(name: "Snowlit.ContractProbe")
     private let credentials: KeychainCredentialStore
-    private let session: URLSession
+    private let transport = SourceHTTPTransport()
     private var operation: SourceOperationGate.Ticket?
     private let worker: SourceWorkerSession?
     private var window: UIWindow?
@@ -101,10 +101,6 @@ private final class NativeContractProbe: NSObject, WKScriptMessageHandlerWithRep
         gate = try .init(installationID: installation, scriptSHA256: digest, configurationRevision: 0,
             sessionRevision: 0, credentialPolicy: credentialsPolicy)
         credentials = try .init(servicePrefix: "io.github.bemarkt.snowlit.tests.contract.\(UUID())")
-        let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 10
-        configuration.timeoutIntervalForResource = 15
-        session = URLSession(configuration: configuration, delegate: ContractNoRedirects(), delegateQueue: nil)
         super.init()
         probe.webView.configuration.userContentController.addScriptMessageHandler(self, contentWorld: world, name: "contractHost")
     }
@@ -213,14 +209,8 @@ private final class NativeContractProbe: NSObject, WKScriptMessageHandlerWithRep
         let reply: YingxueWire.HostReply
         switch call.request {
         case .http(let request):
-            let prepared = try await SourceHTTPContract.prepare(request.input, policy: policy, gate: gate, ticket: operation, credentials: credentials)
-            var native = URLRequest(url: prepared.url)
-            native.httpMethod = prepared.method; native.httpBody = prepared.body
-            native.allHTTPHeaderFields = prepared.headers
-            let (bytes, response) = try await session.data(for: native)
-            guard let response = response as? HTTPURLResponse, let url = response.url else { throw FixtureScenario.Failure.invalidResponse }
-            let headers = response.allHeaderFields.map { YingxueWire.HTTPResponseHeader(name: String(describing: $0.key), value: String(describing: $0.value)) }
-            let value = try SourceHTTPContract.response(status: response.statusCode, finalURL: url, headers: headers, body: bytes, policy: policy)
+            let value = try await transport.perform(request.input, policy: policy, gate: gate,
+                ticket: operation, credentials: credentials)
             reply = .http(.init(kind: .http, id: call.id, context: call.context, value: value))
         case .decodeText(let request):
             reply = .decodeText(.init(kind: .decodeText, id: call.id, context: call.context, value: try SourceTextDecoder.decode(request.input)))
@@ -255,15 +245,9 @@ private final class NativeContractProbe: NSObject, WKScriptMessageHandlerWithRep
         window?.isHidden = true; window = nil; previousWindow?.makeKeyAndVisible()
         probe.webView.configuration.userContentController.removeScriptMessageHandler(forName: "contractHost", contentWorld: world)
         probe.close()
-        session.invalidateAndCancel()
+        await transport.close()
         try await credentials.removeAll(for: installation)
     }
 }
 
-private final class ContractNoRedirects: NSObject, URLSessionTaskDelegate {
-    func urlSession(_ session: URLSession, task: URLSessionTask, willPerformHTTPRedirection response: HTTPURLResponse,
-                    newRequest request: URLRequest, completionHandler: @escaping @Sendable (URLRequest?) -> Void) {
-        completionHandler(nil)
-    }
-}
 #endif
