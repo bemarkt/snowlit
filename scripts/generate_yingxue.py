@@ -108,11 +108,18 @@ def swift():
                 fields += [f'{key}: {ptype}' + ('? = nil' if optional else '')]
                 assignments += [f'            self.{key} = {key}']
             output += ['        public init(' + ', '.join(fields) + ') {', *assignments, '        }']
-            output += ['        private enum CodingKeys: String, CodingKey { case ' + ', '.join(props) + ' }', '        public func encode(to encoder: any Encoder) throws {', '            var container = encoder.container(keyedBy: CodingKeys.self)']
-            output += [f'            try container.' + ('encode' if key in required else 'encodeIfPresent') + f'({key}, forKey: .{key})' for key in props]
-            output += ['        }', '    }']
+            if props:
+                output += ['        private enum CodingKeys: String, CodingKey { case ' + ', '.join(props) + ' }', '        public func encode(to encoder: any Encoder) throws {', '            var container = encoder.container(keyedBy: CodingKeys.self)']
+                output += [f'            try container.' + ('encode' if key in required else 'encodeIfPresent') + f'({key}, forKey: .{key})' for key in props]
+                output += ['        }']
+            else:
+                output += ['        public init(from decoder: any Decoder) throws {',
+                           '            _ = try decoder.container(keyedBy: WireDiscriminator.self)', '        }',
+                           '        public func encode(to encoder: any Encoder) throws {',
+                           '            _ = encoder.container(keyedBy: WireDiscriminator.self)', '        }']
+            output += ['    }']
             field_rules = ', '.join(f'{quote(key)}: .init(type: {quote(reference(prop))}, required: {str(key in required).lower()})' for key, prop in props.items())
-            rule = f'.object([{field_rules}])'
+            rule = f'.object([{field_rules}])' if props else '.object([:])'
         elif t == 'union':
             choices = alternatives(schema)
             output += [f'    public enum {name}: YingxueWireModel, Equatable {{', f'        public static let wireType = "{name}"']

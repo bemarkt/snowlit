@@ -508,5 +508,17 @@
     "type": "EvaluatePage",
     "json": "{\"page\":{\"id\":\"11111111-1111-1111-1111-111111111111\"},\"script\":\"return null;\",\"inputJSON\":\"null\"}",
     "valid": false
+  },
+  {
+    "name": "configuration-values",
+    "type": "ConfigurationSnapshot",
+    "json": "{\"revision\":3,\"values\":[{\"kind\":\"text\",\"key\":\"category\",\"value\":\"all\"},{\"kind\":\"boolean\",\"key\":\"compact\",\"value\":true}]}",
+    "valid": true
+  },
+  {
+    "name": "configuration-secret-kind",
+    "type": "ConfigurationSnapshot",
+    "json": "{\"revision\":3,\"values\":[{\"kind\":\"secret\",\"key\":\"password\",\"value\":\"synthetic-secret\"}]}",
+    "valid": false
   }
 ]

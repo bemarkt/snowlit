@@ -19,7 +19,7 @@ extension SourceOperationGate {
         case .readCredential: try policy.check(call.context, capability: .credentialsRead)
         case .readPublicState, .writePublicState: try policy.check(call.context, capability: .publicState)
         case .openPage, .evaluatePage, .closePage: try policy.check(call.context, capability: .browser)
-        case .interact, .decodeText: break
+        case .interact, .decodeText, .readConfiguration: break
         }
         let key = ticket.call.context.requestID + "/" + call.id
         guard hostCallIDs.insert(key).inserted else { throw SourceHostFailure.duplicateHostCall }
@@ -68,6 +68,7 @@ extension YingxueWire.HostRequest {
         case .openPage: .openPage
         case .evaluatePage: .evaluatePage
         case .closePage: .closePage
+        case .readConfiguration: .readConfiguration
         }
     }
 }
@@ -85,6 +86,7 @@ private extension YingxueWire.HostReply {
         case .openPage(let reply): (reply.id, reply.context, .openPage)
         case .evaluatePage(let reply): (reply.id, reply.context, .evaluatePage)
         case .closePage(let reply): (reply.id, reply.context, .closePage)
+        case .readConfiguration(let reply): (reply.id, reply.context, .readConfiguration)
         case .failure(let reply): (reply.id, reply.context, reply.method)
         }
     }

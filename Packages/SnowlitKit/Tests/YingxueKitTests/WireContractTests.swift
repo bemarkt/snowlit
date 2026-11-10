@@ -4,6 +4,36 @@ import Testing
 @testable import YingxueKit
 
 struct WireContractTests {
+    @Test func publicConfigurationRejectsUnknownDuplicateMistypedAndStaleValues() async throws {
+        #expect(try YingxueWireCodec.encode(YingxueWire.ReadConfiguration()) == Data("{}".utf8))
+        _ = try YingxueWireCodec.decode(YingxueWire.ReadConfiguration.self, from: Data("{}".utf8))
+        #expect(throws: WireViolation.self) { try YingxueWireCodec.decode(YingxueWire.ReadConfiguration.self, from: Data("{\"unknown\":true}".utf8)) }
+        let installation = SourceInstallationID(), digest = String(repeating: "a", count: 64)
+        let old = try YingxueWireCodec.decode(YingxueWire.Manifest.self, from: manifestBytes())
+        let manifest = YingxueWire.Manifest(protocolVersion: 1, sourceID: old.sourceID, name: old.name, scriptVersion: old.scriptVersion,
+            referenceVersion: 1, stateVersion: 1, capabilities: [], origins: [], authentication: [], publicConfiguration: [
+                .text(.init(kind: .text, key: "é", label: "first", initial: "a")),
+                .text(.init(kind: .text, key: "e\u{301}", label: "second", initial: "b")),
+                .boolean(.init(kind: .boolean, key: "compact", label: "compact", initial: false)),
+                .choice(.init(kind: .choice, key: "category", label: "category", initial: "all", choices: [.init(value: "all", label: "all")]))])
+        let policy = try SourceHostPolicy(installationID: installation, scriptSHA256: digest, manifest: manifest)
+        let gate = try SourceOperationGate(installationID: installation, scriptSHA256: digest, configurationRevision: 3, sessionRevision: 0)
+        let ticket = try await gate.begin(.search(.init(kind: .search, input: .init(query: "book", cursor: nil))))
+        let snapshot = try SourceConfiguration(policy: policy, revision: 3, overrides: [.boolean(.init(kind: .boolean, key: "compact", value: true))])
+        #expect(try snapshot.read(for: ticket.call.context).values == [
+            .text(.init(kind: .text, key: "é", value: "a")), .text(.init(kind: .text, key: "e\u{301}", value: "b")),
+            .boolean(.init(kind: .boolean, key: "compact", value: true)), .text(.init(kind: .text, key: "category", value: "all"))])
+        for invalid: [YingxueWire.ConfigurationValue] in [
+            [.text(.init(kind: .text, key: "password", value: "private"))],
+            [.text(.init(kind: .text, key: "compact", value: "true"))],
+            [.text(.init(kind: .text, key: "category", value: "missing"))],
+            [.boolean(.init(kind: .boolean, key: "compact", value: true)), .boolean(.init(kind: .boolean, key: "compact", value: false))]] {
+            #expect(throws: SourceConfigurationFailure.self) { try SourceConfiguration(policy: policy, revision: 3, overrides: invalid) }
+        }
+        #expect(throws: SourceConfigurationFailure.staleRevision) {
+            try SourceConfiguration(policy: policy, revision: 2).read(for: ticket.call.context)
+        }
+    }
     @Test(arguments: WireCorpusCase.all)
     func sharedCorpus(_ fixture: WireCorpusCase) throws {
         let bytes = Data(fixture.json.utf8)
@@ -41,6 +71,7 @@ struct WireContractTests {
             case "PageEvaluation": _ = try YingxueWireCodec.decode(YingxueWire.PageEvaluation.self, from: bytes)
             case "ClosePage": _ = try YingxueWireCodec.decode(YingxueWire.ClosePage.self, from: bytes)
             case "ClosedPage": _ = try YingxueWireCodec.decode(YingxueWire.ClosedPage.self, from: bytes)
+            case "ConfigurationSnapshot": _ = try YingxueWireCodec.decode(YingxueWire.ConfigurationSnapshot.self, from: bytes)
             default: Issue.record("Add typed decoding for this valid corpus model")
             }
         } else {

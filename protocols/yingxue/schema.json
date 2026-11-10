@@ -2519,7 +2519,8 @@
         "writePublicState",
         "openPage",
         "evaluatePage",
-        "closePage"
+        "closePage",
+        "readConfiguration"
       ]
     },
     "HostRequest": {
@@ -2553,6 +2554,9 @@
         },
         {
           "$ref": "#/$defs/ClosePageHostRequest"
+        },
+        {
+          "$ref": "#/$defs/ReadConfigurationHostRequest"
         }
       ]
     },
@@ -2638,6 +2642,9 @@
         },
         {
           "$ref": "#/$defs/ClosePageHostReply"
+        },
+        {
+          "$ref": "#/$defs/ReadConfigurationHostReply"
         }
       ]
     },
@@ -3376,6 +3383,128 @@
         "value"
       ],
       "additionalProperties": false
+    },
+    "ConfigurationText": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/TextSettingKind"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "value": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "ConfigurationFlag": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/BooleanSettingKind"
+        },
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "value": {
+          "$ref": "#/$defs/Flag"
+        }
+      },
+      "required": [
+        "kind",
+        "key",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "ConfigurationValue": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/ConfigurationText"
+        },
+        {
+          "$ref": "#/$defs/ConfigurationFlag"
+        }
+      ]
+    },
+    "ConfigurationValues": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ConfigurationValue"
+      }
+    },
+    "ReadConfiguration": {
+      "type": "object",
+      "properties": {},
+      "required": [],
+      "additionalProperties": false
+    },
+    "ConfigurationSnapshot": {
+      "type": "object",
+      "properties": {
+        "revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "values": {
+          "$ref": "#/$defs/ConfigurationValues"
+        }
+      },
+      "required": [
+        "revision",
+        "values"
+      ],
+      "additionalProperties": false
+    },
+    "ReadConfigurationHostKind": {
+      "type": "string",
+      "const": "readConfiguration"
+    },
+    "ReadConfigurationHostRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ReadConfigurationHostKind"
+        },
+        "input": {
+          "$ref": "#/$defs/ReadConfiguration"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "ReadConfigurationHostReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ReadConfigurationHostKind"
+        },
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/ConfigurationSnapshot"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
     }
   },
   "x-host": {
@@ -3428,6 +3557,11 @@
       "input": "ClosePage",
       "output": "ClosedPage",
       "capability": "browser"
+    },
+    "readConfiguration": {
+      "input": "ReadConfiguration",
+      "output": "ConfigurationSnapshot",
+      "capability": null
     }
   },
   "x-operations": {
