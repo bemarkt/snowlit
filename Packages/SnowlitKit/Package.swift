@@ -19,8 +19,8 @@ let package = Package(
         .target(name: "YingxueKit", dependencies: ["SnowlitCore"]),
         .target(name: "SnowlitReader", dependencies: ["SnowlitCore"]),
         .testTarget(name: "SnowlitCoreTests", dependencies: ["SnowlitCore"]),
-        .testTarget(name: "SnowlitStorageTests", dependencies: ["SnowlitStorage", .product(name: "GRDB", package: "GRDB.swift")]),
-        .testTarget(name: "YingxueKitTests", dependencies: ["YingxueKit"]),
+        .testTarget(name: "SnowlitStorageTests", dependencies: ["SnowlitCore", "SnowlitStorage", .product(name: "GRDB", package: "GRDB.swift")]),
+        .testTarget(name: "YingxueKitTests", dependencies: ["SnowlitCore", "YingxueKit"]),
     ],
     swiftLanguageModes: [.v6]
 )
