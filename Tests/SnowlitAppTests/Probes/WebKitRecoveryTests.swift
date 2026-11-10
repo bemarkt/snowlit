@@ -59,12 +59,26 @@ struct WebKitRecoveryTests {
                 return String(globalThis.retainedProbeBuffers.reduce((sum, bytes) => sum + bytes.byteLength, 0));
                 """) == "67108864")
             let active = probe!
-            let pending = Task { try await active.evaluate("return await new Promise(() => {});", timeout: .seconds(5)) }
+            // Keep the awaited promise reachable. Otherwise WebKit can collect
+            // its completion handlers before the supervisor injects the fault.
+            let pending = Task { try await active.evaluate("""
+                globalThis.pendingTerminationProbe = new Promise(resolve => {
+                  globalThis.resolveTerminationProbe = resolve;
+                });
+                return await globalThis.pendingTerminationProbe;
+                """, timeout: .seconds(5)) }
             defer { pending.cancel() }
             try await FixtureScenario.eventually { active.results.pendingCount == 1 }
+            try await FixtureScenario.eventually {
+                try await active.evaluate("return String(typeof globalThis.resolveTerminationProbe === 'function');") == "true"
+            }
             let token = UUID().uuidString.lowercased()
             let request = "TerminationRequest token=\(token) hostPID=\(ProcessInfo.processInfo.processIdentifier)\n"
             FileHandle.standardOutput.write(Data(request.utf8))
+            // Await the actual delegate signal independently of the evaluation
+            // callback, so a callback failure cannot immediately advance the
+            // suite while the already requested process fault is still pending.
+            try await FixtureScenario.eventually { active.terminationCount == 1 }
             await #expect(throws: ProbeResultRegistry<String>.Interruption.webContentTerminated) { try await pending.value }
             try #require(active.terminationCount == 1)
             #expect(active.results.pendingCount == 0)
