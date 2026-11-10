@@ -65,7 +65,18 @@ def main():
     termination = TerminationControl(args.log) if args.allow_test_termination else None
     if samples:
         samples.sample("before-command")
-    with args.log.open("wb") as output:
+    with args.log.open("wb") as output, args.log.open("rb") as live_log:
+        def publish_log(*, final=False):
+            # Read the persisted log independently. No pipe reader thread can
+            # outlive the command, and logging never changes its exit status.
+            # Bound each live pass so a noisy command cannot starve sampling.
+            for _ in range(1024 if final else 16):
+                chunk = live_log.read(65536)
+                if not chunk:
+                    break
+                sys.stdout.buffer.write(chunk)
+            sys.stdout.buffer.flush()
+
         process = subprocess.Popen(command, stdout=output, stderr=subprocess.STDOUT,
                                    start_new_session=True)
         try:
@@ -75,14 +86,14 @@ def main():
                 if remaining <= 0:
                     raise subprocess.TimeoutExpired(command, args.timeout)
                 try:
-                    exit_code = process.wait(timeout=min(0.25, remaining) if samples else remaining)
+                    exit_code = process.wait(timeout=min(0.25, remaining))
                     break
                 except subprocess.TimeoutExpired:
-                    if not samples:
-                        raise
-                    snapshot = samples.sample("command-running")
-                    if termination and snapshot:
-                        termination.poll(snapshot, lambda: samples.sample("before-test-termination"))
+                    if samples:
+                        snapshot = samples.sample("command-running")
+                        if termination and snapshot:
+                            termination.poll(snapshot, lambda: samples.sample("before-test-termination"))
+                    publish_log()
         except subprocess.TimeoutExpired:
             timed_out = True
             stop_group()
@@ -91,6 +102,8 @@ def main():
             interrupted = True
             stop_group()
             exit_code = 130
+        finally:
+            publish_log(final=True)
     command_exit_code = exit_code
     if samples:
         samples.sample("after-command")
