@@ -44,14 +44,22 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Cache locked package checkouts
-        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+      - name: Restore locked package checkouts
+        id: package-cache
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: build/SourcePackages
           key: spm-${{ runner.os }}-${{ runner.arch }}-xcode26.6-${{ hashFiles('Packages/SnowlitKit/Package.swift', 'Packages/SnowlitKit/Package.resolved', 'Snowlit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
       - name: Prepare signed simulator test host
         id: host
         run: bash scripts/ci.sh "${{ matrix.device }}" prepare
+      - name: Save resolved package checkouts
+        # Keep successfully built dependencies even if a later behavior test fails.
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && steps.package-cache.outputs.cache-hit != 'true' }}
+        uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: build/SourcePackages
+          key: ${{ steps.package-cache.outputs.cache-primary-key }}
       - name: Run baseline checks
         id: baseline
         if: ${{ !cancelled() && steps.host.conclusion == 'success' && env.SNOWLIT_CI_TASK == 'verify' }}
