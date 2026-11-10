@@ -18,6 +18,7 @@ extension SourceOperationGate {
         case .dom: try policy.check(call.context, capability: .dom)
         case .readCredential: try policy.check(call.context, capability: .credentialsRead)
         case .readPublicState, .writePublicState: try policy.check(call.context, capability: .publicState)
+        case .openPage, .evaluatePage, .closePage: try policy.check(call.context, capability: .browser)
         case .interact, .decodeText: break
         }
         let key = ticket.call.context.requestID + "/" + call.id
@@ -64,6 +65,9 @@ extension YingxueWire.HostRequest {
         case .interact: .interact
         case .readPublicState: .readPublicState
         case .writePublicState: .writePublicState
+        case .openPage: .openPage
+        case .evaluatePage: .evaluatePage
+        case .closePage: .closePage
         }
     }
 }
@@ -78,6 +82,9 @@ private extension YingxueWire.HostReply {
         case .interact(let reply): (reply.id, reply.context, .interact)
         case .readPublicState(let reply): (reply.id, reply.context, .readPublicState)
         case .writePublicState(let reply): (reply.id, reply.context, .writePublicState)
+        case .openPage(let reply): (reply.id, reply.context, .openPage)
+        case .evaluatePage(let reply): (reply.id, reply.context, .evaluatePage)
+        case .closePage(let reply): (reply.id, reply.context, .closePage)
         case .failure(let reply): (reply.id, reply.context, reply.method)
         }
     }

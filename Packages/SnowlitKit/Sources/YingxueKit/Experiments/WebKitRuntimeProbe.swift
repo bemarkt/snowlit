@@ -53,6 +53,7 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
     func evaluate(
         _ body: String,
         arguments: [String: Any] = [:],
+        contentWorld: WKContentWorld = .page,
         timeout: Duration = .seconds(10)
     ) async throws -> String {
         guard !isClosed else { throw Failure.closed }
@@ -60,7 +61,7 @@ final class WebKitRuntimeProbe: NSObject, WKNavigationDelegate {
         let sequence = evaluationCount
         do {
             return try await results.perform(timeout: timeout) { ticket in
-                webView.callAsyncJavaScript(body, arguments: arguments, in: nil, in: .page) {
+                webView.callAsyncJavaScript(body, arguments: arguments, in: nil, in: contentWorld) {
                     [weak self] result in
                     guard let self else { return }
                     switch result {

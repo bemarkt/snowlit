@@ -27,6 +27,7 @@ public actor SourceOperationGate {
     var interactions: [String: YingxueWire.InteractionPresentation] = [:]
     var hostCalls: [String: YingxueWire.HostCall] = [:]
     var hostCallIDs: Set<String> = []
+    var pages: [String: SourcePageState] = [:]
 
     public init(installationID: SourceInstallationID, scriptSHA256: String,
                 configurationRevision: Int, sessionRevision: Int, enabled: Bool = true,
@@ -83,6 +84,7 @@ public actor SourceOperationGate {
         discardCredentials(for: ticket.call.context.requestID)
         discardInteractions(for: ticket.call.context.requestID)
         discardHostCalls(for: ticket.call.context.requestID)
+        discardPages(for: ticket.call.context.requestID)
     }
 
     /// Cancels exactly this owned consumer. Backends still receive explicit cancellation.
@@ -93,6 +95,7 @@ public actor SourceOperationGate {
         discardCredentials(for: ticket.call.context.requestID)
         discardInteractions(for: ticket.call.context.requestID)
         discardHostCalls(for: ticket.call.context.requestID)
+        discardPages(for: ticket.call.context.requestID)
         return true
     }
 
@@ -125,6 +128,7 @@ public actor SourceOperationGate {
         interactions.removeAll()
         hostCalls.removeAll()
         hostCallIDs.removeAll()
+        pages.removeAll()
         generation = UUID()
         return requests
     }

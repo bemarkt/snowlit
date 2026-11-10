@@ -103,6 +103,16 @@ The transport disables automatic redirect forwarding. `SourceHTTPRedirects` reso
 
 [fixture.source.js](examples/fixture.source.js) demonstrates search, detail, two-page catalog, a native credential form, session verification, and protected chapter extraction. The Node contract suite executes it with a deterministic host double and validates both operation and host messages. It is author-contract evidence, not a live website, native networking, WebKit, or App UI acceptance result.
 
+## Dynamic pages
+
+`ctx.openPage` opens a declared HTTP(S) origin in the installation's website session and returns a page ID, navigation ID, and final URL. Every permitted main-frame navigation, including redirects and website-initiated navigation, invalidates the previous navigation handle before loading starts. A result from an older navigation cannot be adopted. The native adapter must check each navigation and redirect, not just the initial URL and final reply. This origin check does not claim that every subresource, iframe, or browser request passes through `ctx.http`.
+
+`ctx.evaluatePage` accepts the current handle, an asynchronous JavaScript function body, and `inputJSON`. The body receives the parsed value as `input` and returns a JSON-serializable value. The host passes input as data, evaluates in an isolated content world sharing the page DOM, and serializes the result into `PageEvaluation.json`. Page-world JavaScript globals and the source runtime's host bridge are not exposed in this world. This separation does not isolate DOM mutations, network access, or WebContent processes. Undefined, functions, symbols, BigInt, nonfinite numbers and cycles fail serialization rather than becoming successful empty content. Malformed JSON and duplicate object keys fail native validation. Page inputs and results may be private and must not enter shareable logs.
+
+The host checks the operation and navigation before evaluation and after the native callback. Closing, navigation, cancellation, logout, source replacement, and disablement prevent late results. `ctx.closePage` accepts the page ID so a source can clean up after its navigation handle has expired; repeated close returns `closed: false`. Pages are owned by one operation and cannot be borrowed by another. The native owner closes the WebView, requests and other resources when the operation ends. The gate only invalidates registrations; it does not establish that JavaScript execution has stopped.
+
+The App-hosted WebKit corpus exercises dynamic DOM extraction, isolated-world inputs, serialization failures, navigation and cancellation with delayed native callbacks. Until that corpus runs for the candidate SHA, portable tests establish only contract behavior.
+
 ## Local checks
 
 ```sh

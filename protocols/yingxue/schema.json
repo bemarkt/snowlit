@@ -2516,7 +2516,10 @@
         "readCredential",
         "interact",
         "readPublicState",
-        "writePublicState"
+        "writePublicState",
+        "openPage",
+        "evaluatePage",
+        "closePage"
       ]
     },
     "HostRequest": {
@@ -2541,6 +2544,15 @@
         },
         {
           "$ref": "#/$defs/WritePublicStateHostRequest"
+        },
+        {
+          "$ref": "#/$defs/OpenPageHostRequest"
+        },
+        {
+          "$ref": "#/$defs/EvaluatePageHostRequest"
+        },
+        {
+          "$ref": "#/$defs/ClosePageHostRequest"
         }
       ]
     },
@@ -2617,6 +2629,15 @@
         },
         {
           "$ref": "#/$defs/WritePublicStateHostReply"
+        },
+        {
+          "$ref": "#/$defs/OpenPageHostReply"
+        },
+        {
+          "$ref": "#/$defs/EvaluatePageHostReply"
+        },
+        {
+          "$ref": "#/$defs/ClosePageHostReply"
         }
       ]
     },
@@ -3121,6 +3142,240 @@
         "value"
       ],
       "additionalProperties": false
+    },
+    "PageHandle": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "navigationID": {
+          "$ref": "#/$defs/UUIDString"
+        }
+      },
+      "required": [
+        "id",
+        "navigationID"
+      ],
+      "additionalProperties": false
+    },
+    "OpenPage": {
+      "type": "object",
+      "properties": {
+        "target": {
+          "$ref": "#/$defs/URLReference"
+        }
+      },
+      "required": [
+        "target"
+      ],
+      "additionalProperties": false
+    },
+    "OpenedPage": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "$ref": "#/$defs/PageHandle"
+        },
+        "finalURL": {
+          "$ref": "#/$defs/Label"
+        }
+      },
+      "required": [
+        "page",
+        "finalURL"
+      ],
+      "additionalProperties": false
+    },
+    "EvaluatePage": {
+      "type": "object",
+      "properties": {
+        "page": {
+          "$ref": "#/$defs/PageHandle"
+        },
+        "script": {
+          "$ref": "#/$defs/Label"
+        },
+        "inputJSON": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "page",
+        "script",
+        "inputJSON"
+      ],
+      "additionalProperties": false,
+      "x-sensitive": true
+    },
+    "PageEvaluation": {
+      "type": "object",
+      "properties": {
+        "json": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "json"
+      ],
+      "additionalProperties": false,
+      "x-sensitive": true
+    },
+    "ClosePage": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "ClosedPage": {
+      "type": "object",
+      "properties": {
+        "closed": {
+          "$ref": "#/$defs/Flag"
+        }
+      },
+      "required": [
+        "closed"
+      ],
+      "additionalProperties": false
+    },
+    "OpenPageHostKind": {
+      "type": "string",
+      "const": "openPage"
+    },
+    "OpenPageHostRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/OpenPageHostKind"
+        },
+        "input": {
+          "$ref": "#/$defs/OpenPage"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "OpenPageHostReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/OpenPageHostKind"
+        },
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/OpenedPage"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "EvaluatePageHostKind": {
+      "type": "string",
+      "const": "evaluatePage"
+    },
+    "EvaluatePageHostRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/EvaluatePageHostKind"
+        },
+        "input": {
+          "$ref": "#/$defs/EvaluatePage"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "EvaluatePageHostReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/EvaluatePageHostKind"
+        },
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/PageEvaluation"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "ClosePageHostKind": {
+      "type": "string",
+      "const": "closePage"
+    },
+    "ClosePageHostRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ClosePageHostKind"
+        },
+        "input": {
+          "$ref": "#/$defs/ClosePage"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "ClosePageHostReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ClosePageHostKind"
+        },
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/ClosedPage"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
     }
   },
   "x-host": {
@@ -3158,6 +3413,21 @@
       "input": "WritePublicState",
       "output": "PublicStateWriteResult",
       "capability": "publicState"
+    },
+    "openPage": {
+      "input": "OpenPage",
+      "output": "OpenedPage",
+      "capability": "browser"
+    },
+    "evaluatePage": {
+      "input": "EvaluatePage",
+      "output": "PageEvaluation",
+      "capability": "browser"
+    },
+    "closePage": {
+      "input": "ClosePage",
+      "output": "ClosedPage",
+      "capability": "browser"
     }
   },
   "x-operations": {

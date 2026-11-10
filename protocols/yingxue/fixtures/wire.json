@@ -466,5 +466,47 @@
     "type": "StateMigrationResult",
     "json": "{\"fromVersion\":1,\"toVersion\":2,\"expectedRevision\":0,\"entries\":[{\"key\":\"newCategory\",\"value\":\"all\"}]}",
     "valid": true
+  },
+  {
+    "name": "page-open-request",
+    "type": "OpenPage",
+    "json": "{\"target\":{\"url\":\"https://fixture.invalid/dynamic\"}}",
+    "valid": true
+  },
+  {
+    "name": "page-open-result",
+    "type": "OpenedPage",
+    "json": "{\"page\":{\"id\":\"11111111-1111-1111-1111-111111111111\",\"navigationID\":\"22222222-2222-2222-2222-222222222222\"},\"finalURL\":\"https://fixture.invalid/dynamic\"}",
+    "valid": true
+  },
+  {
+    "name": "page-extraction",
+    "type": "EvaluatePage",
+    "json": "{\"page\":{\"id\":\"11111111-1111-1111-1111-111111111111\",\"navigationID\":\"22222222-2222-2222-2222-222222222222\"},\"script\":\"return document.querySelector(input.selector).textContent;\",\"inputJSON\":\"{\\\"selector\\\":\\\"main\\\"}\"}",
+    "valid": true
+  },
+  {
+    "name": "page-serialized-result",
+    "type": "PageEvaluation",
+    "json": "{\"json\":\"{\\\"text\\\":\\\"动态正文\\\"}\"}",
+    "valid": true
+  },
+  {
+    "name": "page-close-stale-navigation",
+    "type": "ClosePage",
+    "json": "{\"id\":\"11111111-1111-1111-1111-111111111111\"}",
+    "valid": true
+  },
+  {
+    "name": "page-close-result",
+    "type": "ClosedPage",
+    "json": "{\"closed\":true}",
+    "valid": true
+  },
+  {
+    "name": "page-missing-navigation",
+    "type": "EvaluatePage",
+    "json": "{\"page\":{\"id\":\"11111111-1111-1111-1111-111111111111\"},\"script\":\"return null;\",\"inputJSON\":\"null\"}",
+    "valid": false
   }
 ]

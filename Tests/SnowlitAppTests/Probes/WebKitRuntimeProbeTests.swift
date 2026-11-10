@@ -1,5 +1,6 @@
 #if os(iOS)
 import Foundation
+import SnowlitCore
 import Testing
 import WebKit
 @testable import YingxueKit
@@ -57,6 +58,90 @@ struct WebKitRuntimeProbeTests {
             }
             #expect(try await probe.evaluate("return document.querySelector('#content').textContent;") == "动态合成正文")
         }
+    }
+
+    @Test func pageContractExtractsInAnIsolatedWorldAndRejectsOldNavigationCallbacks() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            let (gate, policy) = try pageEnvironment()
+            let operation = try await gate.begin(.search(.init(kind: .search, input: .init(query: "fixture", cursor: nil))))
+            let page = try await gate.createPage(for: operation, policy: policy)
+            let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
+            defer { probe.close() }
+            let first = try await gate.beginNavigation(.init(url: fixture.url("dynamic").absoluteString), page: page)
+            try await probe.load(first.url)
+            let opened = try await gate.finishNavigation(first, finalURL: #require(probe.webView.url))
+            try await FixtureScenario.eventually {
+                try await probe.evaluate("return document.querySelector('#content').dataset.ready ?? '';") == "true"
+            }
+            _ = try await probe.evaluate("globalThis.siteOnlyValue = 'site'; return 'set';")
+            let input = "\"; throw new Error('data-is-not-code'); //"
+            let request = YingxueWire.EvaluatePage(page: opened.page,
+                script: "return {text: document.querySelector('#content').textContent, echo: input, siteGlobal: typeof siteOnlyValue};",
+                inputJSON: String(decoding: try JSONEncoder().encode(input), as: UTF8.self))
+            let json = try await evaluatePage(request, probe: probe, gate: gate, operation: operation)
+            let content = try JSONDecoder().decode([String: String].self, from: Data(json.json.utf8))
+            #expect(content == ["text": "动态合成正文", "echo": input, "siteGlobal": "undefined"])
+
+            let delayed = YingxueWire.EvaluatePage(page: opened.page, script: "await fetch(input); return {text: 'old'};",
+                inputJSON: String(decoding: try JSONEncoder().encode(fixture.url("wait/page-old").absoluteString), as: UTF8.self))
+            let pending = Task { try await evaluatePage(delayed, probe: probe, gate: gate, operation: operation) }
+            defer { pending.cancel() }
+            try await FixtureScenario.eventually { try await (fixture.status()["pending"] as? Int) == 1 }
+            let next = try await gate.beginNavigation(.init(url: fixture.url("page").absoluteString), page: page)
+            #expect(try await fixture.request("release/page-old", method: "POST").0 == 200)
+            await #expect(throws: SourcePageFailure.staleNavigation) { try await pending.value }
+            try await probe.load(next.url)
+            let renewed = try await gate.finishNavigation(next, finalURL: #require(probe.webView.url))
+            let fresh = try await evaluatePage(.init(page: renewed.page, script: "return document.querySelector('main').textContent;", inputJSON: "null"),
+                probe: probe, gate: gate, operation: operation)
+            #expect(fresh.json == "\"Ready\"")
+            #expect(try await gate.closePage(.init(id: page.id), for: operation).closed)
+            try await gate.finish(operation)
+        }
+    }
+
+    @Test func pageContractRejectsNonJSONAndCancelledNativeExtraction() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            let (gate, policy) = try pageEnvironment()
+            let operation = try await gate.begin(.search(.init(kind: .search, input: .init(query: "fixture", cursor: nil))))
+            let page = try await gate.createPage(for: operation, policy: policy)
+            let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
+            defer { probe.close() }
+            let navigation = try await gate.beginNavigation(.init(url: fixture.url("page").absoluteString), page: page)
+            try await probe.load(navigation.url)
+            let opened = try await gate.finishNavigation(navigation, finalURL: #require(probe.webView.url))
+            for script in ["return undefined;", "return {value: NaN};", "return [() => 1];", "const a = {}; a.self = a; return a;"] {
+                await #expect(throws: (any Error).self) {
+                    try await evaluatePage(.init(page: opened.page, script: script, inputJSON: "null"), probe: probe, gate: gate, operation: operation)
+                }
+            }
+            let request = YingxueWire.EvaluatePage(page: opened.page, script: "await fetch(input); return 'late';",
+                inputJSON: String(decoding: try JSONEncoder().encode(fixture.url("wait/page-cancel").absoluteString), as: UTF8.self))
+            let pending = Task { try await evaluatePage(request, probe: probe, gate: gate, operation: operation) }
+            defer { pending.cancel() }
+            try await FixtureScenario.eventually { try await (fixture.status()["pending"] as? Int) == 1 }
+            #expect(await gate.cancel(operation))
+            #expect(try await fixture.request("release/page-cancel", method: "POST").0 == 200)
+            await #expect(throws: SourceOperationGate.Failure.staleOperation) { try await pending.value }
+            #expect(await gate.pageIDs(for: operation).isEmpty)
+            // The owner still closes WebKit; registry cancellation is not JS termination.
+        }
+    }
+
+    private func pageEnvironment() throws -> (SourceOperationGate, SourceHostPolicy) {
+        let installation = SourceInstallationID(), digest = String(repeating: "a", count: 64)
+        let manifest = YingxueWire.Manifest(protocolVersion: 1, sourceID: "org.example.pages", name: "Fixture", scriptVersion: "1", referenceVersion: 1,
+            stateVersion: 1, capabilities: [.browser], origins: [.init(scheme: .http, host: "127.0.0.1", port: 18731)], authentication: [], publicConfiguration: [])
+        return (try .init(installationID: installation, scriptSHA256: digest, configurationRevision: 0, sessionRevision: 0),
+                try .init(installationID: installation, scriptSHA256: digest, manifest: manifest))
+    }
+
+    private func evaluatePage(_ request: YingxueWire.EvaluatePage, probe: WebKitRuntimeProbe,
+                              gate: SourceOperationGate, operation: SourceOperationGate.Ticket) async throws -> YingxueWire.PageEvaluation {
+        try await gate.preparePageEvaluation(request, for: operation)
+        let json = try await probe.evaluate(SourcePageProgram.body(for: request), arguments: ["inputJSON": request.inputJSON],
+            contentWorld: .world(name: "Snowlit.PageProbe"))
+        return try await gate.acceptPageEvaluation(YingxueWireCodec.encode(YingxueWire.PageEvaluation(json: json)), page: request.page, for: operation)
     }
 
     @Test func browserSelectsSameNameCookiesByPathAndHonorsHttpOnly() async throws {

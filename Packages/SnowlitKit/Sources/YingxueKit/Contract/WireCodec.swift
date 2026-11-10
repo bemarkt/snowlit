@@ -30,12 +30,21 @@ public enum YingxueWireCodec {
     }
 
     public static func validate(_ bytes: Data, as type: String) throws {
+        let value = try jsonValue(bytes)
+        try validate(value, as: type, path: "$")
+    }
+
+    /// Arbitrary serialized page input/output still rejects malformed JSON and
+    /// duplicate keys. JavaScript values that cannot serialize are not results.
+    public static func validateJSON(_ bytes: Data) throws { _ = try jsonValue(bytes) }
+
+    private static func jsonValue(_ bytes: Data) throws -> WireValue {
         let value: WireValue
         do { value = try JSONDecoder().decode(WireValue.self, from: bytes) }
         catch { throw WireViolation(path: "$", reason: .malformedJSON) }
         var keys = WireJSONKeys(bytes: Array(bytes))
         try keys.check()
-        try validate(value, as: type, path: "$")
+        return value
     }
 
     private static func validate(_ value: WireValue, as type: String, path: String) throws {

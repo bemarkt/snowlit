@@ -35,6 +35,12 @@ struct WireContractTests {
             case "PublicStateWriteResult": _ = try YingxueWireCodec.decode(YingxueWire.PublicStateWriteResult.self, from: bytes)
             case "StateMigrationInput": _ = try YingxueWireCodec.decode(YingxueWire.StateMigrationInput.self, from: bytes)
             case "StateMigrationResult": _ = try YingxueWireCodec.decode(YingxueWire.StateMigrationResult.self, from: bytes)
+            case "OpenPage": _ = try YingxueWireCodec.decode(YingxueWire.OpenPage.self, from: bytes)
+            case "OpenedPage": _ = try YingxueWireCodec.decode(YingxueWire.OpenedPage.self, from: bytes)
+            case "EvaluatePage": _ = try YingxueWireCodec.decode(YingxueWire.EvaluatePage.self, from: bytes)
+            case "PageEvaluation": _ = try YingxueWireCodec.decode(YingxueWire.PageEvaluation.self, from: bytes)
+            case "ClosePage": _ = try YingxueWireCodec.decode(YingxueWire.ClosePage.self, from: bytes)
+            case "ClosedPage": _ = try YingxueWireCodec.decode(YingxueWire.ClosedPage.self, from: bytes)
             default: Issue.record("Add typed decoding for this valid corpus model")
             }
         } else {
