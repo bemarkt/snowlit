@@ -8,6 +8,45 @@ import UIKit
 @Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct ReaderProbeTests {
+    @Test func chapterWindowPreservesVisibleIdentityAcrossForwardAndReverseReplacement() throws {
+        let documents = try (0..<5).map { number in
+            try ProbeDocument(id: "window-chapter-\(number)", paragraphs: (0..<24).map { paragraph in
+                ProbeParagraph(id: "p\(paragraph)", runs: [.text(String(repeating: "重复中文 👩🏽‍💻 e\u{301}。", count: 12))])
+            })
+        }
+        let window = ProbeChapterWindow()
+        window.loadViewIfNeeded()
+        window.view.frame = CGRect(x: 0, y: 0, width: 390, height: 600)
+        try window.render(Array(documents[0...2]), fontSize: 20)
+        for _ in 0..<3 {
+            // Move across a real chapter boundary before replacing the preceding chapter.
+            for (chapterIndex, range) in [(2, 1...3), (3, 2...4), (2, 1...3), (1, 0...2)] {
+                let document = documents[chapterIndex]
+                let target = ProbeTextAnchor(documentID: document.id, revision: document.revision,
+                                              paragraphID: "p12", utf16Offset: 0)
+                try window.restore(.init(anchor: target, y: 80))
+                let visible = try window.capture()
+                #expect(visible.anchor.documentID == document.id)
+                for (width, size) in [(CGFloat(390), CGFloat(28)), (844, 18), (390, 20)] {
+                    window.view.frame.size.width = width
+                    try window.render(Array(documents[range]), fontSize: size, maintaining: visible)
+                    #expect(abs(try window.visibleY(of: visible.anchor) - visible.y) <= 1)
+                    #expect(try window.capture().anchor.documentID == document.id)
+                    #expect(window.textView.textLayoutManager != nil)
+                    #expect(window.projection?.documents.map(\.id) == documents[range].map(\.id))
+                    print("ChapterWindowObservation chapter=\(document.id) width=\(width) font=\(size) visibleY=\(try window.visibleY(of: visible.anchor))")
+                }
+            }
+        }
+        let before = try window.capture()
+        let text = window.textView.text
+        #expect(throws: ProbeChapterProjection.Failure.chapterNotResident) {
+            try window.render(Array(documents[2...4]), fontSize: 20, maintaining: before)
+        }
+        #expect(window.textView.text == text)
+        #expect(try window.capture().anchor == before.anchor)
+    }
+
     @Test func visibleTextPositionSurvivesReflowIndependentlyOfTheSelection() throws {
         let document = try fixture(repetitions: 300)
         let viewport = ProbeViewport(document: document)
