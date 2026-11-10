@@ -12,11 +12,12 @@ let package = Package(
     ],
     dependencies: [
         .package(url: "https://github.com/groue/GRDB.swift.git", exact: "7.12.0"),
+        .package(url: "https://github.com/scinfu/SwiftSoup.git", exact: "2.14.3"),
     ],
     targets: [
         .target(name: "SnowlitCore"),
         .target(name: "SnowlitStorage", dependencies: ["SnowlitCore", .product(name: "GRDB", package: "GRDB.swift")]),
-        .target(name: "YingxueKit", dependencies: ["SnowlitCore"]),
+        .target(name: "YingxueKit", dependencies: ["SnowlitCore", .product(name: "SwiftSoup", package: "SwiftSoup")]),
         .target(name: "SnowlitReader", dependencies: ["SnowlitCore"]),
         .testTarget(name: "SnowlitCoreTests", dependencies: ["SnowlitCore"]),
         .testTarget(name: "SnowlitStorageTests", dependencies: ["SnowlitCore", "SnowlitStorage", .product(name: "GRDB", package: "GRDB.swift")]),

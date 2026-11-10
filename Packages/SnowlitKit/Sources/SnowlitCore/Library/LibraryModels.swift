@@ -72,6 +72,12 @@ public struct ReadingPosition: Equatable, Codable, Sendable {
         self.utf16Offset = utf16Offset
     }
 
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.chapter == rhs.chapter && lhs.documentRevision.utf8.elementsEqual(rhs.documentRevision.utf8)
+            && lhs.normalizationVersion == rhs.normalizationVersion
+            && lhs.elementID.utf8.elementsEqual(rhs.elementID.utf8) && lhs.utf16Offset == rhs.utf16Offset
+    }
+
     private enum CodingKeys: CodingKey {
         case chapter, documentRevision, normalizationVersion, elementID, utf16Offset
     }

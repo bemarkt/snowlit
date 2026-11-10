@@ -3,6 +3,8 @@ import GRDB
 import Testing
 #if canImport(CryptoKit)
 import CryptoKit
+#elseif os(Windows)
+import WinSDK
 #endif
 @testable import SnowlitStorage
 
@@ -372,24 +374,19 @@ struct ProbeFileStoreTests {
         #if canImport(CryptoKit)
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
         #elseif os(Windows)
-        // Portable test adapter only. Node computes real SHA-256; it is never an App dependency.
-        let executable = try #require(ProcessInfo.processInfo.environment["SNOWLIT_PROBE_NODE"])
-        let process = Process()
-        process.executableURL = URL(fileURLWithPath: executable)
-        process.arguments = ["-e", "const c=require('node:crypto'),h=c.createHash('sha256');process.stdin.on('data',d=>h.update(d));process.stdin.on('end',()=>process.stdout.write(h.digest('hex')));"]
-        let input = Pipe()
-        let output = Pipe()
-        process.standardInput = input
-        process.standardOutput = output
-        try process.run()
-        try input.fileHandleForWriting.write(contentsOf: data)
-        try input.fileHandleForWriting.close()
-        let result = try output.fileHandleForReading.readToEnd() ?? Data()
-        process.waitUntilExit()
-        #expect(process.terminationStatus == 0)
-        let digest = try #require(String(data: result, encoding: .utf8))
-        #expect(digest.count == 64)
-        return digest
+        // Avoid child-process handle inheritance during parallel file operations.
+        var provider: BCRYPT_ALG_HANDLE?
+        let algorithm = Array("SHA256".utf16) + [0]
+        let opened = algorithm.withUnsafeBufferPointer { BCryptOpenAlgorithmProvider(&provider, $0.baseAddress, nil, 0) }
+        try #require(opened == 0)
+        defer { _ = BCryptCloseAlgorithmProvider(provider, 0) }
+        var input = Array(data)
+        var output = [UInt8](repeating: 0, count: 32)
+        let status = input.withUnsafeMutableBufferPointer {
+            BCryptHash(provider, nil, 0, $0.baseAddress, ULONG($0.count), &output, 32)
+        }
+        try #require(status == 0)
+        return output.map { String(format: "%02x", $0) }.joined()
         #else
         throw ProbeFileStore.Failure.invalidStore
         #endif

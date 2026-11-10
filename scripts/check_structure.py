@@ -12,18 +12,26 @@ PACKAGE = ROOT / "Packages/SnowlitKit"
 DEPENDENCIES = {
     "SnowlitCore": set(),
     "SnowlitStorage": {"SnowlitCore", "GRDB"},
-    "YingxueKit": {"SnowlitCore"},
+    "YingxueKit": {"SnowlitCore", "SwiftSoup"},
     "SnowlitReader": {"SnowlitCore"},
 }
 IMPORTS = {
     "SnowlitCore": {"Foundation"},
     "SnowlitStorage": {"Foundation", "SnowlitCore", "GRDB"},
-    "YingxueKit": {"Foundation", "SnowlitCore", "WebKit"},
+    "YingxueKit": {"Foundation", "SnowlitCore", "WebKit", "SwiftSoup"},
     "SnowlitReader": {"Foundation", "SnowlitCore", "UIKit"},
 }
 GRDB_URL = "https://github.com/groue/GRDB.swift.git"
 GRDB_VERSION = "7.12.0"
 GRDB_REVISION = "92a554cd0d5e8d67cb18993c6054e73fe42c066c"
+EXTERNAL_PACKAGES = {
+    "grdb.swift": (GRDB_URL, GRDB_VERSION, GRDB_REVISION),
+    "swiftsoup": ("https://github.com/scinfu/SwiftSoup.git", "2.14.3", "e7f85f4d3dd91ca9a1e94d3328aa1ed5120a8c0f"),
+}
+EXTERNAL_PRODUCTS = {
+    "SnowlitStorage": ["GRDB", "GRDB.swift", None, None],
+    "YingxueKit": ["SwiftSoup", "SwiftSoup", None, None],
+}
 
 
 def require(condition, message):
@@ -49,22 +57,29 @@ def check_imports():
 def check_manifest():
     manifest = command_json("swift", "package", "--package-path", str(PACKAGE), "dump-package")
     external = manifest["dependencies"]
-    require(len(external) == 1 and set(external[0]) == {"sourceControl"},
-            "Only the reviewed GRDB dependency is allowed")
-    source = external[0]["sourceControl"]
-    require(len(source) == 1 and source[0]["identity"] == "grdb.swift"
-            and source[0]["location"] == {"remote": [{"urlString": GRDB_URL}]}
-            and source[0]["requirement"] == {"exact": [GRDB_VERSION]},
-            "GRDB must use its reviewed URL and exact version")
+    require(len(external) == len(EXTERNAL_PACKAGES), "Only reviewed dependencies are allowed")
+    identities = set()
+    for dependency in external:
+        require(set(dependency) == {"sourceControl"}, "Dependencies must be locked source-control packages")
+        source = dependency["sourceControl"]
+        require(len(source) == 1 and source[0]["identity"] in EXTERNAL_PACKAGES, "Unreviewed dependency")
+        identity = source[0]["identity"]
+        require(identity not in identities, "Duplicate dependency")
+        identities.add(identity)
+        url, version, _ = EXTERNAL_PACKAGES[identity]
+        require(source[0]["location"] == {"remote": [{"urlString": url}]}
+                and source[0]["requirement"] == {"exact": [version]}, "Dependency URL/version differs from review")
     for path in (PACKAGE / "Package.resolved",
                  ROOT / "Snowlit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved"):
         locked = json.loads(path.read_text(encoding="utf-8"))
         require(locked.get("version") in (2, 3), f"Unexpected lock format: {path}")
-        require(locked["pins"] == [{
-            "identity": "grdb.swift", "kind": "remoteSourceControl", "location": GRDB_URL,
-            "state": {"revision": GRDB_REVISION, "version": GRDB_VERSION},
-        }], f"Unreviewed or unlocked dependency in {path}")
+        expected_pins = [{"identity": identity, "kind": "remoteSourceControl", "location": url,
+                          "state": {"revision": revision, "version": version}}
+                         for identity, (url, version, revision) in EXTERNAL_PACKAGES.items()]
+        require(sorted(locked["pins"], key=lambda pin: pin["identity"]) == sorted(expected_pins, key=lambda pin: pin["identity"]),
+                f"Unreviewed or unlocked dependency in {path}")
     require((ROOT / "Licenses/GRDB.txt").is_file(), "GRDB license attribution is required")
+    require((ROOT / "Licenses/SwiftSoup.txt").is_file(), "SwiftSoup license attribution is required")
     require(manifest["swiftLanguageVersions"] == ["6"], "Swift 6 language mode is required")
     require(any(p["platformName"] == "ios" and p["version"] == "26.0"
                 for p in manifest["platforms"]), "Package minimum iOS must be 26.0")
@@ -75,10 +90,9 @@ def check_manifest():
         for entry in target["dependencies"]:
             require(len(entry) == 1, f"Unexpected dependency kind in {name}")
             if "product" in entry:
-                require(name == "SnowlitStorage"
-                        and entry["product"] == ["GRDB", "GRDB.swift", None, None],
+                require(entry["product"] == EXTERNAL_PRODUCTS.get(name),
                         f"Unexpected external product in {name}")
-                dependencies.add("GRDB")
+                dependencies.add(entry["product"][0])
             else:
                 require("byName" in entry or "target" in entry, f"Unexpected dependency kind in {name}")
                 dependencies.add(next(iter(entry.values()))[0])
