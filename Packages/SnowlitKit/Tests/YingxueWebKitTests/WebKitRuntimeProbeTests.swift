@@ -94,6 +94,74 @@ struct WebKitRuntimeProbeTests {
         }
     }
 
+    @Test func explicitCookieTransferPreservesPathsAndHTTPOnlyWithoutSharingNativeSessions() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
+            let native = nativeSession()
+            let isolated = nativeSession()
+            defer { probe.close(); native.invalidateAndCancel(); isolated.invalidateAndCancel() }
+            let nativeStore = try #require(native.configuration.httpCookieStorage)
+            try await probe.load(fixture.url("page"))
+            #expect(try await responseCode(probe, at: fixture.url("cookies/issue")) == "200")
+            #expect(try await nativeCookies(native, at: fixture.url("nested/cookies")).isEmpty)
+            let exported = await probe.webView.configuration.websiteDataStore.httpCookieStore.allCookies()
+            #expect(exported.count == 3)
+            for cookie in exported { nativeStore.setCookie(cookie) }
+            for cookie in exported {
+                let copied = try #require(nativeStore.cookies?.first {
+                    $0.name == cookie.name && $0.domain == cookie.domain && $0.path == cookie.path
+                })
+                #expect(copied.value == cookie.value && copied.isHTTPOnly == cookie.isHTTPOnly)
+            }
+            #expect(Set(try await nativeCookies(native, at: fixture.url("cookies"))) ==
+                    ["probeCookie=root", "probeCookie=scenario"])
+            #expect(Set(try await nativeCookies(native, at: fixture.url("nested/cookies"))) ==
+                    ["probeCookie=root", "probeCookie=scenario", "probeCookie=nested"])
+            #expect(try await nativeCookies(isolated, at: fixture.url("nested/cookies")).isEmpty)
+        }
+    }
+
+    @Test func explicitCookieTransferPropagatesSessionRotationAndLogout() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            let dataStore = WKWebsiteDataStore.nonPersistent()
+            let probe = WebKitRuntimeProbe(dataStore: dataStore)
+            let native = nativeSession()
+            defer { probe.close(); native.invalidateAndCancel() }
+            let nativeStore = try #require(native.configuration.httpCookieStorage)
+            let browserStore = dataStore.httpCookieStore
+            try await probe.load(fixture.url("page"))
+            #expect(try await probe.evaluate("""
+                return String((await fetch(url, {method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({password: 'fixture-password'})})).status);
+                """, arguments: ["url": fixture.url("auth/login").absoluteString]) == "200")
+            let loggedInCookies = await browserStore.allCookies()
+            let original = try #require(loggedInCookies.first { $0.name == "sid" })
+            #expect(original.isHTTPOnly)
+            #expect(try await nativeResponse(native, at: fixture.url("protected")).0 == 401)
+            nativeStore.setCookie(original)
+            #expect(try await nativeResponse(native, at: fixture.url("protected")).0 == 200)
+            #expect(try await nativeResponse(native, at: fixture.url("auth/rotate"), method: "POST").0 == 200)
+            let rotated = try #require(nativeStore.cookies?.first { $0.name == "sid" })
+            #expect(rotated.value != original.value && rotated.isHTTPOnly)
+            // Stores require explicit transfer; the browser still presents its revoked cookie.
+            #expect(try await responseCode(probe, at: fixture.url("protected")) == "401")
+            await browserStore.setCookie(rotated)
+            #expect(try await responseCode(probe, at: fixture.url("protected")) == "200")
+            #expect(try await probe.evaluate("return String(document.cookie.includes('sid='));") == "false")
+            #expect(try await nativeResponse(native, at: fixture.url("auth/logout"), method: "POST").0 == 200)
+            #expect(!(nativeStore.cookies ?? []).contains { $0.name == "sid" })
+            #expect(try await nativeResponse(native, at: fixture.url("protected")).0 == 401)
+            #expect(try await responseCode(probe, at: fixture.url("protected")) == "401")
+            let revokedCookies = await browserStore.allCookies()
+            #expect(revokedCookies.contains { $0.name == "sid" && $0.value == rotated.value })
+            await browserStore.deleteCookie(rotated)
+            let clearedCookies = await browserStore.allCookies()
+            #expect(!clearedCookies.contains { $0.name == "sid" })
+            // This tests explicit transfer/deletion, not a production synchronization policy.
+        }
+    }
+
     @Test(arguments: [false, true])
     func replacingSourceOrSessionRejectsLateJavaScript(sourceChanged: Bool) async throws {
         try await FixtureScenario.withScenario { fixture in
@@ -155,6 +223,28 @@ struct WebKitRuntimeProbeTests {
                               method: String = "GET") async throws -> String {
         try await probe.evaluate("return String((await fetch(url, {method})).status);",
                                  arguments: ["url": url.absoluteString, "method": method])
+    }
+
+    private func nativeSession() -> URLSession {
+        let configuration = URLSessionConfiguration.ephemeral
+        configuration.timeoutIntervalForRequest = 10
+        configuration.timeoutIntervalForResource = 15
+        return URLSession(configuration: configuration)
+    }
+
+    private func nativeResponse(_ session: URLSession, at url: URL,
+                                method: String = "GET") async throws -> (Int, Data) {
+        var request = URLRequest(url: url)
+        request.httpMethod = method
+        let (data, response) = try await session.data(for: request)
+        let http = try #require(response as? HTTPURLResponse)
+        return (http.statusCode, data)
+    }
+
+    private func nativeCookies(_ session: URLSession, at url: URL) async throws -> [String] {
+        let (code, data) = try await nativeResponse(session, at: url)
+        #expect(code == 200)
+        return try JSONDecoder().decode(CookieEcho.self, from: data).cookies
     }
 
     private func cookies(_ probe: WebKitRuntimeProbe, at url: URL) async throws -> [String] {
