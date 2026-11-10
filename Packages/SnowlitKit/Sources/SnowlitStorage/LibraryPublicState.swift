@@ -99,12 +99,16 @@ extension LibraryDatabase: SourcePublicStateStore {
     }
 
     private static func publicState(_ db: Database, _ access: SourcePublicStateAccess) throws -> SourcePublicState {
+        try publicState(db, installationID: access.installationID, version: access.stateVersion)
+    }
+
+    static func publicState(_ db: Database, installationID: SourceInstallationID, version: Int) throws -> SourcePublicState {
         guard let row = try Row.fetchOne(db, sql: "SELECT revision, entries FROM source_public_state WHERE installation=? AND state_version=?",
-                                        arguments: [access.installationID.rawValue.uuidString, access.stateVersion]) else {
-            return try .init(stateVersion: access.stateVersion, revision: 0, entries: [])
+                                        arguments: [installationID.rawValue.uuidString, version]) else {
+            return try .init(stateVersion: version, revision: 0, entries: [])
         }
         let bytes: Data = row["entries"]
-        return try .init(stateVersion: access.stateVersion, revision: row["revision"],
+        return try .init(stateVersion: version, revision: row["revision"],
                          entries: JSONDecoder().decode([SourcePublicStateEntry].self, from: bytes))
     }
 

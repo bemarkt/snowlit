@@ -10,7 +10,7 @@ struct LibraryBookReferenceTests {
             let (book, catalog, session, position) = try await seed(database)
             try await database.close()
             let raw = try DatabaseQueue(path: path.path)
-            try await raw.write { try $0.execute(sql: Self.schemaFour) }
+            try await raw.write { try removeSourceInventorySchema($0); try $0.execute(sql: Self.schemaFour) }
             try raw.close()
             let before = try Data(contentsOf: path)
             #expect(throws: LibraryDatabase.Failure.migrationRequired) { try LibraryDatabase(existingAt: path, readOnly: true) }
@@ -87,6 +87,7 @@ struct LibraryBookReferenceTests {
             try await database.close()
             let raw = try DatabaseQueue(path: path.path)
             try await raw.write { db in
+                try removeSourceInventorySchema(db)
                 try db.execute(sql: Self.schemaFour)
                 try db.execute(sql: "UPDATE reading_checkpoint SET position=? WHERE book_id=?",
                     arguments: [try JSONEncoder().encode(position), other.id.rawValue.uuidString])

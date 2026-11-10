@@ -54,7 +54,7 @@ extension LibraryDatabase: SourceScriptStore {
         }
     }
 
-    private static func decodeSourceImport(_ row: Row) throws -> SourceImportRecord {
+    static func decodeSourceImport(_ row: Row) throws -> SourceImportRecord {
         let rawID: String = row["id"]
         guard let id = UUID(uuidString: rawID) else { throw Failure.inconsistentData }
         return try SourceImportRecord(id: id, scriptSHA256: row["script_sha256"],

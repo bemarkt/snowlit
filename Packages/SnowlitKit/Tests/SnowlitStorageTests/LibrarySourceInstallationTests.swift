@@ -188,7 +188,7 @@ struct LibrarySourceInstallationTests {
             let candidate = try await stage(database, "one")
             try await database.close()
             let raw = try DatabaseQueue(path: path.path)
-            try await raw.write { try $0.execute(sql: "DROP TABLE book_reference; ALTER TABLE library_book DROP COLUMN catalog_reference; DROP TABLE source_installation; PRAGMA user_version=3;") }
+            try await raw.write { try removeSourceInventorySchema($0); try $0.execute(sql: "DROP TABLE book_reference; ALTER TABLE library_book DROP COLUMN catalog_reference; DROP TABLE source_installation; PRAGMA user_version=3;") }
             try raw.close()
             #expect(throws: LibraryDatabase.Failure.migrationRequired) { try LibraryDatabase(existingAt: path, readOnly: true) }
             let upgraded = try LibraryDatabase(existingAt: path)
@@ -204,7 +204,7 @@ struct LibrarySourceInstallationTests {
         try await withLibrary { path, database in
             try await database.close()
             let raw = try DatabaseQueue(path: path.path)
-            try await raw.write { try $0.execute(sql: """
+            try await raw.write { try removeSourceInventorySchema($0); try $0.execute(sql: """
                 DROP TABLE book_reference; ALTER TABLE library_book DROP COLUMN catalog_reference; DROP TABLE source_installation; DROP TABLE source_import; DROP TABLE source_script;
                 CREATE TABLE source_installation(marker TEXT); INSERT INTO source_installation VALUES('retained');
                 PRAGMA user_version=2;

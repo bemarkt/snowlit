@@ -88,6 +88,9 @@ public struct SourceInstallationSnapshot: Equatable, Sendable {
 /// the candidate before adoption. Storing a receipt does not activate it.
 public protocol SourceInstallationStore: Sendable {
     func sourceInstallations() async throws -> [SourceInstallationSnapshot]
+    /// Read-only preparation; candidate scripts receive adapted values, never
+    /// these host-owned IDs or a live database access token.
+    func captureSourceUpdate(importID: UUID, expected: SourceInstallationSnapshot) async throws -> SourceUpdateSnapshot
     func installSource(importID: UUID, id: SourceInstallationID, configuration: [SourceSettingValue],
                        consent: SourceCredentialReadConsent) async throws -> SourceInstallationSnapshot
     /// Version changes require a complete migration transaction, not this path.

@@ -66,7 +66,7 @@ struct LibraryPublicStateTests {
             try await database.close()
             // The prior schema is the same four library tables, without source state.
             let raw = try DatabaseQueue(path: path.path)
-            try await raw.write { try $0.execute(sql: "DROP TABLE book_reference; ALTER TABLE library_book DROP COLUMN catalog_reference; DROP TABLE source_installation; DROP TABLE source_import; DROP TABLE source_script; DROP TABLE source_public_state; DROP TABLE source_state_operation; DROP TABLE source_state_access; PRAGMA user_version=1;") }
+            try await raw.write { try removeSourceInventorySchema($0); try $0.execute(sql: "DROP TABLE book_reference; ALTER TABLE library_book DROP COLUMN catalog_reference; DROP TABLE source_installation; DROP TABLE source_import; DROP TABLE source_script; DROP TABLE source_public_state; DROP TABLE source_state_operation; DROP TABLE source_state_access; PRAGMA user_version=1;") }
             try raw.close()
             let before = try Data(contentsOf: path)
             #expect(throws: LibraryDatabase.Failure.migrationRequired) { try LibraryDatabase(existingAt: path, readOnly: true) }
@@ -92,7 +92,7 @@ struct LibraryPublicStateTests {
             let book = try await database.addBook(reference: .init(installationID: SourceInstallationID(), referenceVersion: 1, key: "book"), title: "retained", author: nil)
             try await database.close()
             let raw = try DatabaseQueue(path: path.path)
-            try await raw.write { try $0.execute(sql: "DROP TABLE book_reference; ALTER TABLE library_book DROP COLUMN catalog_reference; DROP TABLE source_installation; DROP TABLE source_import; DROP TABLE source_script; DROP TABLE source_public_state; PRAGMA user_version=1;") }
+            try await raw.write { try removeSourceInventorySchema($0); try $0.execute(sql: "DROP TABLE book_reference; ALTER TABLE library_book DROP COLUMN catalog_reference; DROP TABLE source_installation; DROP TABLE source_import; DROP TABLE source_script; DROP TABLE source_public_state; PRAGMA user_version=1;") }
             // Existing conflicting second table makes the migration fail after its first CREATE.
             #expect(throws: DatabaseError.self) { try LibraryDatabase(existingAt: path) }
             let values = try await raw.read { db in

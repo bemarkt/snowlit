@@ -168,14 +168,14 @@ extension LibraryDatabase: SourceInstallationStore {
         switch consent { case .managedOnly: false; case .approvedForCandidate: true }
     }
 
-    private static func importedMetadata(_ db: Database, _ importID: UUID) throws -> SourceScriptMetadata {
+    static func importedMetadata(_ db: Database, _ importID: UUID) throws -> SourceScriptMetadata {
         guard let bytes = try Data.fetchOne(db, sql: """
             SELECT s.metadata FROM source_import r JOIN source_script s ON s.sha256=r.script_sha256 WHERE r.id=?
             """, arguments: [importID.uuidString]) else { throw SourceInstallationFailure.missingImport }
         return try JSONDecoder().decode(SourceScriptMetadata.self, from: bytes)
     }
 
-    private static func installation(_ db: Database, _ id: SourceInstallationID) throws -> SourceInstallationSnapshot {
+    static func installation(_ db: Database, _ id: SourceInstallationID) throws -> SourceInstallationSnapshot {
         guard let row = try Row.fetchOne(db, sql: installationSelect + " WHERE i.id=?",
                                         arguments: [id.rawValue.uuidString]) else { throw SourceInstallationFailure.missingInstallation }
         return try decodeInstallation(row)

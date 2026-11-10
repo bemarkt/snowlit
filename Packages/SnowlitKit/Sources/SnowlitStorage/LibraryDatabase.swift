@@ -45,12 +45,13 @@ public actor LibraryDatabase: LibraryStore {
                 try db.execute(sql: Self.sourceScriptSchema)
                 try db.execute(sql: Self.sourceInstallationSchema)
                 try Self.migrateBookReferences(db)
+                try Self.migrateSourceInventoryRevision(db)
             }
         } else {
             let version = try queue.read { db in
                 let version = try Int.fetchOne(db, sql: "PRAGMA user_version")
                 guard try Int.fetchOne(db, sql: "PRAGMA application_id") == 0x534e4c54,
-                      let version, (1...5).contains(version) else {
+                      let version, (1...6).contains(version) else {
                     throw Failure.unsupportedSchema
                 }
                 guard try String.fetchOne(db, sql: "PRAGMA quick_check") == "ok",
@@ -77,18 +78,20 @@ public actor LibraryDatabase: LibraryStore {
                     _ = try Row.fetchAll(db, sql: "SELECT book_id, installation, reference_version, remote_key FROM book_reference LIMIT 0")
                     _ = try Row.fetchAll(db, sql: "SELECT catalog_reference FROM library_book LIMIT 0")
                 }
+                if version >= 6 { try Self.validateSourceInventoryRevisionSchema(db) }
                 return version
             }
-            if version != 5 {
+            if version != 6 {
                 guard !readOnly else { throw Failure.migrationRequired }
                 try queue.write { db in
-                    guard let current = try Int.fetchOne(db, sql: "PRAGMA user_version"), (1...5).contains(current) else {
+                    guard let current = try Int.fetchOne(db, sql: "PRAGMA user_version"), (1...6).contains(current) else {
                         throw Failure.unsupportedSchema
                     }
                     if current == 1 { try db.execute(sql: Self.publicStateSchema) }
                     if current < 3 { try db.execute(sql: Self.sourceScriptSchema) }
                     if current < 4 { try db.execute(sql: Self.sourceInstallationSchema) }
                     if current < 5 { try Self.migrateBookReferences(db) }
+                    if current < 6 { try Self.migrateSourceInventoryRevision(db) }
                 }
             }
         }
