@@ -86,7 +86,8 @@ def check_manifest():
     libraries = {t["name"]: t for t in manifest["targets"] if t["type"] == "regular"}
     require(libraries.keys() == DEPENDENCIES.keys(), "Unexpected library target graph")
     for name, target in libraries.items():
-        expected_resources = [{"path": "Resources/SourceInspection", "rule": {"copy": {}}}] if name == "YingxueKit" else []
+        expected_resources = [{"path": path, "rule": {"copy": {}}}
+                              for path in ["Resources/SourceInspection", "Resources/SourceExecution"]] if name == "YingxueKit" else []
         resources = [{**item, "path": item["path"].replace("\\", "/")} for item in target.get("resources", [])]
         require(resources == expected_resources, f"Unexpected bundled resources in {name}")
         dependencies = set()

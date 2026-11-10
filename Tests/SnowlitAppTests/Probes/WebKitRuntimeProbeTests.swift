@@ -9,6 +9,137 @@ import UIKit
 @Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct WebKitRuntimeProbeTests {
+    @Test func sourceWorkerCannotExecuteAnotherScriptOrInstallationTicket() async throws {
+        try await withSourceWorker { worker in
+            let (gate, policy) = try sourceWorkerContext()
+            let manifest = String(decoding: try YingxueWireCodec.encode(policy.manifest), as: UTF8.self)
+            let source = "/* @yingxue\n" + manifest + "\n*/\n" + """
+                export async function search(ctx, input) { return {items: [], nextCursor: null}; }
+                export async function book(ctx, input) {}
+                export async function chapters(ctx, input) {}
+                export async function chapter(ctx, input) {}
+                """
+            let snapshot = try SourceScriptSnapshot(bytes: Data(source.utf8), metadata: .init(sourceID: "org.example.worker",
+                name: "Worker", scriptVersion: "2", protocolVersion: 1, referenceVersion: 2, stateVersion: 2),
+                digest: { _ in String(repeating: "b", count: 64) })
+            try await worker.prepare(script: snapshot)
+            let input = YingxueWire.OperationInput.search(.init(kind: .search, input: .init(query: "book", cursor: nil)))
+            let (wrongGate, wrongPolicy) = try sourceWorkerContext(digest: String(repeating: "c", count: 64))
+            let wrong = try await wrongGate.begin(input)
+            await #expect(throws: SourceHostFailure.wrongContext) {
+                try await worker.invoke(wrong, gate: wrongGate, policy: wrongPolicy, host: workerConfigurationReply)
+            }
+            await wrongGate.cancel(wrong)
+            let ticket = try await gate.begin(input)
+            let reply = try await worker.invoke(ticket, gate: gate, policy: policy, host: workerConfigurationReply)
+            guard case .search = reply else { throw SourceWorkerFailure.invalidResult }
+            try await gate.finish(ticket)
+            let (otherGate, otherPolicy) = try sourceWorkerContext()
+            let other = try await otherGate.begin(input)
+            await #expect(throws: SourceHostFailure.wrongContext) {
+                try await worker.invoke(other, gate: otherGate, policy: otherPolicy, host: workerConfigurationReply)
+            }
+            await otherGate.cancel(other)
+        }
+    }
+
+    @Test(arguments: ["spin", "never"])
+    func sourceWorkerCancellationRevokesEnteredWorkAndFinishesCleanup(fault: String) async throws {
+        try await withSourceWorker { worker in
+            let (gate, policy) = try sourceWorkerContext()
+            try await worker.prepare(source: """
+                export async function search(ctx, input) {
+                  ctx.readConfiguration({});
+                  if (input.query === 'spin') { while (true) {} }
+                  return await new Promise(resolve => { globalThis.pendingResolve = resolve; });
+                }
+                """, requiredExports: ["search"])
+            var calls = 0
+            let ticket = try await gate.begin(.search(.init(kind: .search, input: .init(query: fault, cursor: nil))))
+            let work = Task {
+                try await worker.invoke(ticket, gate: gate, policy: policy) { host in
+                    calls += 1
+                    return workerConfigurationReply(host)
+                }
+            }
+            defer { work.cancel() }
+            // Preflight is call one. Call two was sent by the author immediately
+            // before entering its non-returning operation body.
+            try await FixtureScenario.eventually { calls == 2 }
+            let started = ContinuousClock.now
+            work.cancel()
+            await #expect(throws: CancellationError.self) { try await work.value }
+            #expect(started.duration(to: .now) < .seconds(3))
+            #expect(await gate.pendingCount == 0)
+            try await worker.close()
+        }
+    }
+
+    @Test func sourceWorkerRejectsInvalidWireResultsAndGlobalReadySpoofing() async throws {
+        try await withSourceWorker { worker in
+            await #expect(throws: SourceWorkerFailure.invalidResult) {
+                try await worker.prepare(source: "postMessage({kind: 'ready'}); throw new Error('private'); export async function search(ctx, input) {}",
+                    requiredExports: ["search"])
+            }
+        }
+        try await withSourceWorker { worker in
+            let (gate, policy) = try sourceWorkerContext()
+            try await worker.prepare(source: "export async function search(ctx, input) { return {items: [], nextCursor: ''}; }",
+                requiredExports: ["search"])
+            let ticket = try await gate.begin(.search(.init(kind: .search, input: .init(query: "bad", cursor: nil))))
+            await #expect(throws: WireViolation.self) {
+                try await worker.invoke(ticket, gate: gate, policy: policy, host: workerConfigurationReply)
+            }
+            #expect(await gate.pendingCount == 0)
+        }
+    }
+
+    @Test(arguments: [false, true])
+    func sourceWorkerExecutesCandidateMigrationsAndRejectsOmissions(omitMapping: Bool) async throws {
+        try await withSourceWorker { worker in
+            let installation = SourceInstallationID()
+            let oldMetadata = try SourceScriptMetadata(sourceID: "org.example.worker", name: "Worker", scriptVersion: "1",
+                protocolVersion: 1, referenceVersion: 1, stateVersion: 1)
+            let metadata = try SourceScriptMetadata(sourceID: "org.example.worker", name: "Worker", scriptVersion: "2",
+                protocolVersion: 1, referenceVersion: 2, stateVersion: 2)
+            let installed = try SourceInstallationSnapshot(id: installation, importID: UUID(), scriptSHA256: String(repeating: "a", count: 64),
+                metadata: oldMetadata, revision: 1, state: .enabled, configuration: [], allowsCredentialRead: false,
+                websiteSessionID: UUID(), pendingCleanup: nil)
+            let candidate = try SourceImportRecord(scriptSHA256: String(repeating: "b", count: 64),
+                inspectionContractSHA256: YingxueWire.schemaSHA256, fileName: "worker.js", importedAt: Date())
+            let reference = try SourceBookReference(installationID: installation, referenceVersion: 1, key: "book")
+            let chapter = try ChapterReference(book: reference, key: "chapter")
+            let snapshot = try SourceUpdateSnapshot(installation: installed, candidate: candidate, candidateMetadata: metadata,
+                inventoryRevision: 0, books: [.init(book: .init(id: LocalBookID(), reference: reference, title: "Book", author: nil),
+                    references: [reference], chapterReferences: [chapter], catalog: nil, checkpoint: nil)],
+                currentState: .init(stateVersion: 1, revision: 4, entries: [.init(key: "public", value: "old")]),
+                targetState: .init(stateVersion: 2, revision: 0, entries: []), referenceHistory: [])
+            let plan = try SourceUpdateMigrationPlan(prepared: snapshot)
+            let (gate, policy) = try sourceWorkerContext(installation: installation, digest: candidate.scriptSHA256)
+            try await worker.prepare(source: """
+                export async function migrateReferences(ctx, input) {
+                  return {fromVersion: input.fromVersion, toVersion: input.toVersion,
+                    books: \(omitMapping ? "[]" : "input.books.map(book => ({kind: 'mapped', old: book.book, new: {key: 'new-book'}, chapters: book.chapters.map(key => ({kind: 'mapped', oldKey: key, newKey: 'new-' + key}))}))")};
+                }
+                export async function migrateState(ctx, input) {
+                  return {fromVersion: input.fromVersion, toVersion: input.toVersion,
+                    expectedRevision: input.snapshot.revision, entries: [{key: 'public', value: 'new'}]};
+                }
+                """, requiredExports: ["migrateReferences", "migrateState"])
+            if omitMapping {
+                await #expect(throws: SourceMigrationFailure.incompleteMapping) {
+                    try await worker.migrate(plan, gate: gate, policy: policy, host: workerConfigurationReply)
+                }
+            } else {
+                let values = try await worker.migrate(plan, gate: gate, policy: policy, host: workerConfigurationReply)
+                #expect(values.references?.books.count == 1)
+                #expect(values.state?.stateVersion == 2 && values.state?.revision == 0)
+                #expect(values.state?.entries.first?.value == "new")
+            }
+            #expect(await gate.pendingCount == 0)
+        }
+    }
+
     @Test func isolatedModuleWorkerPreservesDataAndCannotFetchOutsideItsNativeHost() async throws {
         try await FixtureScenario.withScenario { fixture in
             let (status, bytes) = try await fixture.request("worker-source.mjs")
@@ -576,4 +707,38 @@ private final class WorkerExperiment {
             """, timeout: .seconds(1))
     }
 }
+@MainActor
+private func withSourceWorker(_ body: @MainActor (SourceWorkerSession) async throws -> Void) async throws {
+    let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first { $0.isKeyWindow }
+    let window = UIWindow(windowScene: scene)
+    let controller = UIViewController()
+    let worker = SourceWorkerSession(program: try .init())
+    window.rootViewController = controller
+    worker.webView.frame = window.bounds
+    worker.webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+    controller.view.addSubview(worker.webView)
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true; previous?.makeKeyAndVisible() }
+    do { try await body(worker); try await worker.close() }
+    catch {
+        do { try await worker.close() } catch { Issue.record(error, "Source worker cleanup failed") }
+        throw error
+    }
+}
+
+@MainActor
+private func sourceWorkerContext(installation: SourceInstallationID = .init(), digest: String = String(repeating: "b", count: 64)) throws -> (SourceOperationGate, SourceHostPolicy) {
+    let manifest = YingxueWire.Manifest(protocolVersion: 1, sourceID: "org.example.worker", name: "Worker", scriptVersion: "2",
+        referenceVersion: 2, stateVersion: 2, capabilities: [], origins: [], authentication: [], publicConfiguration: [])
+    return (try .init(installationID: installation, scriptSHA256: digest, configurationRevision: 0, sessionRevision: 0),
+            try .init(installationID: installation, scriptSHA256: digest, manifest: manifest))
+}
+
+@MainActor
+private func workerConfigurationReply(_ host: SourceOperationGate.HostTicket) -> YingxueWire.HostReply {
+    .readConfiguration(.init(kind: .readConfiguration, id: host.call.id, context: host.call.context,
+        value: .init(revision: host.call.context.configurationRevision, values: [])))
+}
+
 #endif

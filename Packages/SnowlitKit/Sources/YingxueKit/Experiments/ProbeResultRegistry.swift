@@ -1,7 +1,7 @@
 import Foundation
 
-/// Experimental result ownership, not a JavaScript termination mechanism.
-/// Kept internal until the runtime feasibility gate has an observed conclusion.
+/// Result ownership shared by feasibility probes and the worker execution
+/// candidate. Kept internal; this is not a JavaScript termination mechanism.
 @MainActor
 final class ProbeResultRegistry<Value: Sendable> {
     struct Ticket: Hashable, Sendable {

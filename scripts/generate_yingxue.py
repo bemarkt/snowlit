@@ -153,7 +153,8 @@ def swift():
                        '    public var debugDescription: String { description }',
                        '    public var customMirror: Mirror { Mirror(self, children: [:]) }', '}']
     output += ['', 'enum GeneratedWireSchema {', '    static let rules: [String: WireRule] = [', *rules, '    ]', '}',
-               'enum GeneratedModulePolicy {', '    static let requiredExports = [' + ', '.join(map(quote,SCHEMA['x-module']['requiredExports'])) + ']', '}', '']
+               'enum GeneratedModulePolicy {', '    static let requiredExports = [' + ', '.join(map(quote,SCHEMA['x-module']['requiredExports'])) + ']',
+               '    static let hostMethods = [' + ', '.join(map(quote,SCHEMA['x-host'])) + ']', '}', '']
     return '\n'.join(output)
 
 

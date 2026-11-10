@@ -3491,4 +3491,5 @@ enum GeneratedWireSchema {
 }
 enum GeneratedModulePolicy {
     static let requiredExports = ["search", "book", "chapters", "chapter"]
+    static let hostMethods = ["http", "dom", "decodeText", "readCredential", "interact", "readPublicState", "writePublicState", "openPage", "evaluatePage", "closePage", "readConfiguration"]
 }
