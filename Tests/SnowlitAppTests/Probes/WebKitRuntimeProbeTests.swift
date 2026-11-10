@@ -101,23 +101,30 @@ struct WebKitRuntimeProbeTests {
     @Test func sourceBrowserExtractsDynamicDOMWithoutWebsiteGlobalsOrHostBridge() async throws {
         try await FixtureScenario.withScenario { fixture in
             try await withSourceBrowser { browser, gate, ticket in
+                print("BrowserExtractionStage opening")
                 let page = try await browser.open(.init(target: .init(url: fixture.url("dynamic").absoluteString)))
+                print("BrowserExtractionStage page-ready")
                 let view = try #require(browser.webView(for: page.page.id))
                 _ = try await view.evaluateJavaScript("globalThis.websiteOnly = 'private';")
+                print("BrowserExtractionStage website-global-set")
                 try await FixtureScenario.eventually {
                     try await browser.evaluate(.init(page: page.page,
                         script: "return document.querySelector('#content').dataset.ready === 'true';", inputJSON: "null")).json == "true"
                 }
+                print("BrowserExtractionStage dynamic-ready")
                 let input = "\"; throw new Error('input-is-data'); //"
                 let value = try await browser.evaluate(.init(page: page.page,
                     script: "return {text: document.querySelector('#content').textContent, echo: input, site: typeof websiteOnly, bridge: typeof globalThis.webkit?.messageHandlers?.sourceHost};",
                     inputJSON: String(decoding: try JSONEncoder().encode(input), as: UTF8.self)))
                 #expect(try JSONDecoder().decode([String: String].self, from: Data(value.json.utf8)) ==
                     ["text": "动态合成正文", "echo": input, "site": "undefined", "bridge": "undefined"])
-                for script in ["return undefined;", "return {value: NaN};", "return [() => 1];", "const a = {}; a.self = a; return a;"] {
+                print("BrowserExtractionStage isolated-json-accepted")
+                for (index, script) in ["return undefined;", "return {value: NaN};", "return [() => 1];", "const a = {}; a.self = a; return a;"].enumerated() {
+                    print("BrowserExtractionStage invalid-json-start index=\(index)")
                     await #expect(throws: SourceBrowserFailure.invalidResult) {
                         try await browser.evaluate(.init(page: page.page, script: script, inputJSON: "null"))
                     }
+                    print("BrowserExtractionStage invalid-json-rejected index=\(index)")
                 }
                 #expect(try await browser.closePage(.init(id: page.page.id)).closed)
                 #expect(view.superview == nil)
@@ -956,6 +963,15 @@ private func withWebsiteSession(_ body: @MainActor (SourceWebsiteSession, WebKit
     let dataStore = WKWebsiteDataStore.nonPersistent()
     let website = SourceWebsiteSession(dataStore: dataStore)
     let probe = WebKitRuntimeProbe(dataStore: dataStore)
+    let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+    let previous = scene.windows.first { $0.isKeyWindow }
+    let window = UIWindow(windowScene: scene)
+    let controller = UIViewController()
+    window.rootViewController = controller
+    probe.webView.frame = window.bounds
+    controller.view.addSubview(probe.webView)
+    window.makeKeyAndVisible()
+    defer { window.isHidden = true; previous?.makeKeyAndVisible() }
     let installation = SourceInstallationID(), digest = String(repeating: "a", count: 64)
     let manifest = YingxueWire.Manifest(protocolVersion: 1, sourceID: "org.example.website", name: "Website", scriptVersion: "1",
         referenceVersion: 1, stateVersion: 1, capabilities: [.http, .browser],

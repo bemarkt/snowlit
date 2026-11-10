@@ -97,10 +97,16 @@ struct WebKitRecoveryTests {
     @Test(arguments: ["spin", "never"])
     func observeRecoveryAfterAbandoningUncooperativeJavaScript(fault: String) async throws {
         try #require(Bundle.main.bundleIdentifier == "io.github.bemarkt.snowlit")
+        let window = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).first(where: \.isKeyWindow))
         let clock = ContinuousClock()
         let page = URL(string: "http://127.0.0.1:18731/health")!
         for repetition in 1...3 {
             var probe: WebKitRuntimeProbe? = WebKitRuntimeProbe(dataStore: .nonPersistent())
+            defer { probe?.close() }
+            probe!.webView.frame = window.bounds
+            window.addSubview(probe!.webView)
+            #expect(probe!.webView.window === window)
             let lifetime = ViewLifetimeObservation(probe!.webView)
             try await probe!.load(page)
             observe("baseline", fault: fault, repetition: repetition)
@@ -144,6 +150,9 @@ struct WebKitRecoveryTests {
                 #expect(lifetime.view == nil)
                 let replacement = WebKitRuntimeProbe(dataStore: .nonPersistent())
                 defer { replacement.close() }
+                replacement.webView.frame = window.bounds
+                window.addSubview(replacement.webView)
+                #expect(replacement.webView.window === window)
                 let recoveryStarted = clock.now
                 try await replacement.load(page, timeout: .seconds(5))
                 #expect(try await replacement.evaluate("return 'fresh operation';", timeout: .seconds(5)) == "fresh operation")

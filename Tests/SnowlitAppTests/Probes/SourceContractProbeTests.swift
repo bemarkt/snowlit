@@ -108,6 +108,17 @@ private final class NativeContractProbe: NSObject, WKScriptMessageHandlerWithRep
     func prepare(at url: URL, bytes: Data) async throws -> SourceScriptSnapshot {
         let preview = try SourceImportPreview(bytes: bytes)
         let source = preview.header.source
+        let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
+        previousWindow = scene.windows.first { $0.isKeyWindow }
+        let mounted = UIWindow(windowScene: scene)
+        let controller = UIViewController()
+        mounted.rootViewController = controller
+        probe.webView.frame = mounted.bounds
+        probe.webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
+        controller.view.addSubview(probe.webView)
+        mounted.makeKeyAndVisible()
+        window = mounted
+        #expect(probe.webView.window === mounted)
         try await probe.load(url)
         let program = try SourceInspectionProgram()
         _ = try await probe.evaluate(program.bootstrap + "\nreturn 'ready';", contentWorld: world)
@@ -118,16 +129,10 @@ private final class NativeContractProbe: NSObject, WKScriptMessageHandlerWithRep
         })
         if let worker {
             probe.close()
-            let scene = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }.first)
-            previousWindow = scene.windows.first { $0.isKeyWindow }
-            let mounted = UIWindow(windowScene: scene)
-            let controller = UIViewController()
-            mounted.rootViewController = controller
             worker.webView.frame = mounted.bounds
             worker.webView.autoresizingMask = [.flexibleWidth, .flexibleHeight]
             controller.view.addSubview(worker.webView)
-            mounted.makeKeyAndVisible()
-            window = mounted
+            #expect(worker.webView.window === mounted)
             try await worker.prepare(script: snapshot)
         } else {
             _ = try await probe.evaluate("""
