@@ -20,6 +20,16 @@ struct WireContractTests {
         let gate = try SourceOperationGate(installationID: installation, scriptSHA256: digest, configurationRevision: 3, sessionRevision: 0)
         let ticket = try await gate.begin(.search(.init(kind: .search, input: .init(query: "book", cursor: nil))))
         let snapshot = try SourceConfiguration(policy: policy, revision: 3, overrides: [.boolean(.init(kind: .boolean, key: "compact", value: true))])
+        let persisted = try JSONEncoder().encode(snapshot.storedValues)
+        let restored = try SourceConfiguration(policy: policy, revision: 3,
+            saved: JSONDecoder().decode([SourceSettingValue].self, from: persisted))
+        #expect(try restored.read(for: ticket.call.context) == snapshot.read(for: ticket.call.context))
+        #expect(throws: SourceConfigurationFailure.invalidValue) {
+            try SourceConfiguration(policy: policy, revision: 3, saved: [.text(key: "compact", value: "true")])
+        }
+        #expect(throws: SourceConfigurationFailure.unknownKey) {
+            try SourceConfiguration(policy: policy, revision: 3, saved: [.text(key: "password", value: "not-a-setting")])
+        }
         #expect(try snapshot.read(for: ticket.call.context).values == [
             .text(.init(kind: .text, key: "é", value: "a")), .text(.init(kind: .text, key: "e\u{301}", value: "b")),
             .boolean(.init(kind: .boolean, key: "compact", value: true)), .text(.init(kind: .text, key: "category", value: "all"))])

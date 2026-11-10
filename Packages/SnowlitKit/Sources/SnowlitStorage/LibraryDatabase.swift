@@ -43,12 +43,13 @@ public actor LibraryDatabase: LibraryStore {
                 try db.execute(sql: Self.schema)
                 try db.execute(sql: Self.publicStateSchema)
                 try db.execute(sql: Self.sourceScriptSchema)
+                try db.execute(sql: Self.sourceInstallationSchema)
             }
         } else {
             let version = try queue.read { db in
                 let version = try Int.fetchOne(db, sql: "PRAGMA user_version")
                 guard try Int.fetchOne(db, sql: "PRAGMA application_id") == 0x534e4c54,
-                      version == 1 || version == 2 || version == 3 else {
+                      version == 1 || version == 2 || version == 3 || version == 4 else {
                     throw Failure.unsupportedSchema
                 }
                 guard try String.fetchOne(db, sql: "PRAGMA quick_check") == "ok",
@@ -64,20 +65,24 @@ public actor LibraryDatabase: LibraryStore {
                     _ = try Row.fetchAll(db, sql: "SELECT installation, state_version, access_id FROM source_state_access LIMIT 0")
                     _ = try Row.fetchAll(db, sql: "SELECT installation, access_id, request_id, active FROM source_state_operation LIMIT 0")
                 }
-                if version == 3 {
+                if let version, version >= 3 {
                     _ = try Row.fetchAll(db, sql: "SELECT sha256, bytes, metadata FROM source_script LIMIT 0")
                     _ = try Row.fetchAll(db, sql: "SELECT id, script_sha256, inspection_contract_sha256, file_name, imported_at FROM source_import LIMIT 0")
                 }
+                if version == 4 {
+                    _ = try Row.fetchAll(db, sql: "SELECT id, source_id, import_id, revision, state, configuration, credential_read, website_session, cleanup FROM source_installation LIMIT 0")
+                }
                 return version
             }
-            if version != 3 {
+            if version != 4 {
                 guard !readOnly else { throw Failure.migrationRequired }
                 try queue.write { db in
-                    guard let current = try Int.fetchOne(db, sql: "PRAGMA user_version"), (1...3).contains(current) else {
+                    guard let current = try Int.fetchOne(db, sql: "PRAGMA user_version"), (1...4).contains(current) else {
                         throw Failure.unsupportedSchema
                     }
                     if current == 1 { try db.execute(sql: Self.publicStateSchema) }
                     if current < 3 { try db.execute(sql: Self.sourceScriptSchema) }
+                    if current < 4 { try db.execute(sql: Self.sourceInstallationSchema) }
                 }
             }
         }

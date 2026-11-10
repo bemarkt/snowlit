@@ -1,4 +1,5 @@
 import Foundation
+import SnowlitCore
 
 public enum SourceConfigurationFailure: Error, Equatable, Sendable {
     case duplicateKey, unknownKey, invalidValue, staleRevision
@@ -9,6 +10,26 @@ public enum SourceConfigurationFailure: Error, Equatable, Sendable {
 public struct SourceConfiguration: Sendable {
     private let policy: SourceHostPolicy
     private let snapshot: YingxueWire.ConfigurationSnapshot
+
+    public init(policy: SourceHostPolicy, revision: Int, saved: [SourceSettingValue]) throws {
+        try SourceSettingValue.validate(saved)
+        try self.init(policy: policy, revision: revision, overrides: saved.map {
+            switch $0 {
+            case .text(let key, let value): .text(.init(kind: .text, key: key, value: value))
+            case .boolean(let key, let value): .boolean(.init(kind: .boolean, key: key, value: value))
+            }
+        })
+    }
+
+    /// Save only values that passed the current manifest, including defaults.
+    public var storedValues: [SourceSettingValue] {
+        snapshot.values.map {
+            switch $0 {
+            case .text(let value): .text(key: value.key, value: value.value)
+            case .boolean(let value): .boolean(key: value.key, value: value.value)
+            }
+        }
+    }
 
     public init(policy: SourceHostPolicy, revision: Int, overrides: [YingxueWire.ConfigurationValue] = []) throws {
         try YingxueWireCodec.validate(JSONEncoder().encode(revision), as: "Revision")

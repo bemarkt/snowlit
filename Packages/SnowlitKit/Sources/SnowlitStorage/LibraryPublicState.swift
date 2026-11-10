@@ -8,13 +8,23 @@ extension LibraryDatabase: SourcePublicStateStore {
         try Task.checkCancellation()
         let access = try SourcePublicStateAccess(installationID: installationID, stateVersion: stateVersion)
         try queue.write { db in
-            try db.execute(sql: "DELETE FROM source_state_operation WHERE installation=?", arguments: [installationID.rawValue.uuidString])
-            try db.execute(sql: """
-                INSERT INTO source_state_access (installation, state_version, access_id) VALUES (?, ?, ?)
-                ON CONFLICT(installation) DO UPDATE SET state_version=excluded.state_version, access_id=excluded.access_id
-                """, arguments: [installationID.rawValue.uuidString, stateVersion, access.id.uuidString])
+            // Installed sources must present their current installation snapshot.
+            // The uninstalled path remains available for isolated contract stores.
+            guard try Bool.fetchOne(db, sql: "SELECT EXISTS(SELECT 1 FROM source_installation WHERE id=?)",
+                                    arguments: [installationID.rawValue.uuidString]) == false else {
+                throw SourcePublicStateFailure.staleAccess
+            }
+            try Self.replacePublicStateAccess(db, access)
         }
         return access
+    }
+
+    static func replacePublicStateAccess(_ db: Database, _ access: SourcePublicStateAccess) throws {
+        try db.execute(sql: "DELETE FROM source_state_operation WHERE installation=?", arguments: [access.installationID.rawValue.uuidString])
+        try db.execute(sql: """
+            INSERT INTO source_state_access (installation, state_version, access_id) VALUES (?, ?, ?)
+            ON CONFLICT(installation) DO UPDATE SET state_version=excluded.state_version, access_id=excluded.access_id
+            """, arguments: [access.installationID.rawValue.uuidString, access.stateVersion, access.id.uuidString])
     }
 
     public func beginPublicStateOperation(requestID: UUID, using access: SourcePublicStateAccess) throws -> SourcePublicStateOperation {
