@@ -6,6 +6,11 @@ on:
   pull_request:
   workflow_dispatch:
     inputs:
+      task:
+        description: Verification task
+        type: choice
+        options: ['verify', 'runtime-check']
+        default: 'verify'
       ios_runtime:
         description: iPhone simulator runtime to verify
         type: choice
@@ -16,11 +21,12 @@ permissions:
   contents: read
 
 concurrency:
-  group: ios-${{ github.ref }}
+  group: ios-${{ github.ref }}-${{ inputs.task || 'verify' }}
   cancel-in-progress: true
 
 jobs:
   build-and-test:
+    if: ${{ inputs.task != 'runtime-check' }}
     name: iOS / ${{ matrix.device }}
     runs-on: macos-26
     timeout-minutes: 65
@@ -56,5 +62,47 @@ jobs:
         with:
           name: ios-${{ matrix.device }}-${{ github.sha }}
           path: build/evidence/
+          if-no-files-found: error
+          retention-days: 14
+
+  runtime-availability:
+    name: Minimum runtime availability
+    if: ${{ inputs.task == 'runtime-check' }}
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Inspect and request the exact minimum runtime
+        run: |
+          set -euo pipefail
+          evidence="$PWD/build/evidence/runtime-availability"
+          mkdir -p "$evidence"
+          {
+            git rev-parse HEAD
+            xcodebuild -version
+            sw_vers
+            printf 'Runner image: %s / %s\n' "$ImageOS" "$ImageVersion"
+            printf 'Run: %s / attempt %s\n' "$GITHUB_RUN_ID" "$GITHUB_RUN_ATTEMPT"
+          } > "$evidence/environment.txt"
+          printf '%s\n' /Applications/Xcode*.app > "$evidence/installed-xcode-paths.txt"
+          downloader=/Applications/Xcode_26.0.1.app/Contents/Developer
+          if [ ! -d "$downloader" ]; then
+            printf 'Required downloader is absent: %s\n' "$downloader" > "$evidence/downloader.txt"
+            exit 1
+          fi
+          DEVELOPER_DIR="$downloader" xcodebuild -version > "$evidence/downloader.txt"
+          # Runtime availability only; this job does not build or test the App.
+          DEVELOPER_DIR="$downloader" bash scripts/prepare_runtime.sh 26.0 "$evidence"
+      - name: Upload runtime evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: runtime-availability-${{ github.sha }}
+          path: build/evidence/runtime-availability/
           if-no-files-found: error
           retention-days: 14
