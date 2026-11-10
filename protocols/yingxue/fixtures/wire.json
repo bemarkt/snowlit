@@ -400,5 +400,71 @@
     "type": "AuthenticationResult",
     "json": "{\"status\":\"authenticated\",\"localBookID\":\"01234567-1234-1234-1234-123456789abc\"}",
     "valid": false
+  },
+  {
+    "name": "reference-migration-input",
+    "type": "ReferenceMigrationInput",
+    "json": "{\"fromVersion\":1,\"toVersion\":2,\"books\":[{\"book\":{\"key\":\"b\"},\"chapters\":[\"c\",\"d\"]}]}",
+    "valid": true
+  },
+  {
+    "name": "reference-migration-explicit",
+    "type": "ReferenceMigrationResult",
+    "json": "{\"fromVersion\":1,\"toVersion\":2,\"books\":[{\"kind\":\"mapped\",\"old\":{\"key\":\"b\"},\"new\":{\"key\":\"new-b\"},\"chapters\":[{\"kind\":\"mapped\",\"oldKey\":\"c\",\"newKey\":\"new-c\"},{\"kind\":\"invalidated\",\"oldKey\":\"d\",\"reason\":\"removed\"}]}]}",
+    "valid": true
+  },
+  {
+    "name": "reference-invalidation",
+    "type": "ReferenceMigrationResult",
+    "json": "{\"fromVersion\":1,\"toVersion\":2,\"books\":[{\"kind\":\"invalidated\",\"old\":{\"key\":\"b\"},\"reason\":\"changedIdentity\"}]}",
+    "valid": true
+  },
+  {
+    "name": "reference-migration-cannot-supply-local-book-id",
+    "type": "ReferenceMigrationResult",
+    "json": "{\"fromVersion\":1,\"toVersion\":2,\"books\":[{\"kind\":\"invalidated\",\"old\":{\"key\":\"b\"},\"reason\":\"removed\",\"localBookID\":\"replace-me\"}]}",
+    "valid": false
+  },
+  {
+    "name": "public-state-empty",
+    "type": "PublicStateSnapshot",
+    "json": "{\"stateVersion\":1,\"revision\":0,\"entries\":[]}",
+    "valid": true
+  },
+  {
+    "name": "public-state-text",
+    "type": "PublicStateSnapshot",
+    "json": "{\"stateVersion\":1,\"revision\":3,\"entries\":[{\"key\":\"selectedCategory\",\"value\":\"fiction\"}]}",
+    "valid": true
+  },
+  {
+    "name": "public-state-cas-request",
+    "type": "WritePublicState",
+    "json": "{\"stateVersion\":1,\"expectedRevision\":3,\"entries\":[{\"key\":\"selectedCategory\",\"value\":\"all\"}]}",
+    "valid": true
+  },
+  {
+    "name": "public-state-cas-conflict",
+    "type": "PublicStateWriteResult",
+    "json": "{\"written\":false,\"snapshot\":{\"stateVersion\":1,\"revision\":0,\"entries\":[]}}",
+    "valid": true
+  },
+  {
+    "name": "public-state-unknown-credentials-property",
+    "type": "PublicStateSnapshot",
+    "json": "{\"stateVersion\":1,\"revision\":0,\"entries\":[],\"credentials\":\"synthetic-secret\"}",
+    "valid": false
+  },
+  {
+    "name": "state-migration-input",
+    "type": "StateMigrationInput",
+    "json": "{\"fromVersion\":1,\"toVersion\":2,\"snapshot\":{\"stateVersion\":1,\"revision\":0,\"entries\":[]}}",
+    "valid": true
+  },
+  {
+    "name": "state-migration-result",
+    "type": "StateMigrationResult",
+    "json": "{\"fromVersion\":1,\"toVersion\":2,\"expectedRevision\":0,\"entries\":[{\"key\":\"newCategory\",\"value\":\"all\"}]}",
+    "valid": true
   }
 ]

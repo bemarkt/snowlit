@@ -28,6 +28,13 @@ struct WireContractTests {
             case "InteractionRequest": _ = try YingxueWireCodec.decode(YingxueWire.InteractionRequest.self, from: bytes)
             case "InteractionResult": _ = try YingxueWireCodec.decode(YingxueWire.InteractionResult.self, from: bytes)
             case "AuthenticationResult": _ = try YingxueWireCodec.decode(YingxueWire.AuthenticationResult.self, from: bytes)
+            case "ReferenceMigrationInput": _ = try YingxueWireCodec.decode(YingxueWire.ReferenceMigrationInput.self, from: bytes)
+            case "ReferenceMigrationResult": _ = try YingxueWireCodec.decode(YingxueWire.ReferenceMigrationResult.self, from: bytes)
+            case "PublicStateSnapshot": _ = try YingxueWireCodec.decode(YingxueWire.PublicStateSnapshot.self, from: bytes)
+            case "WritePublicState": _ = try YingxueWireCodec.decode(YingxueWire.WritePublicState.self, from: bytes)
+            case "PublicStateWriteResult": _ = try YingxueWireCodec.decode(YingxueWire.PublicStateWriteResult.self, from: bytes)
+            case "StateMigrationInput": _ = try YingxueWireCodec.decode(YingxueWire.StateMigrationInput.self, from: bytes)
+            case "StateMigrationResult": _ = try YingxueWireCodec.decode(YingxueWire.StateMigrationResult.self, from: bytes)
             default: Issue.record("Add typed decoding for this valid corpus model")
             }
         } else {

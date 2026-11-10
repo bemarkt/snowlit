@@ -1043,7 +1043,9 @@
         "book",
         "chapters",
         "chapter",
-        "authenticate"
+        "authenticate",
+        "migrateReferences",
+        "migrateState"
       ]
     },
     "OperationContext": {
@@ -1328,6 +1330,12 @@
         },
         {
           "$ref": "#/$defs/AuthenticateOperation"
+        },
+        {
+          "$ref": "#/$defs/MigrateReferencesOperation"
+        },
+        {
+          "$ref": "#/$defs/MigrateStateOperation"
         }
       ]
     },
@@ -1370,6 +1378,12 @@
         },
         {
           "$ref": "#/$defs/AuthenticateReply"
+        },
+        {
+          "$ref": "#/$defs/MigrateReferencesReply"
+        },
+        {
+          "$ref": "#/$defs/MigrateStateReply"
         }
       ]
     },
@@ -2500,7 +2514,9 @@
         "dom",
         "decodeText",
         "readCredential",
-        "interact"
+        "interact",
+        "readPublicState",
+        "writePublicState"
       ]
     },
     "HostRequest": {
@@ -2519,6 +2535,12 @@
         },
         {
           "$ref": "#/$defs/InteractHostRequest"
+        },
+        {
+          "$ref": "#/$defs/ReadPublicStateHostRequest"
+        },
+        {
+          "$ref": "#/$defs/WritePublicStateHostRequest"
         }
       ]
     },
@@ -2589,8 +2611,516 @@
         },
         {
           "$ref": "#/$defs/HostFailureReply"
+        },
+        {
+          "$ref": "#/$defs/ReadPublicStateHostReply"
+        },
+        {
+          "$ref": "#/$defs/WritePublicStateHostReply"
         }
       ]
+    },
+    "ReferenceKeys": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/Opaque"
+      }
+    },
+    "ReferenceInventoryBook": {
+      "type": "object",
+      "properties": {
+        "book": {
+          "$ref": "#/$defs/BookReference"
+        },
+        "chapters": {
+          "$ref": "#/$defs/ReferenceKeys"
+        }
+      },
+      "required": [
+        "book",
+        "chapters"
+      ],
+      "additionalProperties": false
+    },
+    "ReferenceInventory": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ReferenceInventoryBook"
+      }
+    },
+    "ReferenceMigrationInput": {
+      "type": "object",
+      "properties": {
+        "fromVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        },
+        "toVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        },
+        "books": {
+          "$ref": "#/$defs/ReferenceInventory"
+        }
+      },
+      "required": [
+        "fromVersion",
+        "toVersion",
+        "books"
+      ],
+      "additionalProperties": false
+    },
+    "MappedKind": {
+      "type": "string",
+      "const": "mapped"
+    },
+    "InvalidatedKind": {
+      "type": "string",
+      "const": "invalidated"
+    },
+    "ReferenceInvalidationReason": {
+      "type": "string",
+      "enum": [
+        "removed",
+        "unavailable",
+        "changedIdentity"
+      ]
+    },
+    "MappedChapter": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/MappedKind"
+        },
+        "oldKey": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "newKey": {
+          "$ref": "#/$defs/Opaque"
+        }
+      },
+      "required": [
+        "kind",
+        "oldKey",
+        "newKey"
+      ],
+      "additionalProperties": false
+    },
+    "InvalidatedChapter": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/InvalidatedKind"
+        },
+        "oldKey": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "reason": {
+          "$ref": "#/$defs/ReferenceInvalidationReason"
+        }
+      },
+      "required": [
+        "kind",
+        "oldKey",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "ChapterMapping": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/MappedChapter"
+        },
+        {
+          "$ref": "#/$defs/InvalidatedChapter"
+        }
+      ]
+    },
+    "ChapterMappings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/ChapterMapping"
+      }
+    },
+    "MappedBook": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/MappedKind"
+        },
+        "old": {
+          "$ref": "#/$defs/BookReference"
+        },
+        "new": {
+          "$ref": "#/$defs/BookReference"
+        },
+        "chapters": {
+          "$ref": "#/$defs/ChapterMappings"
+        }
+      },
+      "required": [
+        "kind",
+        "old",
+        "new",
+        "chapters"
+      ],
+      "additionalProperties": false
+    },
+    "InvalidatedBook": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/InvalidatedKind"
+        },
+        "old": {
+          "$ref": "#/$defs/BookReference"
+        },
+        "reason": {
+          "$ref": "#/$defs/ReferenceInvalidationReason"
+        }
+      },
+      "required": [
+        "kind",
+        "old",
+        "reason"
+      ],
+      "additionalProperties": false
+    },
+    "BookMapping": {
+      "oneOf": [
+        {
+          "$ref": "#/$defs/MappedBook"
+        },
+        {
+          "$ref": "#/$defs/InvalidatedBook"
+        }
+      ]
+    },
+    "BookMappings": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/BookMapping"
+      }
+    },
+    "ReferenceMigrationResult": {
+      "type": "object",
+      "properties": {
+        "fromVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        },
+        "toVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        },
+        "books": {
+          "$ref": "#/$defs/BookMappings"
+        }
+      },
+      "required": [
+        "fromVersion",
+        "toVersion",
+        "books"
+      ],
+      "additionalProperties": false
+    },
+    "PublicStateEntry": {
+      "type": "object",
+      "properties": {
+        "key": {
+          "$ref": "#/$defs/Opaque"
+        },
+        "value": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "key",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "PublicStateEntries": {
+      "type": "array",
+      "items": {
+        "$ref": "#/$defs/PublicStateEntry"
+      }
+    },
+    "PublicStateSnapshot": {
+      "type": "object",
+      "properties": {
+        "stateVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        },
+        "revision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "entries": {
+          "$ref": "#/$defs/PublicStateEntries"
+        }
+      },
+      "required": [
+        "stateVersion",
+        "revision",
+        "entries"
+      ],
+      "additionalProperties": false
+    },
+    "ReadPublicState": {
+      "type": "object",
+      "properties": {
+        "stateVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        }
+      },
+      "required": [
+        "stateVersion"
+      ],
+      "additionalProperties": false
+    },
+    "WritePublicState": {
+      "type": "object",
+      "properties": {
+        "stateVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        },
+        "expectedRevision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "entries": {
+          "$ref": "#/$defs/PublicStateEntries"
+        }
+      },
+      "required": [
+        "stateVersion",
+        "expectedRevision",
+        "entries"
+      ],
+      "additionalProperties": false
+    },
+    "PublicStateWriteResult": {
+      "type": "object",
+      "properties": {
+        "written": {
+          "$ref": "#/$defs/Flag"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/PublicStateSnapshot"
+        }
+      },
+      "required": [
+        "written",
+        "snapshot"
+      ],
+      "additionalProperties": false
+    },
+    "StateMigrationInput": {
+      "type": "object",
+      "properties": {
+        "fromVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        },
+        "toVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        },
+        "snapshot": {
+          "$ref": "#/$defs/PublicStateSnapshot"
+        }
+      },
+      "required": [
+        "fromVersion",
+        "toVersion",
+        "snapshot"
+      ],
+      "additionalProperties": false
+    },
+    "StateMigrationResult": {
+      "type": "object",
+      "properties": {
+        "fromVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        },
+        "toVersion": {
+          "$ref": "#/$defs/PositiveInteger"
+        },
+        "expectedRevision": {
+          "$ref": "#/$defs/Revision"
+        },
+        "entries": {
+          "$ref": "#/$defs/PublicStateEntries"
+        }
+      },
+      "required": [
+        "fromVersion",
+        "toVersion",
+        "expectedRevision",
+        "entries"
+      ],
+      "additionalProperties": false
+    },
+    "ReadPublicStateHostKind": {
+      "type": "string",
+      "const": "readPublicState"
+    },
+    "ReadPublicStateHostRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ReadPublicStateHostKind"
+        },
+        "input": {
+          "$ref": "#/$defs/ReadPublicState"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "ReadPublicStateHostReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/ReadPublicStateHostKind"
+        },
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/PublicStateSnapshot"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "WritePublicStateHostKind": {
+      "type": "string",
+      "const": "writePublicState"
+    },
+    "WritePublicStateHostRequest": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/WritePublicStateHostKind"
+        },
+        "input": {
+          "$ref": "#/$defs/WritePublicState"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "WritePublicStateHostReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/WritePublicStateHostKind"
+        },
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/PublicStateWriteResult"
+        }
+      },
+      "required": [
+        "kind",
+        "id",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "MigrateReferencesOperationKind": {
+      "type": "string",
+      "const": "migrateReferences"
+    },
+    "MigrateReferencesOperation": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/MigrateReferencesOperationKind"
+        },
+        "input": {
+          "$ref": "#/$defs/ReferenceMigrationInput"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "MigrateReferencesReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/MigrateReferencesOperationKind"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/ReferenceMigrationResult"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
+    },
+    "MigrateStateOperationKind": {
+      "type": "string",
+      "const": "migrateState"
+    },
+    "MigrateStateOperation": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/MigrateStateOperationKind"
+        },
+        "input": {
+          "$ref": "#/$defs/StateMigrationInput"
+        }
+      },
+      "required": [
+        "kind",
+        "input"
+      ],
+      "additionalProperties": false
+    },
+    "MigrateStateReply": {
+      "type": "object",
+      "properties": {
+        "kind": {
+          "$ref": "#/$defs/MigrateStateOperationKind"
+        },
+        "context": {
+          "$ref": "#/$defs/OperationContext"
+        },
+        "value": {
+          "$ref": "#/$defs/StateMigrationResult"
+        }
+      },
+      "required": [
+        "kind",
+        "context",
+        "value"
+      ],
+      "additionalProperties": false
     }
   },
   "x-host": {
@@ -2618,6 +3148,16 @@
       "input": "InteractionRequest",
       "output": "InteractionResult",
       "capability": null
+    },
+    "readPublicState": {
+      "input": "ReadPublicState",
+      "output": "PublicStateSnapshot",
+      "capability": "publicState"
+    },
+    "writePublicState": {
+      "input": "WritePublicState",
+      "output": "PublicStateWriteResult",
+      "capability": "publicState"
     }
   },
   "x-operations": {
@@ -2644,6 +3184,16 @@
     "authenticate": {
       "input": "AuthenticationInput",
       "output": "AuthenticationResult",
+      "required": false
+    },
+    "migrateReferences": {
+      "input": "ReferenceMigrationInput",
+      "output": "ReferenceMigrationResult",
+      "required": false
+    },
+    "migrateState": {
+      "input": "StateMigrationInput",
+      "output": "StateMigrationResult",
       "required": false
     }
   }

@@ -149,3 +149,24 @@ test('synthetic author source follows reading pagination and managed authenticat
   assert.equal(content.body.text, '中文\n\n第二段');
   assert.equal(JSON.stringify(captured).includes('synthetic-secret'), false);
 });
+
+test('upgrading metadata requires explicit migration exports and a fresh credential review', () => {
+  const previousBytes = readFileSync(new URL('./examples/fixture.source.js', import.meta.url));
+  const original = previousBytes.toString('utf8');
+  const candidate = original.replace('"referenceVersion": 1', '"referenceVersion": 2').replace('"stateVersion": 1', '"stateVersion": 2')
+    .replace('"http", "dom"', '"http", "dom", "credentials.read"');
+  const rejected = inspectSourceFile(Buffer.from(candidate), {previousBytes});
+  assert.equal(rejected.report.reason, 'missingExport');
+  assert.equal(rejected.upgrade.referenceMigrationRequired, true);
+  assert.equal(rejected.upgrade.publicStateMigrationRequired, true);
+  assert.equal(rejected.upgrade.credentialReadConsentRequired, true);
+  const complete = Buffer.from(candidate + '\nexport async function migrateReferences(ctx, input) {}\nexport async function migrateState(ctx, input) {}');
+  const accepted = inspectSourceFile(complete, {previousBytes});
+  assert.equal(accepted.report.kind, 'accepted');
+  const repeated = inspectSourceFile(complete, {previousBytes: complete});
+  assert.equal(repeated.upgrade.referenceMigrationRequired, false);
+  assert.equal(repeated.upgrade.publicStateMigrationRequired, false);
+  assert.deepEqual(repeated.upgrade.addedCapabilities, []);
+  assert.equal(repeated.upgrade.credentialReadConsentRequired, true);
+  assert.throws(() => inspectSourceFile(Buffer.from(original.replace('org.example.fixture', 'org.example.different')), {previousBytes}), /differentSource/);
+});

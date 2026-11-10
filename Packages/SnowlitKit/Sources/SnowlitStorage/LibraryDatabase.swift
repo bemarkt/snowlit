@@ -9,13 +9,14 @@ public actor LibraryDatabase: LibraryStore {
         case alreadyExists
         case missingDatabase
         case unsupportedSchema
+        case migrationRequired
         case inconsistentData
         case missingBook
         case invalidSequence
         case closed
     }
 
-    private let queue: DatabaseQueue
+    let queue: DatabaseQueue
     private var isClosed = false
 
     /// Dataset creation must be an explicit first-install/recovery decision.
@@ -40,11 +41,13 @@ public actor LibraryDatabase: LibraryStore {
         if create {
             try queue.write { db in
                 try db.execute(sql: Self.schema)
+                try db.execute(sql: Self.publicStateSchema)
             }
         } else {
-            try queue.read { db in
+            let version = try queue.read { db in
+                let version = try Int.fetchOne(db, sql: "PRAGMA user_version")
                 guard try Int.fetchOne(db, sql: "PRAGMA application_id") == 0x534e4c54,
-                      try Int.fetchOne(db, sql: "PRAGMA user_version") == 1 else {
+                      version == 1 || version == 2 else {
                     throw Failure.unsupportedSchema
                 }
                 guard try String.fetchOne(db, sql: "PRAGMA quick_check") == "ok",
@@ -55,6 +58,20 @@ public actor LibraryDatabase: LibraryStore {
                 _ = try Row.fetchAll(db, sql: "SELECT book_id, ordinal, remote_key, title FROM catalog_entry LIMIT 0")
                 _ = try Row.fetchAll(db, sql: "SELECT book_id, session_id, sequence, position FROM reading_checkpoint LIMIT 0")
                 _ = try Row.fetchAll(db, sql: "SELECT id, value FROM reader_preferences LIMIT 0")
+                if version == 2 {
+                    _ = try Row.fetchAll(db, sql: "SELECT installation, state_version, revision, entries FROM source_public_state LIMIT 0")
+                    _ = try Row.fetchAll(db, sql: "SELECT installation, state_version, access_id FROM source_state_access LIMIT 0")
+                    _ = try Row.fetchAll(db, sql: "SELECT installation, access_id, request_id, active FROM source_state_operation LIMIT 0")
+                }
+                return version
+            }
+            if version == 1 {
+                guard !readOnly else { throw Failure.migrationRequired }
+                try queue.write { db in
+                    let current = try Int.fetchOne(db, sql: "PRAGMA user_version")
+                    if current == 1 { try db.execute(sql: Self.publicStateSchema) }
+                    else if current != 2 { throw Failure.unsupportedSchema }
+                }
             }
         }
         self.queue = queue
@@ -210,7 +227,7 @@ public actor LibraryDatabase: LibraryStore {
         isClosed = true
     }
 
-    private func checkOpen() throws {
+    func checkOpen() throws {
         guard !isClosed else { throw Failure.closed }
     }
 

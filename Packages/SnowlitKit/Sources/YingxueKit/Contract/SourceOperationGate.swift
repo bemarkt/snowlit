@@ -154,6 +154,8 @@ extension YingxueWire.OperationInput {
         case .chapters: .chapters
         case .chapter: .chapter
         case .authenticate: .authenticate
+        case .migrateReferences: .migrateReferences
+        case .migrateState: .migrateState
         }
     }
 }
@@ -166,6 +168,8 @@ extension YingxueWire.OperationReply {
         case .chapters(let value): value.context
         case .chapter(let value): value.context
         case .authenticate(let value): value.context
+        case .migrateReferences(let value): value.context
+        case .migrateState(let value): value.context
         case .failure(let value): value.context
         }
     }
@@ -176,6 +180,8 @@ extension YingxueWire.OperationReply {
         case .chapters: .chapters
         case .chapter: .chapter
         case .authenticate: .authenticate
+        case .migrateReferences: .migrateReferences
+        case .migrateState: .migrateState
         case .failure(let value): value.operation
         }
     }

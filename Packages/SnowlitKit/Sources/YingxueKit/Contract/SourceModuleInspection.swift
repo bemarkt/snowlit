@@ -24,18 +24,21 @@ public enum SourceModuleInspection {
         case missingExport
     }
 
-    public static func requirements(for manifest: YingxueWire.Manifest) -> [String] {
-        manifest.authentication.isEmpty ? [] : ["authenticate"]
+    public static func requirements(for manifest: YingxueWire.Manifest, upgrade: SourceUpgradeAssessment? = nil) -> [String] {
+        var names = manifest.authentication.isEmpty ? [] : ["authenticate"]
+        if upgrade?.referenceMigrationRequired == true { names.append("migrateReferences") }
+        if upgrade?.publicStateMigrationRequired == true { names.append("migrateState") }
+        return names
     }
 
     /// A parser report is consumed only from the trusted host invocation. A source
     /// cannot install itself by supplying this JSON as its own operation result.
-    public static func accept(_ bytes: Data, manifest: YingxueWire.Manifest) throws -> [YingxueWire.ExportName] {
+    public static func accept(_ bytes: Data, manifest: YingxueWire.Manifest, upgrade: SourceUpgradeAssessment? = nil) throws -> [YingxueWire.ExportName] {
         switch try YingxueWireCodec.decode(YingxueWire.ModuleInspection.self, from: bytes) {
         case .rejected(let report): throw Failure.rejected(report)
         case .accepted(let report):
             let names = Set(report.exports.map(\.rawValue))
-            guard Set(GeneratedModulePolicy.requiredExports + requirements(for: manifest)).isSubset(of: names) else {
+            guard Set(GeneratedModulePolicy.requiredExports + requirements(for: manifest, upgrade: upgrade)).isSubset(of: names) else {
                 throw Failure.missingExport
             }
             return report.exports
