@@ -94,7 +94,7 @@ jobs:
           {
             printf 'Task: %s\nSource: %s\nRuntime: %s\n' "$SNOWLIT_CI_TASK" "$GITHUB_SHA" "$SNOWLIT_IOS_RUNTIME"
             if [ "$SNOWLIT_CI_TASK" = verify ]; then
-              printf 'Full verification requested; inspect all step results.\n'
+              printf 'Full verification requires all simulator checks AND the independent Release device build at this source revision.\n'
             else
               printf 'Focused verification only. Unselected suites were not executed.\n'
               printf 'Full acceptance requires the verify task at the same source revision.\n'
@@ -106,6 +106,34 @@ jobs:
         with:
           name: ios-${{ matrix.device }}-${{ env.SNOWLIT_CI_TASK }}-${{ github.sha }}
           path: build/evidence/
+          if-no-files-found: error
+          retention-days: 14
+
+  release-build:
+    name: iOS / Release device build
+    if: ${{ inputs.task == 'verify' || github.event_name != 'workflow_dispatch' }}
+    runs-on: macos-26
+    timeout-minutes: 20
+    env:
+      DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
+    steps:
+      - name: Check out source
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Restore locked package checkouts
+        uses: actions/cache/restore@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: build/SourcePackages
+          key: spm-${{ runner.os }}-${{ runner.arch }}-xcode26.6-${{ hashFiles('Packages/SnowlitKit/Package.swift', 'Packages/SnowlitKit/Package.resolved', 'Snowlit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+      - name: Build unsigned Release for iPhone
+        run: bash scripts/build_release.sh
+      - name: Upload Release build evidence
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: ios-release-${{ github.sha }}
+          path: build/evidence/release/
           if-no-files-found: error
           retention-days: 14
 

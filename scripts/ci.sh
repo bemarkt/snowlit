@@ -127,16 +127,11 @@ xcrun simctl install "$simulator" "$app"
 xcrun simctl launch "$simulator" io.github.bemarkt.snowlit \
   | tee "$evidence/launch.log"
 
-if [ "$kind" = phone ]; then
-  printf 'App baseline checks completed. Starting the Release device build.\n'
-  xcodebuild build -project Snowlit.xcodeproj -scheme Snowlit \
-    -configuration Release -destination 'generic/platform=iOS' \
-    -derivedDataPath "$root/build/release" -clonedSourcePackagesDirPath "$packages" CODE_SIGNING_ALLOWED=NO \
-    2>&1 | tee "$evidence/release-build.log"
-  release_app="$root/build/release/Build/Products/Release-iphoneos/Snowlit.app"
-  plutil -convert json -o "$evidence/release-info.json" "$release_app/Info.plist"
-  lipo -info "$release_app/Snowlit" | tee "$evidence/release-architecture.txt"
+if [ "$kind" = phone ] && [ "$scope" = full ]; then
+  # Standalone full runs retain the device build. The workflow runs the same
+  # command in a separate job so it does not delay simulator behavior checks.
+  bash scripts/build_release.sh
 fi
 
-printf 'All required checks passed for %s at %s\n' "$kind" "$(git rev-parse HEAD)" \
+printf 'Baseline checks passed for %s at %s (scope: %s).\n' "$kind" "$(git rev-parse HEAD)" "$scope" \
   | tee "$evidence/result.txt"
