@@ -5,10 +5,26 @@ import tempfile
 from pathlib import Path
 from unittest.mock import patch
 
-from storage_process import BUNDLE, DIGESTS, Probe, read_progress, validate_active, validate_marker, verify_reopened
+from storage_process import BUNDLE, DIGESTS, POINTS, Probe, read_progress, validate_active, validate_marker, verify_reopened
 
 
 class StorageProcessEvidenceTests(unittest.TestCase):
+    def test_order_comparison_keeps_all_commit_points_and_exactly_three_trials_each(self):
+        self.assertEqual(next(iter(POINTS.items()))[0], 'dataset')
+        self.assertEqual(POINTS['dataset'][0], 'oldClosed')
+        self.assertEqual(set(POINTS['dataset']), {'candidateValidated', 'oldClosed', 'pointerCommitted', 'adopted'})
+        self.assertEqual(set(POINTS['file']), {'temporaryWritten', 'filePromoted', 'beforeCommit', 'afterCommit'})
+        probe = object.__new__(Probe)
+        probe.results = []
+        with patch.object(probe, 'operation', return_value={}) as operation, \
+             patch.object(probe, 'save'), patch('storage_process.verify_reopened') as verify, patch('builtins.print'):
+            probe.run()
+        self.assertEqual(operation.call_count, 96)
+        self.assertEqual(verify.call_count, 24)
+        self.assertEqual(len(probe.results), 24)
+        self.assertEqual({(r['kind'], r['point'], r['repetition']) for r in probe.results},
+                         {(kind, point, n) for kind, points in POINTS.items() for point in points for n in range(1, 4)})
+
     def test_active_scene_requires_its_own_stage_and_exact_launch_identity(self):
         expected = dict(token="this-operation", mode="file-check", point="beforeCommit", pid=123)
         active = dict(expected, stage="active", details={})

@@ -185,8 +185,8 @@ struct SourceCandidateValidatorTests {
         let work = Task { try await runtime.invoke(input, expected: expected) }
         try await FixtureScenario.eventually { runtime.active != nil }
         let session = try #require(runtime.active)
-        weak var websiteStore = session.websiteDataStore
-        #expect(websiteStore != nil)
+        let websiteLifetime = WebsiteLifetime(session.websiteDataStore)
+        #expect(websiteLifetime.store != nil)
         let scenes = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
         let scene = try #require(scenes.first)
         let previous = scene.windows.first { $0.isKeyWindow }
@@ -213,7 +213,7 @@ struct SourceCandidateValidatorTests {
             }
             let reply = try await work.value
             #expect(runtime.active == nil && session.phase == .finished)
-            #expect(session.websiteDataStore == nil && websiteStore == nil)
+            #expect(session.websiteDataStore == nil && websiteLifetime.store == nil)
             if let retainedWebInteraction {
                 #expect(retainedWebInteraction.container.subviews.isEmpty && presentedPage == nil)
             }
@@ -222,7 +222,7 @@ struct SourceCandidateValidatorTests {
             do { try await runtime.invalidate(expected.id) }
             catch { Issue.record(error, "Installed operation cleanup failed") }
             _ = await work.result
-            #expect(session.websiteDataStore == nil && websiteStore == nil)
+            #expect(session.websiteDataStore == nil && websiteLifetime.store == nil)
             if let retainedWebInteraction {
                 #expect(retainedWebInteraction.container.subviews.isEmpty && presentedPage == nil)
             }
@@ -232,6 +232,12 @@ struct SourceCandidateValidatorTests {
 
     nonisolated private static let digest: SourceScriptSnapshot.Digest = {
         SHA256.hash(data: $0).map { String(format: "%02x", $0) }.joined()
+    }
+
+    @MainActor
+    private final class WebsiteLifetime {
+        weak var store: WKWebsiteDataStore?
+        init(_ store: WKWebsiteDataStore?) { self.store = store }
     }
 
     private func activeSession(_ validator: SourceCandidateValidator) async throws -> SourceExecutionSession {

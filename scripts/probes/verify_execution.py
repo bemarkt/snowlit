@@ -83,7 +83,7 @@ def verify(evidence, mode):
             raise ValueError("The actual Reader interaction UI test did not pass")
         return {"mode": mode, "suites": ["ReaderInteractionUITests"], "reportedTests": len(tests), "result": "passed"}
     suites = {
-        "integration": ["WebKitRuntimeProbeTests", "ReaderProbeTests", "SourceContractProbeTests"],
+        "integration": ["WebKitRuntimeProbeTests", "ReaderProbeTests", "SourceContractProbeTests", "SourceCandidateValidatorTests", "ReadingViewportTests"],
         "recovery": ["WebKitRecoveryTests"],
     }[mode]
     counts = [int(count) for count in re.findall(r"Test run with (\d+) tests? in \d+ suites? passed", log)]
@@ -93,6 +93,16 @@ def verify(evidence, mode):
         if f"Suite {suite} passed" not in log:
             raise ValueError(f"Required suite did not pass: {suite}")
     result = {"mode": mode, "suites": suites, "reportedTests": sum(counts), "result": "passed"}
+    if mode == "integration":
+        ui = {
+            "LibraryFlowUITests": "testAdoptSearchAllCatalogPagesAddAndReopenFromTheShelf",
+            "ReaderFlowUITests": "testChapterNavigationSettingsAndCachedResumeAfterRelaunch",
+        }
+        for suite, method in ui.items():
+            if (f"Test Case '-[SnowlitUITests.{suite} {method}]' passed" not in log
+                    or f"Test Suite '{suite}' passed" not in log):
+                raise ValueError(f"Required product UI did not pass: {suite}")
+        result["productUISuites"] = list(ui)
     if mode == "recovery":
         if status.get("processSamplingErrors") != 0 or not status.get("processSamples"):
             raise ValueError("Process observation did not complete")

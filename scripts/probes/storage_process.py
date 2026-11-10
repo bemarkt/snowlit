@@ -17,8 +17,10 @@ from process_samples import parse_native_snapshot
 
 BUNDLE = "io.github.bemarkt.snowlit"
 POINTS = {
+    # Move the previously failed reopen before the accumulated launch workload.
+    # Preserve all 24 trials; this tests order sensitivity, not a claimed fix.
+    "dataset": ("oldClosed", "candidateValidated", "pointerCommitted", "adopted"),
     "file": ("temporaryWritten", "filePromoted", "beforeCommit", "afterCommit"),
-    "dataset": ("candidateValidated", "oldClosed", "pointerCommitted", "adopted"),
 }
 CONTENTS = {"original": "original committed chapter 🧪", "replacement": "replacement committed chapter 📖"}
 DIGESTS = {key: hashlib.sha256(value.encode()).hexdigest() for key, value in CONTENTS.items()}
@@ -180,6 +182,10 @@ class Probe:
         except Exception as error:
             record["outcome"] = "failed"
             record["error"] = f"{type(error).__name__}: {error}"
+            if isinstance(error, (subprocess.TimeoutExpired, subprocess.CalledProcessError)):
+                def text(value):
+                    return value.decode(errors="replace") if isinstance(value, bytes) else (value or "")
+                record["commandFailure"] = dict(stdout=text(error.stdout)[-4096:], stderr=text(error.stderr)[-4096:])
             # A launch command can time out after the App starts. Preserve any
             # marker for diagnosis, but never accept it as a verified launch.
             if "marker" not in record and marker.is_file():

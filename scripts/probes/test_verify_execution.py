@@ -19,7 +19,12 @@ class VerifyExecutionTests(unittest.TestCase):
         }))
         (root / "webkit-tests.log").write_text("\n".join([
             "Suite WebKitRuntimeProbeTests passed", "Suite ReaderProbeTests passed", "Suite SourceContractProbeTests passed",
-            "Test run with 15 tests in 3 suites passed",
+            "Suite SourceCandidateValidatorTests passed", "Suite ReadingViewportTests passed",
+            "Test run with 15 tests in 5 suites passed",
+            "Test Case '-[SnowlitUITests.LibraryFlowUITests testAdoptSearchAllCatalogPagesAddAndReopenFromTheShelf]' passed",
+            "Test Suite 'LibraryFlowUITests' passed",
+            "Test Case '-[SnowlitUITests.ReaderFlowUITests testChapterNavigationSettingsAndCachedResumeAfterRelaunch]' passed",
+            "Test Suite 'ReaderFlowUITests' passed",
         ]))
 
     def test_missing_bundle_or_execution_log_is_rejected(self):
@@ -75,6 +80,18 @@ class VerifyExecutionTests(unittest.TestCase):
                 verify(root, "recovery")
             self.recovery_observations(root)
             self.assertEqual(verify(root, "recovery")["result"], "passed")
+
+    def test_product_ui_and_production_viewport_cannot_be_missing(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self.fixture(root)
+            log = root / 'webkit-tests.log'
+            complete = log.read_text()
+            for required in ['Suite ReadingViewportTests passed', 'Suite SourceCandidateValidatorTests passed',
+                             "Test Suite 'LibraryFlowUITests' passed", "Test Suite 'ReaderFlowUITests' passed"]:
+                log.write_text(complete.replace(required, 'omitted'))
+                with self.assertRaises(ValueError):
+                    verify(root, 'integration')
 
     def recovery_observations(self, root):
         log = ["Suite WebKitRecoveryTests passed", "Test run with 1 test in 1 suite passed"]

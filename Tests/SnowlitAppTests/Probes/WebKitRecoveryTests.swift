@@ -94,8 +94,28 @@ struct WebKitRecoveryTests {
 
     /// Only run with scripts/probe_ios.sh phone recovery. It owns a dedicated simulator
     /// and a process deadline. A new WKWebView is not assumed to own a new WebContent process.
-    @Test(arguments: ["spin", "never"])
-    func observeRecoveryAfterAbandoningUncooperativeJavaScript(fault: String) async throws {
+    @Test func observeRecoveryAfterAbandoningUncooperativeJavaScript() async throws {
+        // The prior run completed spin but never reached the following never
+        // baseline. Run never before spin in this same host, then measure a new
+        // load after spin. All six fault repetitions and deadlines remain.
+        print("RecoveryOrder never-then-spin-then-load hostPID=\(ProcessInfo.processInfo.processIdentifier)")
+        for fault in ["never", "spin"] {
+            do { try await observeRecovery(fault: fault) }
+            catch { Issue.record(error, "Recovery comparison failed for \(fault)") }
+        }
+        let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
+        defer { probe.close() }
+        let candidateWindow = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).first(where: \.isKeyWindow)
+        let window = try #require(candidateWindow)
+        probe.webView.frame = window.bounds; window.addSubview(probe.webView)
+        print("PostSpinPreparation started hostPID=\(ProcessInfo.processInfo.processIdentifier)")
+        try await probe.load(URL(string: "http://127.0.0.1:18731/health")!)
+        #expect(try await probe.evaluate("return document.readyState;") == "complete")
+        print("PostSpinPreparation ready hostPID=\(ProcessInfo.processInfo.processIdentifier)")
+    }
+
+    private func observeRecovery(fault: String) async throws {
         try #require(Bundle.main.bundleIdentifier == "io.github.bemarkt.snowlit")
         let candidateWindow = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
             .flatMap(\.windows).first(where: \.isKeyWindow)
