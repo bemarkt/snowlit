@@ -39,12 +39,16 @@ files = subprocess.check_output(["git", "ls-files", "--cached", "--others", "--e
 records = []
 for raw in sorted(set(files.split(b"\0")) - {b""}):
     path = pathlib.Path(raw.decode())
-    if path.is_file() and path.suffix in (".swift", ".sh", ".py", ".mjs", ".pbxproj", ".xcscheme", ".yml"):
+    if path.is_file() and path.suffix in (".swift", ".c", ".sh", ".py", ".mjs", ".pbxproj", ".xcscheme", ".yml"):
         records.append({"path": path.as_posix(), "sha256": hashlib.sha256(path.read_bytes()).hexdigest()})
 pathlib.Path(sys.argv[1]).write_text(json.dumps(records, indent=2) + "\n")
 PY
 
 node --test scripts/probes/site.test.mjs > "$evidence/fixture-tests.log" 2>&1
+export SNOWLIT_PROCESS_SAMPLER="$root/build/process-snapshot"
+xcrun --sdk macosx clang -std=c11 -O2 -Wall -Wextra -Werror \
+  scripts/probes/process_snapshot.c -lproc -o "$SNOWLIT_PROCESS_SAMPLER" \
+  > "$evidence/sampler-build.log" 2>&1
 python3 -m unittest discover -s scripts/probes -p 'test_*.py' \
   > "$evidence/probe-tool-tests.log" 2>&1
 fixture_pid=""
@@ -98,7 +102,7 @@ xcrun simctl bootstatus "$simulator" -b
 xcodebuild -list -json -project Snowlit.xcodeproj > "$evidence/project-schemes.json"
 supervision=(python3 "$root/scripts/probes/supervise.py" --timeout 900 --log "$evidence/webkit-tests.log")
 if [ "$mode" = recovery ]; then
-  supervision+=(--process-samples "$evidence/process-samples.jsonl")
+  supervision+=(--process-samples "$evidence/process-samples.jsonl" --process-sampler "$SNOWLIT_PROCESS_SAMPLER")
 fi
 "${supervision[@]}" -- \
   xcodebuild test -project Snowlit.xcodeproj -scheme Snowlit -destination "platform=iOS Simulator,id=$simulator" \

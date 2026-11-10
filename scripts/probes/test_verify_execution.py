@@ -1,6 +1,7 @@
 """Missing execution evidence must never become an accepted probe run."""
 
 import json
+from datetime import datetime, timezone
 from pathlib import Path
 import tempfile
 import unittest
@@ -56,8 +57,54 @@ class VerifyExecutionTests(unittest.TestCase):
                 "Suite WebKitRecoveryTests passed\nTest run with 1 test in 1 suite passed")
             with self.assertRaises(ValueError):
                 verify(root, "recovery")
-            (root / "process-samples.jsonl").write_text("test-only placeholder\n")
+            self.recovery_observations(root)
             self.assertEqual(verify(root, "recovery")["result"], "passed")
+
+    def recovery_observations(self, root):
+        log = ["Suite WebKitRecoveryTests passed", "Test run with 1 test in 1 suite passed"]
+        samples = [dict(kind="metadata", format=2)]
+        for fault_index, fault in enumerate(["spin", "never"]):
+            for repetition in range(1, 4):
+                baseline = 100 * (fault_index * 3 + repetition)
+                for stage, delta in [("baseline", 0), ("execution-requested", 1), ("fault-entered", 1.1),
+                                     ("waiter-ended", 1.3), ("closed", 2.4),
+                                     ("replacement-ready", 3), ("observation-ended", 5)]:
+                    log.append(f"RecoveryEvent epochSeconds={baseline + delta} stage={stage} "
+                               f"fault={fault} repetition={repetition} hostPID=50")
+                for index in range(1, 20):
+                    samples.append(dict(kind="sample", durationSeconds=0.01,
+                        observedUTC=datetime.fromtimestamp(baseline + index / 4, timezone.utc).isoformat(),
+                        processes=[dict(pid=50, executable="Snowlit", measurement="measured"),
+                                   dict(pid=60, executable="com.apple.WebKit.WebContent", measurement="measured")]))
+        (root / "webkit-tests.log").write_text("\n".join(log))
+        (root / "process-samples.jsonl").write_text("\n".join(json.dumps(row) for row in samples))
+        status_path = root / "webkit-tests.status.json"
+        status = json.loads(status_path.read_text())
+        status["processSamples"] = len(samples) - 1
+        status_path.write_text(json.dumps(status))
+
+    def test_missing_fault_entry_empty_processes_and_observation_gaps_are_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self.fixture(root)
+            for damage in ["missing-entry", "empty", "gap", "error"]:
+                self.recovery_observations(root)
+                if damage == "missing-entry":
+                    path = root / "webkit-tests.log"
+                    path.write_text(path.read_text().replace("stage=fault-entered", "stage=unproven"))
+                else:
+                    path = root / "process-samples.jsonl"
+                    records = [json.loads(row) for row in path.read_text().splitlines()]
+                    if damage == "error":
+                        records.append(dict(kind="samplingError"))
+                    else:
+                        for row in records[1:]:
+                            stamp = datetime.fromisoformat(row["observedUTC"]).timestamp()
+                            if damage == "empty" or 101.1 < stamp < 102.4:
+                                row["processes"] = []
+                    path.write_text("\n".join(json.dumps(row) for row in records))
+                with self.assertRaises(ValueError, msg=damage):
+                    verify(root, "recovery")
 
 
 if __name__ == "__main__":

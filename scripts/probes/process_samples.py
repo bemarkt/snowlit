@@ -1,6 +1,6 @@
 """Observe host process candidates; never infer WebView ownership or terminate them."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import os
 from pathlib import Path
@@ -9,6 +9,7 @@ import time
 
 
 def parse_processes(output, *, metrics=True):
+    """Parse the legacy ps evidence format, retained for historical comparisons."""
     processes = {}
     for line in output.splitlines():
         if not line.strip():
@@ -51,17 +52,64 @@ def parse_processes(output, *, metrics=True):
     return [dict(processes[pid], candidate=pid in candidates) for pid in sorted(selected)]
 
 
+def parse_native_snapshot(output):
+    snapshot = json.loads(output)
+
+    def unsigned(value):
+        if type(value) is not int or value < 0:
+            raise ValueError("Invalid nonnegative integer")
+        return value
+
+    numerator = unsigned(snapshot["timebaseNumerator"])
+    denominator = unsigned(snapshot["timebaseDenominator"])
+    if not numerator or not denominator:
+        raise ValueError("Invalid CPU timebase")
+    identities = set()
+    records = []
+    for raw in snapshot["processes"]:
+        pid = unsigned(raw["pid"])
+        if pid in identities or not pid:
+            raise ValueError("Invalid or duplicate process identity")
+        identities.add(pid)
+        microseconds = unsigned(raw["startMicroseconds"])
+        if microseconds >= 1_000_000:
+            raise ValueError("Invalid process start time")
+        started = datetime.fromtimestamp(unsigned(raw["startSeconds"]), timezone.utc)
+        started += timedelta(microseconds=microseconds)
+        name = raw["executable"]
+        if not isinstance(name, str) or not name or "/" in name or any(ord(c) < 32 for c in name):
+            raise ValueError("Invalid executable basename")
+        candidate = raw["candidate"]
+        if type(candidate) is not bool:
+            raise ValueError("Invalid candidate flag")
+        measurement = raw["measurement"]
+        allowed = {"measured", "exited-during-sample", "identity-changed-during-sample"}
+        if measurement not in (allowed if candidate else {"identity-only"}):
+            raise ValueError("Incomplete candidate measurement")
+        record = dict(pid=pid, parentPID=unsigned(raw["parentPID"]), startedUTC=started.isoformat(),
+                      executable=name, candidate=candidate, measurement=measurement)
+        if measurement == "measured":
+            cpu_ticks = unsigned(raw["userTicks"]) + unsigned(raw["systemTicks"])
+            record.update(rssKiB=unsigned(raw["rssBytes"]) / 1024,
+                          cpuSeconds=cpu_ticks * numerator / denominator / 1_000_000_000)
+        records.append(record)
+    return dict(processes=records, exitedDuringDiscovery=unsigned(snapshot["exitedDuringDiscovery"]),
+                timebaseNumerator=numerator, timebaseDenominator=denominator)
+
+
 class ProcessSamples:
-    def __init__(self, path):
+    def __init__(self, path, sampler):
         self.path = Path(path)
+        self.sampler = Path(sampler)
         self.path.parent.mkdir(parents=True, exist_ok=True)
         self.output = self.path.open("w", encoding="utf-8")
         self.errors = 0
         self.samples = 0
         self.write({
-            "kind": "metadata", "format": 1, "hostCPUCount": os.cpu_count(),
-            "scope": "Host candidates and their ancestors; no per-WebView attribution",
-            "rssUnit": "1024 bytes", "cpuTime": "Accumulated user + system CPU time from ps",
+            "kind": "metadata", "format": 2, "hostCPUCount": os.cpu_count(),
+            "scope": "Same-user host candidates and their same-user ancestors; no per-WebView attribution",
+            "sampler": "macOS libproc; ancestors identity-only; no task ports or process signals",
+            "rssUnit": "1024 bytes", "cpuSeconds": "Accumulated user + system ticks converted by mach_timebase_info",
         })
 
     def write(self, record):
@@ -71,36 +119,31 @@ class ProcessSamples:
         self.output.flush()
 
     def sample(self, stage):
-        environment = dict(os.environ, LC_ALL="C", TZ="UTC")
+        started = time.monotonic()
         try:
             result = subprocess.run(
-                ["/bin/ps", "-Aww", "-o", "pid=,ppid=,lstart=,comm="],
-                env=environment, capture_output=True, text=True, encoding="utf-8",
+                [str(self.sampler)], capture_output=True, text=True, encoding="utf-8",
                 timeout=2, check=True,
             )
-            identities = parse_processes(result.stdout, metrics=False)
-            measured = []
-            if identities:
-                # Resource lookup for every host process can stall a busy CI runner.
-                # Read task metrics only for the observed candidates and their ancestors.
-                pids = ",".join(str(process["pid"]) for process in identities)
-                result = subprocess.run(
-                    ["/bin/ps", "-ww", "-p", pids, "-o", "pid=,ppid=,rss=,time=,lstart=,comm="],
-                    env=environment, capture_output=True, text=True, encoding="utf-8", timeout=2,
-                )
-                # All selected processes may have exited between the two snapshots.
-                empty = result.returncode == 1 and not result.stdout.strip() and not result.stderr.strip()
-                if not empty:
-                    result.check_returncode()
-                    selected = {(process["pid"], process["startedUTC"]) for process in identities}
-                    measured = [process for process in parse_processes(result.stdout)
-                                if (process["pid"], process["startedUTC"]) in selected]
-            self.write({"kind": "sample", "stage": stage, "processes": measured})
+            snapshot = parse_native_snapshot(result.stdout)
+            self.write(dict(kind="sample", stage=stage, durationSeconds=time.monotonic() - started, **snapshot))
             self.samples += 1
-        except (OSError, subprocess.SubprocessError, UnicodeError, ValueError) as error:
+        except (OSError, subprocess.SubprocessError, UnicodeError, ValueError, KeyError, TypeError) as error:
             self.errors += 1
-            # Error type only: no arbitrary process output, command arguments or environment.
-            self.write({"kind": "samplingError", "stage": stage, "errorType": type(error).__name__})
+            diagnostic = {}
+            if isinstance(error, subprocess.CalledProcessError):
+                try:
+                    native = json.loads(error.stderr)
+                    if native.get("phase") in {"arguments", "timebase", "list-size", "allocate", "list",
+                                               "list-truncated", "identity", "metrics"}:
+                        diagnostic["queryPhase"] = native["phase"]
+                        for field in ["pid", "errorCode"]:
+                            if type(native.get(field)) is int:
+                                diagnostic[field] = native[field]
+                except (ValueError, TypeError, AttributeError):
+                    pass  # Preserve the failure without publishing arbitrary subprocess output.
+            self.write(dict(kind="samplingError", stage=stage, errorType=type(error).__name__,
+                            durationSeconds=time.monotonic() - started, **diagnostic))
 
     def close(self):
         self.output.close()

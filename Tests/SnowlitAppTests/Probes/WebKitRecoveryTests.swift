@@ -44,6 +44,10 @@ struct WebKitRecoveryTests {
                 let waitDuration = started.duration(to: clock.now)
                 #expect(heartbeat.ticks > 0)
                 #expect(probe!.results.pendingCount == 0)
+                observe("waiter-ended", fault: fault, repetition: repetition)
+                // A separate observation window after waiter timeout lets the host
+                // sample the still-uncooperative work before close is requested.
+                try await Task.sleep(for: .seconds(1))
                 probe!.webView.configuration.userContentController.removeScriptMessageHandler(forName: "recoveryStarted")
                 probe!.close()
                 probe = nil
@@ -78,7 +82,7 @@ struct WebKitRecoveryTests {
     }
 
     private func observe(_ stage: String, fault: String, repetition: Int) {
-        print("RecoveryEvent epochSeconds=\(Date().timeIntervalSince1970) stage=\(stage) fault=\(fault) repetition=\(repetition)")
+        print("RecoveryEvent epochSeconds=\(Date().timeIntervalSince1970) stage=\(stage) fault=\(fault) repetition=\(repetition) hostPID=\(ProcessInfo.processInfo.processIdentifier)")
     }
 
     @MainActor
@@ -108,7 +112,7 @@ struct WebKitRecoveryTests {
             guard message.name == "recoveryStarted", message.frameInfo.isMainFrame,
                   message.body as? String == token, !received else { return }
             received = true
-            print("RecoveryEvent epochSeconds=\(Date().timeIntervalSince1970) stage=fault-entered fault=\(fault) repetition=\(repetition)")
+            print("RecoveryEvent epochSeconds=\(Date().timeIntervalSince1970) stage=fault-entered fault=\(fault) repetition=\(repetition) hostPID=\(ProcessInfo.processInfo.processIdentifier)")
         }
     }
 }

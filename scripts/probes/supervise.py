@@ -18,6 +18,7 @@ def main():
     parser.add_argument("--timeout", type=float, required=True)
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--process-samples", type=Path)
+    parser.add_argument("--process-sampler", type=Path)
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
@@ -26,7 +27,9 @@ def main():
     if os.name != "posix":
         parser.error("Apple probe supervision requires POSIX process groups")
     if args.process_samples and sys.platform != "darwin":
-        parser.error("Process sampling requires the macOS ps implementation")
+        parser.error("Process sampling requires macOS libproc")
+    if args.process_samples and (not args.process_sampler or not args.process_sampler.is_file()):
+        parser.error("Process sampling requires the compiled host sampler")
     args.log.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     timed_out = False
@@ -54,7 +57,7 @@ def main():
         process.wait(timeout=10)
 
     signal.signal(signal.SIGTERM, interrupt)
-    samples = ProcessSamples(args.process_samples) if args.process_samples else None
+    samples = ProcessSamples(args.process_samples, args.process_sampler) if args.process_samples else None
     if samples:
         samples.sample("before-command")
     with args.log.open("wb") as output:
@@ -67,7 +70,7 @@ def main():
                 if remaining <= 0:
                     raise subprocess.TimeoutExpired(command, args.timeout)
                 try:
-                    exit_code = process.wait(timeout=min(0.5, remaining) if samples else remaining)
+                    exit_code = process.wait(timeout=min(0.25, remaining) if samples else remaining)
                     break
                 except subprocess.TimeoutExpired:
                     if not samples:
