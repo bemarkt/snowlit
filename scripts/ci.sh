@@ -4,6 +4,11 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 root="$PWD"
 kind="$1"
+scope="${2:-full}"
+case "$scope" in
+  full|prepare) ;;
+  *) printf 'Unknown verification scope: %s\n' "$scope" >&2; exit 2 ;;
+esac
 case "$kind" in
   phone) device="iPhone 17" ;;
   tablet) device="iPad (A16)" ;;
@@ -24,6 +29,7 @@ mkdir -p "$evidence"
   printf 'Runner image version: %s\n' "${ImageVersion:-local}"
   printf 'Run ID: %s\n' "${GITHUB_RUN_ID:-local}"
   printf 'Run attempt: %s\n' "${GITHUB_RUN_ATTEMPT:-local}"
+  printf 'Task: %s / preparation scope: %s\n' "${SNOWLIT_CI_TASK:-verify}" "$scope"
 } > "$evidence/environment.txt"
 cat "$evidence/environment.txt"
 runtime_version="${SNOWLIT_IOS_RUNTIME:-26.5}"
@@ -31,6 +37,17 @@ bash scripts/prepare_runtime.sh "$runtime_version" "$evidence"
 runtime_id="com.apple.CoreSimulator.SimRuntime.iOS-${runtime_version//./-}"
 
 python3 scripts/check_structure.py | tee "$evidence/structure.log"
+packages="$root/build/SourcePackages"
+if [ "$scope" = prepare ]; then
+  # Build this checkout's test host once without booting an unused baseline device.
+  xcodebuild build-for-testing -project Snowlit.xcodeproj -scheme Snowlit \
+    -configuration Debug -destination 'generic/platform=iOS Simulator' \
+    -derivedDataPath "$root/build/app-$kind" -clonedSourcePackagesDirPath "$packages" \
+    CODE_SIGNING_ALLOWED=NO 2>&1 | tee "$evidence/test-host-build.log"
+  printf 'Test host prepared at %s; no baseline tests or Release build were run.\n' \
+    "$(git rev-parse HEAD)" > "$evidence/preparation.txt"
+  exit 0
+fi
 core_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
 core_triple="$(uname -m)-apple-ios26.0-simulator"
 printf 'Target: %s\nSDK: %s\n' "$core_triple" "$core_sdk" > "$evidence/core-destination.txt"
@@ -55,7 +72,7 @@ destination="platform=iOS Simulator,id=$simulator"
 if [ "$kind" = phone ]; then
   (
     cd Packages/SnowlitKit
-    xcodebuild -list -json > "$evidence/package-schemes.json"
+    xcodebuild -list -json -clonedSourcePackagesDirPath "$packages" > "$evidence/package-schemes.json"
     package_scheme="$(python3 - "$evidence/package-schemes.json" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
@@ -71,6 +88,7 @@ PY
 )"
     xcodebuild test -scheme "$package_scheme" -destination "$destination" \
       -derivedDataPath "$root/build/package-tests" \
+      -clonedSourcePackagesDirPath "$packages" \
       -resultBundlePath "$evidence/StorageTests.xcresult" \
       -only-testing:SnowlitCoreTests -only-testing:SnowlitStorageTests -only-testing:YingxueKitTests \
       -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
@@ -85,6 +103,7 @@ fi
 xcodebuild test -project Snowlit.xcodeproj -scheme Snowlit \
   -configuration Debug -destination "$destination" \
   -derivedDataPath "$root/build/app-$kind" \
+  -clonedSourcePackagesDirPath "$packages" \
   -resultBundlePath "$evidence/AppTests.xcresult" \
   -parallel-testing-enabled NO -test-timeouts-enabled YES \
   -maximum-test-execution-time-allowance 120 \
@@ -100,7 +119,7 @@ xcrun simctl launch "$simulator" io.github.bemarkt.snowlit \
 if [ "$kind" = phone ]; then
   xcodebuild build -project Snowlit.xcodeproj -scheme Snowlit \
     -configuration Release -destination 'generic/platform=iOS' \
-    -derivedDataPath "$root/build/release" CODE_SIGNING_ALLOWED=NO \
+    -derivedDataPath "$root/build/release" -clonedSourcePackagesDirPath "$packages" CODE_SIGNING_ALLOWED=NO \
     2>&1 | tee "$evidence/release-build.log"
   release_app="$root/build/release/Build/Products/Release-iphoneos/Snowlit.app"
   plutil -convert json -o "$evidence/release-info.json" "$release_app/Info.plist"

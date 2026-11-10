@@ -108,14 +108,15 @@ simulator="$(python3 scripts/create_simulator.py "$device" \
 xcrun simctl boot "$simulator"
 xcrun simctl bootstatus "$simulator" -b
 
-xcodebuild -list -json -project Snowlit.xcodeproj > "$evidence/project-schemes.json"
 supervision=(python3 "$root/scripts/probes/supervise.py" --timeout 900 --log "$evidence/webkit-tests.log")
 if [ "$mode" = recovery ]; then
   supervision+=(--process-samples "$evidence/process-samples.jsonl" --process-sampler "$SNOWLIT_PROCESS_SAMPLER")
 fi
 "${supervision[@]}" -- \
-  xcodebuild test -project Snowlit.xcodeproj -scheme Snowlit -destination "platform=iOS Simulator,id=$simulator" \
+  xcodebuild test-without-building -project Snowlit.xcodeproj -scheme Snowlit -configuration Debug \
+  -destination "platform=iOS Simulator,id=$simulator" \
   -derivedDataPath "$root/build/app-$kind" -resultBundlePath "$evidence/RuntimeTests.xcresult" \
+  -clonedSourcePackagesDirPath "$root/build/SourcePackages" \
   "${selection[@]}" \
   -parallel-testing-enabled NO -test-timeouts-enabled YES \
   -maximum-test-execution-time-allowance "$test_timeout" CODE_SIGNING_ALLOWED=NO

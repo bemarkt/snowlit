@@ -1,4 +1,5 @@
 name: iOS
+run-name: iOS ${{ inputs.task || 'verify' }} / ${{ github.ref_name }} / ${{ inputs.ios_runtime || '26.5' }}
 
 on:
   push:
@@ -7,9 +8,9 @@ on:
   workflow_dispatch:
     inputs:
       task:
-        description: Verification task
+        description: Full verification or a focused experiment
         type: choice
-        options: ['verify', 'runtime-check']
+        options: ['verify', 'integration', 'recovery', 'reader-ui', 'storage', 'runtime-check']
         default: 'verify'
       ios_runtime:
         description: iPhone simulator runtime to verify
@@ -27,7 +28,7 @@ concurrency:
 jobs:
   build-and-test:
     if: ${{ inputs.task != 'runtime-check' }}
-    name: iOS / ${{ matrix.device }}
+    name: iOS / ${{ matrix.device }} / ${{ inputs.task || 'verify' }}
     runs-on: macos-26
     timeout-minutes: 65
     strategy:
@@ -37,30 +38,55 @@ jobs:
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       SNOWLIT_IOS_RUNTIME: ${{ inputs.ios_runtime || '26.5' }}
+      SNOWLIT_CI_TASK: ${{ inputs.task || 'verify' }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - name: Build and test
+      - name: Cache locked package checkouts
+        uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
+        with:
+          path: build/SourcePackages
+          key: spm-${{ runner.os }}-${{ runner.arch }}-xcode26.6-${{ hashFiles('Packages/SnowlitKit/Package.swift', 'Packages/SnowlitKit/Package.resolved', 'Snowlit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
+      - name: Build and test baseline
         id: baseline
+        if: env.SNOWLIT_CI_TASK == 'verify'
         run: bash scripts/ci.sh "${{ matrix.device }}"
+      - name: Prepare focused test host
+        id: focused
+        if: env.SNOWLIT_CI_TASK != 'verify'
+        run: bash scripts/ci.sh "${{ matrix.device }}" prepare
       - name: Run isolated WebKit integration probes
+        if: ${{ !cancelled() && (steps.baseline.conclusion == 'success' || steps.focused.conclusion == 'success') && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'integration') }}
         run: bash scripts/probe_ios.sh "${{ matrix.device }}"
       - name: Observe recovery from uncooperative JavaScript
-        if: ${{ !cancelled() && matrix.device == 'phone' && steps.baseline.conclusion == 'success' }}
+        if: ${{ !cancelled() && matrix.device == 'phone' && (steps.baseline.conclusion == 'success' || steps.focused.conclusion == 'success') && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'recovery') }}
         run: bash scripts/probe_ios.sh phone recovery
       - name: Observe system page curl gestures
-        if: ${{ !cancelled() && steps.baseline.conclusion == 'success' }}
+        if: ${{ !cancelled() && (steps.baseline.conclusion == 'success' || steps.focused.conclusion == 'success') && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'reader-ui') }}
         run: bash scripts/probe_ios.sh "${{ matrix.device }}" reader-ui
       - name: Interrupt and reopen isolated storage
-        if: ${{ !cancelled() && steps.baseline.conclusion == 'success' }}
+        if: ${{ !cancelled() && (steps.baseline.conclusion == 'success' || steps.focused.conclusion == 'success') && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'storage') }}
         run: bash scripts/probe_storage.sh
+      - name: Record verification scope
+        if: always()
+        run: |
+          mkdir -p build/evidence
+          {
+            printf 'Task: %s\nSource: %s\nRuntime: %s\n' "$SNOWLIT_CI_TASK" "$GITHUB_SHA" "$SNOWLIT_IOS_RUNTIME"
+            if [ "$SNOWLIT_CI_TASK" = verify ]; then
+              printf 'Full verification requested; inspect all step results.\n'
+            else
+              printf 'Focused verification only. Unselected suites were not executed.\n'
+              printf 'Full acceptance requires the verify task at the same source revision.\n'
+            fi
+          } | tee build/evidence/verification-scope.txt >> "$GITHUB_STEP_SUMMARY"
       - name: Upload verification evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ios-${{ matrix.device }}-${{ github.sha }}
+          name: ios-${{ matrix.device }}-${{ env.SNOWLIT_CI_TASK }}-${{ github.sha }}
           path: build/evidence/
           if-no-files-found: error
           retention-days: 14
