@@ -10,7 +10,7 @@ on:
       task:
         description: Full verification or a focused experiment
         type: choice
-        options: ['verify', 'integration', 'recovery', 'reader-ui', 'storage', 'runtime-check']
+        options: ['verify', 'integration', 'recovery', 'reader-ui', 'storage', 'ipa', 'runtime-check']
         default: 'verify'
       ios_runtime:
         description: iPhone simulator runtime to verify
@@ -27,7 +27,7 @@ concurrency:
 
 jobs:
   build-and-test:
-    if: ${{ inputs.task != 'runtime-check' }}
+    if: ${{ inputs.task != 'runtime-check' && inputs.task != 'ipa' }}
     name: iOS / ${{ matrix.device }} / ${{ matrix.suite }}
     runs-on: macos-26
     timeout-minutes: 45
@@ -123,7 +123,7 @@ jobs:
 
   release-build:
     name: iOS / Release device build
-    if: ${{ inputs.task == 'verify' || github.event_name != 'workflow_dispatch' }}
+    if: ${{ inputs.task == 'verify' || inputs.task == 'ipa' || github.event_name != 'workflow_dispatch' }}
     runs-on: macos-26
     timeout-minutes: 20
     env:
@@ -140,6 +140,16 @@ jobs:
           key: spm-${{ runner.os }}-${{ runner.arch }}-xcode26.6-${{ hashFiles('Packages/SnowlitKit/Package.swift', 'Packages/SnowlitKit/Package.resolved', 'Snowlit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
       - name: Build unsigned Release for iPhone
         run: bash scripts/build_release.sh
+      - name: Upload unsigned IPA and checksums
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: Snowlit-unsigned-ipa-${{ github.sha }}
+          path: |
+            build/ipa/*.ipa
+            build/ipa/*.sha256
+            build/ipa/*.json
+          if-no-files-found: error
+          retention-days: 14
       - name: Upload Release build evidence
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
