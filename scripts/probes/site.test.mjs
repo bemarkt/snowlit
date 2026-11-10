@@ -63,6 +63,18 @@ test('browser fixture exposes an observable reachable second origin without foll
   assert.ok(requests.some(request => request.path === 'browser/forbidden-redirect'));
 });
 
+test('released native requests can carry independently observed cookie changes', async t => {
+  const {base} = await setup(t);
+  const first = fetch(base + 'wait/cookieA');
+  const second = fetch(base + 'wait/cookieB');
+  await waitUntil(async () => (await (await fetch(base + 'status')).json()).pending === 2);
+  await fetch(base + 'release/cookieB', {method: 'POST'});
+  assert.match((await second).headers.getSetCookie()[0], /^cookieB=received;.*HttpOnly/);
+  assert.equal((await (await fetch(base + 'status')).json()).pending, 1);
+  await fetch(base + 'release/cookieA', {method: 'POST'});
+  assert.match((await first).headers.getSetCookie()[0], /^cookieA=received;.*HttpOnly/);
+});
+
 test('ES module is self-contained and content preserves duplicate paragraphs and image roles', async t => {
   const { base } = await setup(t);
   const response = await fetch(`${base}module.mjs`);

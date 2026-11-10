@@ -97,7 +97,9 @@ export async function startFixture({ port = 0 } = {}) {
       const key = path.slice('release/'.length);
       const pending = scenario.gates.get(key) ?? new Set();
       const count = pending.size;
-      for (const waiting of [...pending]) send(waiting, 200, { released: key });
+      const headers = ['cookieA', 'cookieB'].includes(key)
+        ? { 'Set-Cookie': `${key}=received; Path=${base}; HttpOnly; SameSite=Lax` } : {};
+      for (const waiting of [...pending]) send(waiting, 200, { released: key }, undefined, headers);
       scenario.gates.delete(key);
       return send(response, 200, { released: count });
     }

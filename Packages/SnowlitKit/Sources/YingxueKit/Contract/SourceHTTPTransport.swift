@@ -20,13 +20,19 @@ public final class SourceHTTPTransport {
     private var closed = false
     private var closing: Task<Void, Never>?
 
-    public init() {
+    public convenience init() { self.init(cookies: []) }
+
+    /// Native website-session transfer only. Cookies are never exposed on Wire.
+    init(cookies: [HTTPCookie]) {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 30
         configuration.urlCache = nil
         session = URLSession(configuration: configuration, delegate: SourceRedirectDelegate(), delegateQueue: nil)
+        for cookie in cookies { session.configuration.httpCookieStorage?.setCookie(cookie) }
     }
+
+    var cookies: [HTTPCookie] { session.configuration.httpCookieStorage?.cookies ?? [] }
 
     // A local test can inject an isolated URLProtocol without changing production
     // session behavior or replacing the redirect/credential/gate implementation.

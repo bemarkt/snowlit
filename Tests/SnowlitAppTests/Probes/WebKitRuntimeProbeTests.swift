@@ -9,6 +9,95 @@ import UIKit
 @Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct WebKitRuntimeProbeTests {
+    @Test func websiteSessionSynchronizesWebLoginNativeRotationAndLogout() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            try await withWebsiteSession { website, probe, context in
+                try await probe.load(fixture.url("page"))
+                #expect(try await probe.evaluate("""
+                    return String((await fetch(url, {method: 'POST', headers: {'Content-Type': 'application/json'},
+                        body: JSON.stringify({password: 'fixture-password'})})).status);
+                    """, arguments: ["url": fixture.url("auth/login").absoluteString]) == "200")
+                let original = try #require(await website.dataStore.httpCookieStore.allCookies().first { $0.name == "sid" })
+                #expect(original.isHTTPOnly)
+                #expect(try await context.request(website, fixture.url("protected")).status == 200)
+                let isolated = SourceWebsiteSession(dataStore: .nonPersistent())
+                #expect(try await context.request(isolated, fixture.url("protected")).status == 401)
+                try await isolated.erase()
+                let rotated = try await context.request(website, fixture.url("auth/rotate"), method: .post)
+                #expect(rotated.status == 200)
+                #expect(!rotated.headers.contains { $0.name.lowercased() == "set-cookie" })
+                let current = try #require(await website.dataStore.httpCookieStore.allCookies().first { $0.name == "sid" })
+                #expect(current.value != original.value && current.isHTTPOnly)
+                #expect(try await responseCode(probe, at: fixture.url("protected")) == "200")
+                #expect(try await probe.evaluate("return String(document.cookie.includes('sid='));") == "false")
+                #expect(try await context.request(website, fixture.url("auth/logout"), method: .post).status == 200)
+                #expect(!(await website.dataStore.httpCookieStore.allCookies()).contains { $0.name == "sid" })
+                #expect(try await context.request(website, fixture.url("protected")).status == 401)
+                #expect(try await responseCode(probe, at: fixture.url("protected")) == "401")
+            }
+        }
+    }
+
+    @Test func websiteSessionPreservesCookiePathsHostOnlyAndUnrelatedConcurrentChanges() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            try await withWebsiteSession { website, probe, context in
+                try await probe.load(fixture.url("page"))
+                #expect(try await responseCode(probe, at: fixture.url("cookies/issue")) == "200")
+                let response = try await context.request(website, fixture.url("nested/cookies"))
+                let echo = try JSONDecoder().decode(CookieEcho.self, from: #require(Data(base64Encoded: response.base64)))
+                #expect(Set(echo.cookies) == ["probeCookie=root", "probeCookie=scenario", "probeCookie=nested"])
+                #expect(try await context.request(website, fixture.url("cookies/host-issue")).status == 200)
+                var foreign = try #require(URLComponents(url: fixture.url("cookies"), resolvingAgainstBaseURL: false))
+                foreign.host = "localhost"
+                let foreignResponse = try await context.request(website, #require(foreign.url))
+                let foreignEcho = try JSONDecoder().decode(CookieEcho.self, from: #require(Data(base64Encoded: foreignResponse.base64)))
+                #expect(!foreignEcho.cookies.contains { $0.hasPrefix("probeHost=") || $0.hasPrefix("probeForeign=") })
+
+                _ = try await probe.evaluate("document.cookie = 'theme=old; Path=' + path; return 'set';", arguments: ["path": fixture.base.path])
+                let first = Task { try await context.request(website, fixture.url("wait/cookieA")) }
+                let second = Task { try await context.request(website, fixture.url("wait/cookieB")) }
+                defer { first.cancel(); second.cancel() }
+                try await FixtureScenario.eventually { try await (fixture.status()["pending"] as? Int) == 2 }
+                _ = try await probe.evaluate("document.cookie = 'theme=new; Path=' + path; document.cookie = 'arrived=browser; Path=' + path; return 'set';",
+                    arguments: ["path": fixture.base.path])
+                #expect(try await fixture.request("release/cookieB", method: "POST").0 == 200)
+                #expect(try await second.value.status == 200)
+                #expect(try await fixture.request("release/cookieA", method: "POST").0 == 200)
+                #expect(try await first.value.status == 200)
+                let stored = await website.dataStore.httpCookieStore.allCookies()
+                #expect(stored.contains { $0.name == "theme" && $0.value == "new" })
+                #expect(stored.contains { $0.name == "arrived" && $0.value == "browser" })
+                #expect(stored.contains { $0.name == "cookieA" && $0.isHTTPOnly })
+                #expect(stored.contains { $0.name == "cookieB" && $0.isHTTPOnly })
+            }
+        }
+    }
+
+    @Test func websiteSessionErasureWaitsForCancelledRequestsAndCannotResurrectCookies() async throws {
+        try await FixtureScenario.withScenario { fixture in
+            try await withWebsiteSession { website, probe, context in
+                try await probe.load(fixture.url("page"))
+                #expect(try await responseCode(probe, at: fixture.url("cookies/issue")) == "200")
+                let pending = Task { try await context.request(website, fixture.url("wait/cookieA")) }
+                defer { pending.cancel() }
+                try await FixtureScenario.eventually { try await (fixture.status()["pending"] as? Int) == 1 }
+                probe.close()
+                let first = Task { await website.close() }
+                let second = Task { await website.close() }
+                await first.value; await second.value
+                await #expect(throws: (any Error).self) { try await pending.value }
+                try await website.erase()
+                #expect(await website.dataStore.httpCookieStore.allCookies().isEmpty)
+                try await FixtureScenario.eventually { try await (fixture.status()["pending"] as? Int) == 0 }
+                #expect(try await fixture.request("release/cookieA", method: "POST").0 == 200)
+                #expect(await website.dataStore.httpCookieStore.allCookies().isEmpty)
+                await #expect(throws: SourceWebsiteFailure.closed) {
+                    try await context.request(website, fixture.url("cookies/issue"))
+                }
+            }
+        }
+    }
+
     @Test func sourceBrowserExtractsDynamicDOMWithoutWebsiteGlobalsOrHostBridge() async throws {
         try await FixtureScenario.withScenario { fixture in
             try await withSourceBrowser { browser, gate, ticket in
@@ -841,6 +930,51 @@ private final class WorkerExperiment {
             """, timeout: .seconds(1))
     }
 }
+@MainActor
+private struct WebsiteProbeContext {
+    let gate: SourceOperationGate
+    let policy: SourceHostPolicy
+    let ticket: SourceOperationGate.Ticket
+
+    func request(_ website: SourceWebsiteSession, _ url: URL, method: YingxueWire.HTTPMethod = .get) async throws -> YingxueWire.HTTPResponse {
+        try await website.perform(.init(target: .init(url: url.absoluteString), method: method, headers: [], body: .none(.init(kind: .none))),
+            policy: policy, gate: gate, ticket: ticket, credentials: WebsiteProbeCredentials())
+    }
+}
+
+private struct WebsiteProbeCredentials: CredentialStore {
+    // These cookie-only tests never request a stored credential. Unexpected
+    // access is a test failure instead of a permissive empty credential store.
+    func read(_ id: StoredCredentialID) throws -> CredentialSecret? { throw CredentialStoreFailure.unavailable }
+    func write(_ value: CredentialSecret, for id: StoredCredentialID) throws { throw CredentialStoreFailure.unavailable }
+    func remove(_ id: StoredCredentialID) throws { throw CredentialStoreFailure.unavailable }
+    func removeAll(for installationID: SourceInstallationID) throws { throw CredentialStoreFailure.unavailable }
+}
+
+@MainActor
+private func withWebsiteSession(_ body: @MainActor (SourceWebsiteSession, WebKitRuntimeProbe, WebsiteProbeContext) async throws -> Void) async throws {
+    let dataStore = WKWebsiteDataStore.nonPersistent()
+    let website = SourceWebsiteSession(dataStore: dataStore)
+    let probe = WebKitRuntimeProbe(dataStore: dataStore)
+    let installation = SourceInstallationID(), digest = String(repeating: "a", count: 64)
+    let manifest = YingxueWire.Manifest(protocolVersion: 1, sourceID: "org.example.website", name: "Website", scriptVersion: "1",
+        referenceVersion: 1, stateVersion: 1, capabilities: [.http, .browser],
+        origins: [.init(scheme: .http, host: "127.0.0.1", port: 18731), .init(scheme: .http, host: "localhost", port: 18731)],
+        authentication: [.web], publicConfiguration: [])
+    let gate = try SourceOperationGate(installationID: installation, scriptSHA256: digest, configurationRevision: 0, sessionRevision: 0)
+    let policy = try SourceHostPolicy(installationID: installation, scriptSHA256: digest, manifest: manifest)
+    let ticket = try await gate.begin(.search(.init(kind: .search, input: .init(query: "fixture", cursor: nil))))
+    do {
+        try await body(website, probe, .init(gate: gate, policy: policy, ticket: ticket))
+        probe.close(); try await website.erase(); await gate.cancel(ticket)
+    } catch {
+        probe.close()
+        do { try await website.erase() } catch { Issue.record(error, "Website session cleanup failed") }
+        await gate.cancel(ticket)
+        throw error
+    }
+}
+
 @MainActor
 private func withSourceBrowser(mounted: Bool = true,
     _ body: @MainActor (SourceBrowserSession, SourceOperationGate, SourceOperationGate.Ticket) async throws -> Void) async throws {
