@@ -5,6 +5,59 @@ import Testing
 @testable import SnowlitStorage
 
 struct LibraryDatabaseTests {
+    @Test func sqliteCapacityFailureRollsBackProductionCatalogProgressAndBooks() async throws {
+        try await withDirectory { root in
+            let path = root.appendingPathComponent("library.sqlite")
+            let database = try LibraryDatabase.create(at: path)
+            let book = try await database.addBook(reference: reference(), title: "saved", author: nil)
+            let initial = try await database.beginCatalogUpdate(for: book.id)
+            let savedCatalog = try catalog(book.reference, "old", ["chapter"])
+            #expect(try await database.publishCatalog(savedCatalog, using: initial))
+            let reading = try await database.startReading(book.id)
+            let savedPosition = try position(book.reference, offset: 1)
+            #expect(try await database.saveCheckpoint(savedPosition, session: reading, sequence: 1))
+            let update = try await database.beginCatalogUpdate(for: book.id)
+            // Restrict the real production connection's SQLite page allocator.
+            // This deterministically produces SQLITE_FULL without filling the host disk.
+            let oldLimit = try await database.queue.write { db in
+                let limit = try Int.fetchOne(db, sql: "PRAGMA max_page_count")!
+                let pages = try Int.fetchOne(db, sql: "PRAGMA page_count")!
+                try db.execute(sql: "PRAGMA max_page_count = \(pages)")
+                return limit
+            }
+            let large = String(repeating: "x", count: 1_000_000)
+            let largeCatalog = try catalog(book.reference, "new", [large])
+            do {
+                _ = try await database.publishCatalog(largeCatalog, using: update)
+                Issue.record("Capacity failure was reported as a published catalog")
+            } catch let error as DatabaseError { #expect(error.resultCode == .SQLITE_FULL) }
+            let largePosition = try ReadingPosition(chapter: savedPosition.chapter, documentRevision: large,
+                normalizationVersion: 1, elementID: "p1", utf16Offset: 2)
+            do {
+                _ = try await database.saveCheckpoint(largePosition, session: reading, sequence: 2)
+                Issue.record("Capacity failure was reported as a saved checkpoint")
+            } catch let error as DatabaseError { #expect(error.resultCode == .SQLITE_FULL) }
+            do {
+                _ = try await database.addBook(reference: reference(), title: large, author: nil)
+                Issue.record("Capacity failure was reported as a saved book")
+            } catch let error as DatabaseError { #expect(error.resultCode == .SQLITE_FULL) }
+            #expect(try await database.catalog(for: book.id) == savedCatalog)
+            #expect(try await database.checkpoint(for: book.id)?.position == savedPosition)
+            #expect(try await database.checkpoint(for: book.id)?.sequence == 1)
+            #expect(try await database.books() == [book])
+            try await database.queue.write { try $0.execute(sql: "PRAGMA max_page_count = \(oldLimit)") }
+            // Failed writes consumed neither the catalog request nor checkpoint sequence.
+            #expect(try await database.publishCatalog(largeCatalog, using: update))
+            #expect(try await database.saveCheckpoint(largePosition, session: reading, sequence: 2))
+            try await database.close()
+            let reopened = try LibraryDatabase(existingAt: path)
+            #expect(try await reopened.catalog(for: book.id) == largeCatalog)
+            #expect(try await reopened.checkpoint(for: book.id)?.position == largePosition)
+            #expect(try await reopened.books() == [book])
+            try await reopened.close()
+        }
+    }
+
     @Test func databasePreservesByteDistinctUnicodeReferences() async throws {
         try await withDirectory { root in
             let database = try LibraryDatabase.create(at: root.appendingPathComponent("library.sqlite"))

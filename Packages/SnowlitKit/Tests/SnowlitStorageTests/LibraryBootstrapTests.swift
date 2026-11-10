@@ -88,6 +88,35 @@ struct LibraryBootstrapTests {
         }
     }
 
+    #if !os(Windows)
+    @Test func descriptorPublicationFailurePreservesTheAdoptedLibraryForRetry() async throws {
+        try await withDirectory { root in
+            let dataset = root.appendingPathComponent("Library")
+            try FileManager.default.createDirectory(at: dataset, withIntermediateDirectories: false)
+            let database = try LibraryDatabase.create(at: dataset.appendingPathComponent("library.sqlite"))
+            let reference = try SourceBookReference(installationID: .init(), referenceVersion: 1, key: "saved")
+            let book = try await database.addBook(reference: reference, title: "keep", author: nil)
+            try await database.close()
+            try FileManager.default.setAttributes([.posixPermissions: 0o500], ofItemAtPath: root.path)
+            defer {
+                do { try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path) }
+                catch { Issue.record(error, "Unable to restore test directory permissions") }
+            }
+            let bootstrap = LibraryBootstrap(directory: root)
+            await #expect(throws: (any Error).self) { try await bootstrap.open() }
+            #expect(!FileManager.default.fileExists(atPath: root.appendingPathComponent("library.json").path))
+            let preserved = try LibraryDatabase(existingAt: dataset.appendingPathComponent("library.sqlite"))
+            #expect(try await preserved.books() == [book])
+            try await preserved.close()
+            try FileManager.default.setAttributes([.posixPermissions: 0o700], ofItemAtPath: root.path)
+            let retried = try await bootstrap.open()
+            #expect(try await retried.books() == [book])
+            #expect(FileManager.default.fileExists(atPath: root.appendingPathComponent("library.json").path))
+            try await retried.close()
+        }
+    }
+    #endif
+
     private func withDirectory(_ body: (URL) async throws -> Void) async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("SnowlitBootstrap-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
