@@ -111,7 +111,7 @@ struct LibrarySourceScriptTests {
             #expect(try await database.writePublicState([.init(key: "public", value: "retained")], expectedRevision: 0, using: operation).written)
             try await database.close()
             let raw = try DatabaseQueue(path: path.path)
-            try await raw.write { try $0.execute(sql: "DROP TABLE source_installation; DROP TABLE source_import; DROP TABLE source_script; PRAGMA user_version=2;") }
+            try await raw.write { try $0.execute(sql: "DROP TABLE book_reference; ALTER TABLE library_book DROP COLUMN catalog_reference; DROP TABLE source_installation; DROP TABLE source_import; DROP TABLE source_script; PRAGMA user_version=2;") }
             try raw.close()
             let before = try Data(contentsOf: path)
             #expect(throws: LibraryDatabase.Failure.migrationRequired) { try LibraryDatabase(existingAt: path, readOnly: true) }
@@ -133,7 +133,7 @@ struct LibrarySourceScriptTests {
             let database = try LibraryDatabase.create(at: path)
             try await database.close()
             let raw = try DatabaseQueue(path: path.path)
-            try await raw.write { try $0.execute(sql: "DROP TABLE source_installation; DROP TABLE source_import; DROP TABLE source_script; CREATE TABLE source_import(marker TEXT); INSERT INTO source_import VALUES('retain'); PRAGMA user_version=2;") }
+            try await raw.write { try $0.execute(sql: "DROP TABLE book_reference; ALTER TABLE library_book DROP COLUMN catalog_reference; DROP TABLE source_installation; DROP TABLE source_import; DROP TABLE source_script; CREATE TABLE source_import(marker TEXT); INSERT INTO source_import VALUES('retain'); PRAGMA user_version=2;") }
             #expect(throws: DatabaseError.self) { try LibraryDatabase(existingAt: path) }
             let result = try await raw.read { db in
                 try (Int.fetchOne(db, sql: "PRAGMA user_version"),

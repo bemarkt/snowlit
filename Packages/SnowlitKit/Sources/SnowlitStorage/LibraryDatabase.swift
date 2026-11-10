@@ -44,12 +44,13 @@ public actor LibraryDatabase: LibraryStore {
                 try db.execute(sql: Self.publicStateSchema)
                 try db.execute(sql: Self.sourceScriptSchema)
                 try db.execute(sql: Self.sourceInstallationSchema)
+                try Self.migrateBookReferences(db)
             }
         } else {
             let version = try queue.read { db in
                 let version = try Int.fetchOne(db, sql: "PRAGMA user_version")
                 guard try Int.fetchOne(db, sql: "PRAGMA application_id") == 0x534e4c54,
-                      version == 1 || version == 2 || version == 3 || version == 4 else {
+                      let version, (1...5).contains(version) else {
                     throw Failure.unsupportedSchema
                 }
                 guard try String.fetchOne(db, sql: "PRAGMA quick_check") == "ok",
@@ -60,29 +61,34 @@ public actor LibraryDatabase: LibraryStore {
                 _ = try Row.fetchAll(db, sql: "SELECT book_id, ordinal, remote_key, title FROM catalog_entry LIMIT 0")
                 _ = try Row.fetchAll(db, sql: "SELECT book_id, session_id, sequence, position FROM reading_checkpoint LIMIT 0")
                 _ = try Row.fetchAll(db, sql: "SELECT id, value FROM reader_preferences LIMIT 0")
-                if let version, version >= 2 {
+                if version >= 2 {
                     _ = try Row.fetchAll(db, sql: "SELECT installation, state_version, revision, entries FROM source_public_state LIMIT 0")
                     _ = try Row.fetchAll(db, sql: "SELECT installation, state_version, access_id FROM source_state_access LIMIT 0")
                     _ = try Row.fetchAll(db, sql: "SELECT installation, access_id, request_id, active FROM source_state_operation LIMIT 0")
                 }
-                if let version, version >= 3 {
+                if version >= 3 {
                     _ = try Row.fetchAll(db, sql: "SELECT sha256, bytes, metadata FROM source_script LIMIT 0")
                     _ = try Row.fetchAll(db, sql: "SELECT id, script_sha256, inspection_contract_sha256, file_name, imported_at FROM source_import LIMIT 0")
                 }
-                if version == 4 {
+                if version >= 4 {
                     _ = try Row.fetchAll(db, sql: "SELECT id, source_id, import_id, revision, state, configuration, credential_read, website_session, cleanup FROM source_installation LIMIT 0")
+                }
+                if version >= 5 {
+                    _ = try Row.fetchAll(db, sql: "SELECT book_id, installation, reference_version, remote_key FROM book_reference LIMIT 0")
+                    _ = try Row.fetchAll(db, sql: "SELECT catalog_reference FROM library_book LIMIT 0")
                 }
                 return version
             }
-            if version != 4 {
+            if version != 5 {
                 guard !readOnly else { throw Failure.migrationRequired }
                 try queue.write { db in
-                    guard let current = try Int.fetchOne(db, sql: "PRAGMA user_version"), (1...4).contains(current) else {
+                    guard let current = try Int.fetchOne(db, sql: "PRAGMA user_version"), (1...5).contains(current) else {
                         throw Failure.unsupportedSchema
                     }
                     if current == 1 { try db.execute(sql: Self.publicStateSchema) }
                     if current < 3 { try db.execute(sql: Self.sourceScriptSchema) }
                     if current < 4 { try db.execute(sql: Self.sourceInstallationSchema) }
+                    if current < 5 { try Self.migrateBookReferences(db) }
                 }
             }
         }
@@ -95,7 +101,8 @@ public actor LibraryDatabase: LibraryStore {
         return try queue.write { db in
             let installation = reference.installationID.rawValue.uuidString
             if let row = try Row.fetchOne(db, sql: """
-                SELECT * FROM library_book WHERE installation=? AND reference_version=? AND remote_key=?
+                SELECT b.* FROM library_book b JOIN book_reference r ON r.book_id=b.id
+                WHERE r.installation=? AND r.reference_version=? AND r.remote_key=?
                 """, arguments: [installation, reference.referenceVersion, reference.key]) {
                 return try Self.decodeBook(row)
             }
@@ -105,6 +112,7 @@ public actor LibraryDatabase: LibraryStore {
                 VALUES (?, ?, ?, ?, ?, ?)
                 """, arguments: [book.id.rawValue.uuidString, installation, reference.referenceVersion,
                                   reference.key, title, author])
+            try Self.recordBookReference(db, bookID: book.id, reference: reference)
             return book
         }
     }
@@ -145,8 +153,8 @@ public actor LibraryDatabase: LibraryStore {
                 try db.execute(sql: "INSERT INTO catalog_entry (book_id, ordinal, remote_key, title) VALUES (?, ?, ?, ?)",
                                arguments: [id, ordinal, entry.reference.key, entry.title])
             }
-            try db.execute(sql: "UPDATE library_book SET catalog_revision=?, catalog_request=NULL WHERE id=?",
-                           arguments: [catalog.revision, id])
+            try db.execute(sql: "UPDATE library_book SET catalog_revision=?, catalog_reference=?, catalog_request=NULL WHERE id=?",
+                           arguments: [catalog.revision, try JSONEncoder().encode(catalog.book), id])
             return true
         }
     }
@@ -154,15 +162,7 @@ public actor LibraryDatabase: LibraryStore {
     public func catalog(for bookID: LocalBookID) throws -> CatalogSnapshot? {
         try checkOpen()
         return try queue.read { db in
-            let row = try Self.bookRow(db, bookID)
-            guard let revision: String = row["catalog_revision"] else { return nil }
-            let reference = try Self.decodeBook(row).reference
-            let entries = try Row.fetchAll(db, sql: "SELECT * FROM catalog_entry WHERE book_id=? ORDER BY ordinal",
-                                          arguments: [bookID.rawValue.uuidString]).map { item in
-                try CatalogEntry(reference: ChapterReference(book: reference, key: item["remote_key"]),
-                                 title: item["title"])
-            }
-            return try CatalogSnapshot(book: reference, revision: revision, entries: entries)
+            try Self.savedCatalog(db, bookID)
         }
     }
 
@@ -185,7 +185,8 @@ public actor LibraryDatabase: LibraryStore {
         guard sequence > 0 else { throw Failure.invalidSequence }
         let encoded = try JSONEncoder().encode(position)
         return try queue.write { db in
-            guard try Self.decodeBook(Self.bookRow(db, session.bookID)).reference == position.chapter.book else {
+            _ = try Self.bookRow(db, session.bookID)
+            guard try Self.ownsReference(db, bookID: session.bookID, reference: position.chapter.book) else {
                 throw LibraryModelError.differentBook
             }
             try db.execute(sql: """
@@ -199,16 +200,7 @@ public actor LibraryDatabase: LibraryStore {
     public func checkpoint(for bookID: LocalBookID) throws -> ReadingCheckpoint? {
         try checkOpen()
         return try queue.read { db in
-            let book = try Self.decodeBook(Self.bookRow(db, bookID))
-            guard let row = try Row.fetchOne(db, sql: "SELECT * FROM reading_checkpoint WHERE book_id=?",
-                                            arguments: [bookID.rawValue.uuidString]) else { return nil }
-            let rawSession: String = row["session_id"]
-            guard let id = UUID(uuidString: rawSession) else { throw Failure.inconsistentData }
-            let encoded: Data? = row["position"]
-            let position = try encoded.map { try JSONDecoder().decode(ReadingPosition.self, from: $0) }
-            if let position, position.chapter.book != book.reference { throw Failure.inconsistentData }
-            return ReadingCheckpoint(session: ReadingSession(bookID: bookID, id: id),
-                                     sequence: row["sequence"], position: position)
+            try Self.savedCheckpoint(db, bookID)
         }
     }
 
@@ -243,13 +235,13 @@ public actor LibraryDatabase: LibraryStore {
         guard !isClosed else { throw Failure.closed }
     }
 
-    private static func bookRow(_ db: Database, _ id: LocalBookID) throws -> Row {
+    static func bookRow(_ db: Database, _ id: LocalBookID) throws -> Row {
         guard let row = try Row.fetchOne(db, sql: "SELECT * FROM library_book WHERE id=?",
                                         arguments: [id.rawValue.uuidString]) else { throw Failure.missingBook }
         return row
     }
 
-    private static func decodeBook(_ row: Row) throws -> LibraryBook {
+    static func decodeBook(_ row: Row) throws -> LibraryBook {
         let rawID: String = row["id"]
         let rawInstallation: String = row["installation"]
         guard let id = UUID(uuidString: rawID), let installation = UUID(uuidString: rawInstallation) else {
