@@ -46,6 +46,37 @@ struct ReaderProbeTests {
         // Real drag gestures, cross-chapter windows and device frame timing remain separate probes.
     }
 
+    @Test func selectedTextKeepsSemanticEndpointsWhenEarlierAttachmentsChange() throws {
+        let document = try fixture(repetitions: 300)
+        let viewport = ProbeViewport(document: document)
+        viewport.loadViewIfNeeded()
+        viewport.view.frame = CGRect(x: 0, y: 0, width: 390, height: 500)
+        try viewport.render(fontSize: 20)
+        let start = ProbeTextAnchor(documentID: document.id, revision: document.revision,
+                                    paragraphID: "second", utf16Offset: 0)
+        let end = ProbeTextAnchor(documentID: document.id, revision: document.revision,
+                                  paragraphID: "long", utf16Offset: "中文 👩🏽‍💻 e\u{301}".utf16.count)
+        let initialStart = try viewport.layoutOffset(of: start)
+        let initialEnd = try viewport.layoutOffset(of: end)
+        viewport.textView.selectedRange = NSRange(location: initialStart, length: initialEnd - initialStart)
+        let selectedText = (viewport.textView.text as NSString).substring(with: viewport.textView.selectedRange)
+        let middle = ProbeTextAnchor(documentID: document.id, revision: document.revision,
+                                     paragraphID: "long", utf16Offset: String(repeating: "中文 👩🏽‍💻 e\u{301} long text。", count: 150).utf16.count)
+        try viewport.restoreVisible(.init(anchor: middle, verticalOffset: 80))
+        let visible = try viewport.captureVisiblePosition()
+        let heights: [CGFloat?] = [40, 200, nil, 80, nil]
+        for height in heights {
+            try viewport.render(fontSize: 28, attachmentHeight: height, maintaining: visible)
+            let selected = viewport.textView.selectedRange
+            #expect(selected.location == initialStart + (height == nil ? 0 : 1))
+            #expect(selected.location == (try viewport.layoutOffset(of: start)))
+            #expect(NSMaxRange(selected) == (try viewport.layoutOffset(of: end)))
+            #expect((viewport.textView.text as NSString).substring(with: selected) == selectedText)
+            let measured = try viewport.visibleOffset(of: visible.anchor)
+            #expect(abs(measured - visible.verticalOffset) <= 1)
+        }
+    }
+
     @Test func textKit2AndCoreTextLocateTheSameTextAtMultipleWidths() throws {
         let document = try fixture()
         let viewport = ProbeViewport(document: document)

@@ -164,7 +164,17 @@ final class ProbeViewport: UIViewController {
 
     func render(fontSize: CGFloat, attachmentHeight: CGFloat? = nil,
                 maintaining position: VisiblePosition) throws {
+        // UITextView can move its selection when attributedText is replaced. Store
+        // both semantic endpoints before rebuilding the attachment offset map.
+        let selection = textView.selectedRange
+        let start = try anchor(atLayoutOffset: selection.location)
+        let end = try anchor(atLayoutOffset: NSMaxRange(selection))
         try render(fontSize: fontSize, attachmentHeight: attachmentHeight)
+        let startOffset = try layoutOffset(of: start)
+        let endOffset = try layoutOffset(of: end)
+        guard endOffset >= startOffset else { throw Failure.positionUnavailable }
+        textView.selectedRange = NSRange(location: startOffset, length: endOffset - startOffset)
+        // Restoring selection can itself scroll. Restore the visible anchor last.
         try restoreVisible(position)
     }
 
