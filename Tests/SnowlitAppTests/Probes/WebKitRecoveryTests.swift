@@ -16,7 +16,7 @@ struct WebKitRecoveryTests {
         let page = URL(string: "http://127.0.0.1:18731/health")!
         for repetition in 1...3 {
             var probe: WebKitRuntimeProbe? = WebKitRuntimeProbe(dataStore: .nonPersistent())
-            weak var abandonedView: WKWebView? = probe?.webView
+            let lifetime = ViewLifetimeObservation(probe!.webView)
             try await probe!.load(page)
             observe("baseline", fault: fault, repetition: repetition)
             try await Task.sleep(for: .seconds(1))
@@ -49,16 +49,16 @@ struct WebKitRecoveryTests {
                 probe = nil
                 observe("closed", fault: fault, repetition: repetition)
                 let releaseDeadline = clock.now.advanced(by: .seconds(3))
-                while abandonedView != nil && clock.now < releaseDeadline {
+                while lifetime.view != nil && clock.now < releaseDeadline {
                     try await Task.sleep(for: .milliseconds(20))
                 }
-                #expect(abandonedView == nil)
+                #expect(lifetime.view == nil)
                 let replacement = WebKitRuntimeProbe(dataStore: .nonPersistent())
                 defer { replacement.close() }
                 let recoveryStarted = clock.now
                 try await replacement.load(page, timeout: .seconds(5))
                 #expect(try await replacement.evaluate("return 'fresh operation';", timeout: .seconds(5)) == "fresh operation")
-                print("RecoveryObservation fault=\(fault) repetition=\(repetition) waiter=\(waitDuration) heartbeats=\(heartbeat.ticks) newOperation=\(recoveryStarted.duration(to: clock.now)) wrapperReleased=\(abandonedView == nil)")
+                print("RecoveryObservation fault=\(fault) repetition=\(repetition) waiter=\(waitDuration) heartbeats=\(heartbeat.ticks) newOperation=\(recoveryStarted.duration(to: clock.now)) wrapperReleased=\(lifetime.view == nil)")
                 observe("replacement-ready", fault: fault, repetition: repetition)
                 // Keep the test process alive so host sampling can observe post-close CPU/RSS.
                 try await Task.sleep(for: .seconds(2))
@@ -83,6 +83,12 @@ struct WebKitRecoveryTests {
 
     @MainActor
     private final class MainActorHeartbeat { var ticks = 0 }
+
+    @MainActor
+    private final class ViewLifetimeObservation {
+        weak var view: WKWebView?
+        init(_ view: WKWebView) { self.view = view }
+    }
 
     @MainActor
     private final class FaultEntryObservation: NSObject, WKScriptMessageHandler {
