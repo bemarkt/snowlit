@@ -8,7 +8,7 @@ import sys
 import uuid
 
 device_name, runtime_id, record_path = sys.argv[1:]
-inventory = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "-j"], text=True))
+inventory = json.loads(subprocess.check_output(["xcrun", "simctl", "list", "-j"], text=True, timeout=30))
 device = next((d for d in inventory["devicetypes"] if d["name"] == device_name), None)
 runtime = next((r for r in inventory["runtimes"]
                 if r["identifier"] == runtime_id and r["isAvailable"]), None)
@@ -17,7 +17,7 @@ if device is None or runtime is None:
 udid = subprocess.check_output([
     "xcrun", "simctl", "create", f"Snowlit-CI-{uuid.uuid4().hex[:8]}",
     device["identifier"], runtime["identifier"],
-], text=True).strip()
+], text=True, timeout=30).strip()
 Path(record_path).write_text(
     json.dumps({"udid": udid, "device": device, "runtime": runtime}, indent=2) + "\n",
     encoding="utf-8",

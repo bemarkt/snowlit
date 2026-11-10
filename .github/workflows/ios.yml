@@ -28,17 +28,22 @@ concurrency:
 jobs:
   build-and-test:
     if: ${{ inputs.task != 'runtime-check' }}
-    name: iOS / ${{ matrix.device }} / ${{ inputs.task || 'verify' }}
+    name: iOS / ${{ matrix.device }} / ${{ matrix.suite }}
     runs-on: macos-26
-    timeout-minutes: 65
+    timeout-minutes: 45
     strategy:
       fail-fast: false
+      max-parallel: 5
       matrix:
         device: [phone]
+        # Each suite owns its runner and simulator. A failing recovery probe
+        # cannot delay, cancel or leave processes behind for the other suites.
+        suite: ${{ fromJSON((inputs.task == 'verify' || inputs.task == '') && '["baseline","integration","recovery","reader-ui","storage"]' || format('["{0}"]', inputs.task)) }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       SNOWLIT_IOS_RUNTIME: ${{ inputs.ios_runtime || '26.5' }}
       SNOWLIT_CI_TASK: ${{ inputs.task || 'verify' }}
+      SNOWLIT_CI_SUITE: ${{ matrix.suite }}
     steps:
       - name: Check out source
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -46,6 +51,7 @@ jobs:
           persist-credentials: false
       - name: Verify probe tooling before building the App
         id: probe-tools
+        timeout-minutes: 2
         run: bash scripts/verify_probe_tools.sh
       - name: Restore locked package checkouts
         id: package-cache
@@ -55,35 +61,41 @@ jobs:
           key: spm-${{ runner.os }}-${{ runner.arch }}-xcode26.6-${{ hashFiles('Packages/SnowlitKit/Package.swift', 'Packages/SnowlitKit/Package.resolved', 'Snowlit.xcodeproj/project.xcworkspace/xcshareddata/swiftpm/Package.resolved') }}
       - name: Prepare signed simulator test host
         id: host
+        timeout-minutes: 15
         run: bash scripts/ci.sh "${{ matrix.device }}" prepare
       - name: Save resolved package checkouts
         # Keep successfully built dependencies even if a later behavior test fails.
-        if: ${{ !cancelled() && steps.host.conclusion == 'success' && steps.package-cache.outputs.cache-hit != 'true' }}
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && steps.package-cache.outputs.cache-hit != 'true' && (matrix.suite == 'baseline' || env.SNOWLIT_CI_TASK != 'verify') }}
         uses: actions/cache/save@0057852bfaa89a56745cba8c7296529d2fc39830 # v4.3.0
         with:
           path: build/SourcePackages
           key: ${{ steps.package-cache.outputs.cache-primary-key }}
       - name: Run baseline checks
         id: baseline
-        if: ${{ !cancelled() && steps.host.conclusion == 'success' && env.SNOWLIT_CI_TASK == 'verify' }}
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && matrix.suite == 'baseline' }}
+        timeout-minutes: 28
         run: bash scripts/ci.sh "${{ matrix.device }}" baseline
       - name: Run isolated WebKit integration probes
-        if: ${{ !cancelled() && steps.host.conclusion == 'success' && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'integration') }}
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && matrix.suite == 'integration' }}
+        timeout-minutes: 25
         env:
           SNOWLIT_PROBE_TOOLS_PREPARED: ${{ steps.probe-tools.conclusion == 'success' }}
         run: bash scripts/probe_ios.sh "${{ matrix.device }}"
       - name: Observe recovery from uncooperative JavaScript
-        if: ${{ !cancelled() && matrix.device == 'phone' && steps.host.conclusion == 'success' && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'recovery') }}
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && matrix.suite == 'recovery' }}
+        timeout-minutes: 25
         env:
           SNOWLIT_PROBE_TOOLS_PREPARED: ${{ steps.probe-tools.conclusion == 'success' }}
         run: bash scripts/probe_ios.sh phone recovery
       - name: Observe system page curl gestures
-        if: ${{ !cancelled() && steps.host.conclusion == 'success' && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'reader-ui') }}
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && matrix.suite == 'reader-ui' }}
+        timeout-minutes: 25
         env:
           SNOWLIT_PROBE_TOOLS_PREPARED: ${{ steps.probe-tools.conclusion == 'success' }}
         run: bash scripts/probe_ios.sh "${{ matrix.device }}" reader-ui
       - name: Interrupt and reopen isolated storage
-        if: ${{ !cancelled() && steps.host.conclusion == 'success' && (env.SNOWLIT_CI_TASK == 'verify' || env.SNOWLIT_CI_TASK == 'storage') }}
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && matrix.suite == 'storage' }}
+        timeout-minutes: 25
         env:
           SNOWLIT_PROBE_TOOLS_PREPARED: ${{ steps.probe-tools.conclusion == 'success' }}
         run: bash scripts/probe_storage.sh
@@ -92,9 +104,9 @@ jobs:
         run: |
           mkdir -p build/evidence
           {
-            printf 'Task: %s\nSource: %s\nRuntime: %s\n' "$SNOWLIT_CI_TASK" "$GITHUB_SHA" "$SNOWLIT_IOS_RUNTIME"
+            printf 'Task: %s\nSuite: %s\nSource: %s\nRuntime: %s\n' "$SNOWLIT_CI_TASK" "$SNOWLIT_CI_SUITE" "$GITHUB_SHA" "$SNOWLIT_IOS_RUNTIME"
             if [ "$SNOWLIT_CI_TASK" = verify ]; then
-              printf 'Full verification requires all simulator checks AND the independent Release device build at this source revision.\n'
+              printf 'This job covers one suite only. Full verification requires baseline, integration, recovery, reader-ui, storage AND the Release device build at this source revision.\n'
             else
               printf 'Focused verification only. Unselected suites were not executed.\n'
               printf 'Full acceptance requires the verify task at the same source revision.\n'
@@ -104,7 +116,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
-          name: ios-${{ matrix.device }}-${{ env.SNOWLIT_CI_TASK }}-${{ github.sha }}
+          name: ios-${{ matrix.device }}-${{ matrix.suite }}-${{ github.sha }}
           path: build/evidence/
           if-no-files-found: error
           retention-days: 14

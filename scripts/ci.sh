@@ -3,6 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 root="$PWD"
+source "$root/scripts/ci_command.sh"
 kind="$1"
 scope="${2:-full}"
 case "$scope" in
@@ -43,12 +44,13 @@ packages="$root/build/SourcePackages"
 source "$root/scripts/simulator_signing.sh"
 prepare_simulator_signing
 if [ "$scope" != baseline ]; then
-  # Build the shared host before running any suites. In CI, the separate prepare
-  # step lets independent probes still run if a baseline behavior test fails.
-  xcodebuild build-for-testing -project Snowlit.xcodeproj -scheme Snowlit \
+  # Each CI suite builds its own signed host on an independent runner. The
+  # standalone full entry point also prepares this host before running tests.
+  run_ci_command test-host-build 720 "$evidence/test-host-build.log" \
+    xcodebuild build-for-testing -project Snowlit.xcodeproj -scheme Snowlit \
     -configuration Debug -destination 'generic/platform=iOS Simulator' \
     -derivedDataPath "$root/build/app-$kind" -clonedSourcePackagesDirPath "$packages" \
-    "${simulator_signing[@]}" 2>&1 | tee "$evidence/test-host-build.log"
+    "${simulator_signing[@]}"
   record_simulator_signing
 fi
 if [ "$scope" = prepare ]; then
@@ -59,22 +61,30 @@ fi
 core_sdk="$(xcrun --sdk iphonesimulator --show-sdk-path)"
 core_triple="$(uname -m)-apple-ios26.0-simulator"
 printf 'Target: %s\nSDK: %s\n' "$core_triple" "$core_sdk" > "$evidence/core-destination.txt"
-swift build --package-path Packages/SnowlitKit --target SnowlitCore \
+run_ci_command core-build 180 "$evidence/core-build.log" \
+  swift build --package-path Packages/SnowlitKit --target SnowlitCore \
   --sdk "$core_sdk" --triple "$core_triple" \
-  --scratch-path "$root/build/core-$kind" 2>&1 | tee "$evidence/core-build.log"
+  --scratch-path "$root/build/core-$kind"
 
 simulator=""
 cleanup() {
+  result=$?
+  trap - EXIT
   if [ -n "$simulator" ]; then
-    xcrun simctl shutdown "$simulator" || true
-    xcrun simctl delete "$simulator" || true
+    run_ci_command simulator-shutdown 30 "$evidence/simulator-shutdown.log" xcrun simctl shutdown "$simulator" \
+      || { if [ "$result" -eq 0 ]; then result=1; fi; }
+    run_ci_command simulator-delete 30 "$evidence/simulator-delete.log" xcrun simctl delete "$simulator" \
+      || { if [ "$result" -eq 0 ]; then result=1; fi; }
   fi
+  printf 'Exit status: %s\n' "$result" > "$evidence/script-status.txt"
+  exit "$result"
 }
 trap cleanup EXIT
-simulator="$(python3 scripts/create_simulator.py "$device" \
-  "$runtime_id" "$evidence/simulator.json")"
-xcrun simctl boot "$simulator"
-xcrun simctl bootstatus "$simulator" -b
+run_ci_command simulator-create 75 "$evidence/simulator-create.log" \
+  python3 scripts/create_simulator.py "$device" "$runtime_id" "$evidence/simulator.json"
+simulator="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["udid"])' "$evidence/simulator.json")"
+run_ci_command simulator-boot 45 "$evidence/simulator-boot.log" xcrun simctl boot "$simulator"
+run_ci_command simulator-ready 240 "$evidence/simulator-ready.log" xcrun simctl bootstatus "$simulator" -b
 printf 'Simulator boot completed. Starting Package and App baseline checks.\n'
 destination="platform=iOS Simulator,id=$simulator"
 
@@ -82,7 +92,9 @@ if [ "$kind" = phone ]; then
   (
     cd Packages/SnowlitKit
     printf 'Resolving the Package test scheme.\n'
-    xcodebuild -list -json -clonedSourcePackagesDirPath "$packages" > "$evidence/package-schemes.json"
+    run_ci_command package-schemes 60 "$evidence/package-schemes.log" \
+      bash -c 'exec xcodebuild -list -json -clonedSourcePackagesDirPath "$1" > "$2"' \
+      _ "$packages" "$evidence/package-schemes.json"
     package_scheme="$(python3 - "$evidence/package-schemes.json" <<'PY'
 import json, sys
 data = json.load(open(sys.argv[1]))
@@ -96,13 +108,14 @@ else:
     raise SystemExit(f"Package test scheme not found: {schemes}")
 PY
 )"
-    xcodebuild test -scheme "$package_scheme" -destination "$destination" \
+    run_ci_command package-tests 600 "$evidence/storage-tests.log" \
+      xcodebuild test -scheme "$package_scheme" -destination "$destination" \
       -derivedDataPath "$root/build/package-tests" \
       -clonedSourcePackagesDirPath "$packages" \
       -resultBundlePath "$evidence/StorageTests.xcresult" \
       -only-testing:SnowlitCoreTests -only-testing:SnowlitStorageTests -only-testing:YingxueKitTests \
-      -parallel-testing-enabled NO CODE_SIGNING_ALLOWED=NO \
-      2>&1 | tee "$evidence/storage-tests.log"
+      -parallel-testing-enabled NO -test-timeouts-enabled YES \
+      -maximum-test-execution-time-allowance 120 CODE_SIGNING_ALLOWED=NO
   )
 fi
 
@@ -111,21 +124,20 @@ test_selection=(-only-testing:SnowlitAppTests/StartupModelTests -only-testing:Sn
 if [ "$kind" = tablet ]; then
   test_selection=(-only-testing:SnowlitUITests/StartupUITests)
 fi
-xcodebuild test-without-building -project Snowlit.xcodeproj -scheme Snowlit \
+run_ci_command app-startup-tests 300 "$evidence/app-tests.log" \
+  xcodebuild test-without-building -project Snowlit.xcodeproj -scheme Snowlit \
   -configuration Debug -destination "$destination" \
   -derivedDataPath "$root/build/app-$kind" \
   -clonedSourcePackagesDirPath "$packages" \
   -resultBundlePath "$evidence/AppTests.xcresult" \
   -parallel-testing-enabled NO -test-timeouts-enabled YES \
   -maximum-test-execution-time-allowance 120 \
-  "${test_selection[@]}" "${simulator_signing[@]}" \
-  2>&1 | tee "$evidence/app-tests.log"
+  "${test_selection[@]}" "${simulator_signing[@]}"
 
 app="$root/build/app-$kind/Build/Products/Debug-iphonesimulator/Snowlit.app"
 plutil -convert json -o "$evidence/app-info.json" "$app/Info.plist"
-xcrun simctl install "$simulator" "$app"
-xcrun simctl launch "$simulator" io.github.bemarkt.snowlit \
-  | tee "$evidence/launch.log"
+run_ci_command app-install 60 "$evidence/app-install.log" xcrun simctl install "$simulator" "$app"
+run_ci_command app-launch 30 "$evidence/launch.log" xcrun simctl launch "$simulator" io.github.bemarkt.snowlit
 
 if [ "$kind" = phone ] && [ "$scope" = full ]; then
   # Standalone full runs retain the device build. The workflow runs the same

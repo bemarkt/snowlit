@@ -3,6 +3,7 @@
 
 import argparse
 import json
+import math
 import os
 from pathlib import Path
 import signal
@@ -18,14 +19,18 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--timeout", type=float, required=True)
     parser.add_argument("--log", type=Path, required=True)
+    parser.add_argument("--label")
+    parser.add_argument("--heartbeat-interval", type=float, default=30)
     parser.add_argument("--process-samples", type=Path)
     parser.add_argument("--process-sampler", type=Path)
     parser.add_argument("--allow-test-termination", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
-    if not command or args.timeout <= 0:
-        parser.error("A command and a positive timeout are required")
+    if not command or not math.isfinite(args.timeout) or args.timeout <= 0:
+        parser.error("A command and a finite positive timeout are required")
+    if not math.isfinite(args.heartbeat_interval) or args.heartbeat_interval <= 0:
+        parser.error("A finite positive heartbeat interval is required")
     if os.name != "posix":
         parser.error("Apple probe supervision requires POSIX process groups")
     if args.process_samples and sys.platform != "darwin":
@@ -36,6 +41,9 @@ def main():
         parser.error("Test termination requires simulator process observations")
     args.log.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
+    label = args.label or args.log.stem
+    last_output = started
+    next_heartbeat = started + args.heartbeat_interval
     timed_out = False
     interrupted = False
     process = None
@@ -67,6 +75,7 @@ def main():
         samples.sample("before-command")
     with args.log.open("wb") as output, args.log.open("rb") as live_log:
         def publish_log(*, final=False):
+            nonlocal last_output
             # Read the persisted log independently. No pipe reader thread can
             # outlive the command, and logging never changes its exit status.
             # Bound each live pass so a noisy command cannot starve sampling.
@@ -74,6 +83,7 @@ def main():
                 chunk = live_log.read(65536)
                 if not chunk:
                     break
+                last_output = time.monotonic()
                 sys.stdout.buffer.write(chunk)
             sys.stdout.buffer.flush()
 
@@ -94,8 +104,15 @@ def main():
                         if termination and snapshot:
                             termination.poll(snapshot, lambda: samples.sample("before-test-termination"))
                     publish_log()
+                    now = time.monotonic()
+                    if now >= next_heartbeat:
+                        print(f"[{label}] Still running: {now - started:.0f}s elapsed; "
+                              f"{max(0, deadline - now):.0f}s until command deadline; "
+                              f"last child output {now - last_output:.0f}s ago.", flush=True)
+                        next_heartbeat = now + args.heartbeat_interval
         except subprocess.TimeoutExpired:
             timed_out = True
+            print(f"[{label}] Command deadline exceeded; stopping the owned process group.", flush=True)
             stop_group()
             exit_code = 124
         except KeyboardInterrupt:
@@ -113,6 +130,7 @@ def main():
     if termination and termination.errors and exit_code == 0:
         exit_code = 1
     result = {
+        "label": label, "timeoutSeconds": args.timeout,
         "command": command, "exitCode": exit_code, "processExitCode": process.returncode,
         "commandExitCode": command_exit_code,
         "timedOut": timed_out, "interrupted": interrupted,

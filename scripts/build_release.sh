@@ -3,6 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 root="$PWD"
+source "$root/scripts/ci_command.sh"
 evidence="$root/build/evidence/release"
 mkdir -p "$evidence"
 {
@@ -19,7 +20,7 @@ mkdir -p "$evidence"
 } | tee "$evidence/environment.txt"
 
 printf 'Starting the Release device build at %s.\n' "$(date -u +%FT%TZ)"
-python3 scripts/probes/supervise.py --timeout 900 --log "$evidence/release-build.log" -- \
+run_ci_command release-build 900 "$evidence/release-build.log" \
   xcodebuild build -project Snowlit.xcodeproj -scheme Snowlit \
     -configuration Release -destination 'generic/platform=iOS' \
     -derivedDataPath "$root/build/release" \

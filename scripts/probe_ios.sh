@@ -3,6 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 root="$PWD"
+source "$root/scripts/ci_command.sh"
 kind="${1:-}"
 mode="${2:-integration}"
 source "$root/scripts/simulator_signing.sh"
@@ -65,18 +66,23 @@ cleanup() {
     result=1
   fi
   if [ "$mode" = reader-ui ] && [ -f "$evidence/RuntimeTests.xcresult/Info.plist" ]; then
-    if ! xcrun xcresulttool export attachments --path "$evidence/RuntimeTests.xcresult" \
-      --output-path "$evidence/attachments" > "$evidence/attachment-export.log" 2>&1; then
+    if ! run_ci_command attachment-export 60 "$evidence/attachment-export.log" \
+      xcrun xcresulttool export attachments --path "$evidence/RuntimeTests.xcresult" \
+      --output-path "$evidence/attachments"; then
       printf 'Reader screenshot export failed; see attachment-export.log\n' >&2
       result=1
     fi
   fi
   if [ -n "$simulator" ]; then
-    xcrun simctl shutdown "$simulator" || true
-    xcrun simctl delete "$simulator" || true
+    run_ci_command simulator-shutdown 30 "$evidence/simulator-shutdown.log" xcrun simctl shutdown "$simulator" \
+      || { if [ "$result" -eq 0 ]; then result=1; fi; }
+    run_ci_command simulator-delete 30 "$evidence/simulator-delete.log" xcrun simctl delete "$simulator" \
+      || { if [ "$result" -eq 0 ]; then result=1; fi; }
   fi
   if [ -n "$fixture_pid" ]; then
-    kill "$fixture_pid" 2>/dev/null || true
+    # The fixture is this shell's direct child. It installs no shutdown handler
+    # and has no persistent data, so cleanup need not wait for graceful draining.
+    kill -KILL "$fixture_pid" 2>/dev/null || true
     wait "$fixture_pid" 2>/dev/null || true
   fi
   printf 'Exit status: %s\n' "$result" > "$evidence/script-status.txt"
@@ -105,13 +111,14 @@ while True:
             raise
         time.sleep(0.05)
 PY
-simulator="$(python3 scripts/create_simulator.py "$device" \
-  "$runtime_id" "$evidence/simulator.json")"
-xcrun simctl boot "$simulator"
-xcrun simctl bootstatus "$simulator" -b
+run_ci_command simulator-create 75 "$evidence/simulator-create.log" \
+  python3 scripts/create_simulator.py "$device" "$runtime_id" "$evidence/simulator.json"
+simulator="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["udid"])' "$evidence/simulator.json")"
+run_ci_command simulator-boot 45 "$evidence/simulator-boot.log" xcrun simctl boot "$simulator"
+run_ci_command simulator-ready 240 "$evidence/simulator-ready.log" xcrun simctl bootstatus "$simulator" -b
 printf 'Simulator boot completed. Starting %s tests; test output follows.\n' "$mode"
 
-supervision=(python3 "$root/scripts/probes/supervise.py" --timeout 900 --log "$evidence/webkit-tests.log")
+supervision=(python3 "$root/scripts/probes/supervise.py" --label "$mode-tests" --timeout 900 --log "$evidence/webkit-tests.log")
 if [ "$mode" = recovery ]; then
   supervision+=(--process-samples "$evidence/process-samples.jsonl" --process-sampler "$SNOWLIT_PROCESS_SAMPLER" --allow-test-termination)
 fi

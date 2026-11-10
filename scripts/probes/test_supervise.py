@@ -74,3 +74,19 @@ class SupervisionTests(unittest.TestCase):
             self.assertNotEqual(status['processExitCode'], 0)
             self.assertEqual((folder / 'command.log').read_bytes(), b'entered-wait\n')
             self.assertIn(b'entered-wait\n', result.stdout)
+
+    def test_silent_command_reports_progress_without_changing_its_log_or_deadline(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            folder = Path(temporary)
+            command = self.command(folder, "import time; time.sleep(30)", timeout=0.7)
+            command[2:2] = ['--label', 'simulator-ready', '--heartbeat-interval', '0.1']
+            result = subprocess.run(command, capture_output=True, timeout=10)
+            status = json.loads((folder / 'command.status.json').read_text())
+            self.assertEqual(result.returncode, 124)
+            self.assertTrue(status['timedOut'])
+            self.assertEqual(status['label'], 'simulator-ready')
+            self.assertEqual(status['timeoutSeconds'], 0.7)
+            self.assertIn(b'[simulator-ready] Still running:', result.stdout)
+            self.assertIn(b'Command deadline exceeded;', result.stdout)
+            self.assertLess(status['elapsedSeconds'], 5)
+            self.assertEqual((folder / 'command.log').read_bytes(), b'')

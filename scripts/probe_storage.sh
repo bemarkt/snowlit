@@ -3,6 +3,7 @@ set -euo pipefail
 
 cd "$(dirname "$0")/.."
 root="$PWD"
+source "$root/scripts/ci_command.sh"
 evidence="$root/build/evidence/storage-phone-process"
 mkdir -p "$evidence"
 runtime_version="${SNOWLIT_IOS_RUNTIME:-26.5}"
@@ -42,20 +43,24 @@ cleanup() {
   result=$?
   trap - EXIT
   if [ -n "$simulator" ]; then
-    xcrun simctl shutdown "$simulator" || true
-    xcrun simctl delete "$simulator" || true
+    run_ci_command simulator-shutdown 30 "$evidence/simulator-shutdown.log" xcrun simctl shutdown "$simulator" \
+      || { if [ "$result" -eq 0 ]; then result=1; fi; }
+    run_ci_command simulator-delete 30 "$evidence/simulator-delete.log" xcrun simctl delete "$simulator" \
+      || { if [ "$result" -eq 0 ]; then result=1; fi; }
   fi
   printf 'Exit status: %s\n' "$result" > "$evidence/script-status.txt"
   exit "$result"
 }
 trap cleanup EXIT
-simulator="$(python3 scripts/create_simulator.py 'iPhone 17' "$runtime_id" "$evidence/simulator.json")"
-xcrun simctl boot "$simulator"
-xcrun simctl bootstatus "$simulator" -b
+run_ci_command simulator-create 75 "$evidence/simulator-create.log" \
+  python3 scripts/create_simulator.py 'iPhone 17' "$runtime_id" "$evidence/simulator.json"
+simulator="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["udid"])' "$evidence/simulator.json")"
+run_ci_command simulator-boot 45 "$evidence/simulator-boot.log" xcrun simctl boot "$simulator"
+run_ci_command simulator-ready 240 "$evidence/simulator-ready.log" xcrun simctl bootstatus "$simulator" -b
 printf 'Simulator boot completed. Installing the storage probe App.\n'
-xcrun simctl install "$simulator" "$app"
+run_ci_command storage-app-install 60 "$evidence/app-install.log" xcrun simctl install "$simulator" "$app"
 printf 'App installed. Starting 24 storage interruption trials.\n'
-python3 scripts/probes/supervise.py --timeout 900 --log "$evidence/storage-tests.log" -- \
+run_ci_command storage-interruptions 900 "$evidence/storage-tests.log" \
   python3 scripts/probes/storage_process.py "$simulator" "$sampler" "$evidence"
 printf '24 interruption trials and two fresh reopens each passed at %s\n' "$(git rev-parse HEAD)" \
   > "$evidence/result.txt"
