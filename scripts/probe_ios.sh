@@ -40,13 +40,17 @@ pathlib.Path(sys.argv[1]).write_text(json.dumps(records, indent=2) + "\n")
 PY
 
 node --test scripts/probes/site.test.mjs > "$evidence/fixture-tests.log" 2>&1
-python3 -m unittest discover -s scripts/probes -p 'test_process_samples.py' \
-  > "$evidence/process-sample-parser-tests.log" 2>&1
+python3 -m unittest discover -s scripts/probes -p 'test_*.py' \
+  > "$evidence/probe-tool-tests.log" 2>&1
 fixture_pid=""
 simulator=""
+probe_complete=false
 cleanup() {
   result=$?
   trap - EXIT
+  if [ "$result" -eq 0 ] && [ "$probe_complete" != true ]; then
+    result=1
+  fi
   if [ -n "$simulator" ]; then
     xcrun simctl shutdown "$simulator" || true
     xcrun simctl delete "$simulator" || true
@@ -87,14 +91,16 @@ xcrun simctl boot "$simulator"
 xcrun simctl bootstatus "$simulator" -b
 
 xcodebuild -list -json -project Snowlit.xcodeproj > "$evidence/project-schemes.json"
-sampling=()
+supervision=(python3 "$root/scripts/probes/supervise.py" --timeout 900 --log "$evidence/webkit-tests.log")
 if [ "$mode" = recovery ]; then
-  sampling=(--process-samples "$evidence/process-samples.jsonl")
+  supervision+=(--process-samples "$evidence/process-samples.jsonl")
 fi
-python3 "$root/scripts/probes/supervise.py" --timeout 900 --log "$evidence/webkit-tests.log" "${sampling[@]}" -- \
+"${supervision[@]}" -- \
   xcodebuild test -project Snowlit.xcodeproj -scheme Snowlit -destination "platform=iOS Simulator,id=$simulator" \
   -derivedDataPath "$root/build/runtime-$kind-$mode" -resultBundlePath "$evidence/RuntimeTests.xcresult" \
   "${selection[@]}" \
   -parallel-testing-enabled NO -test-timeouts-enabled YES \
   -maximum-test-execution-time-allowance 60 CODE_SIGNING_ALLOWED=NO
+python3 "$root/scripts/probes/verify_execution.py" "$evidence" "$mode"
 printf 'Selected integration tests passed at %s\n' "$(git rev-parse HEAD)" > "$evidence/result.txt"
+probe_complete=true
