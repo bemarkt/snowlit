@@ -31,15 +31,20 @@ struct WebKitRecoveryTests {
                 } catch { /* Sleep ends when the test cancels its ticker. */ }
             }
             let started = clock.now
+            let entry = FaultEntryObservation(fault: fault, repetition: repetition)
+            probe!.webView.configuration.userContentController.add(entry, name: "recoveryStarted")
             do {
-                let body = fault == "spin" ? "while (true) {}" : "return await new Promise(() => {});"
-                observe("execution-started", fault: fault, repetition: repetition)
+                let faultBody = fault == "spin" ? "while (true) {}" : "return await new Promise(() => {});"
+                let body = "window.webkit.messageHandlers.recoveryStarted.postMessage(startToken);\n" + faultBody
+                observe("execution-requested", fault: fault, repetition: repetition)
                 await #expect(throws: ProbeResultRegistry<String>.Interruption.timedOut) {
-                    try await probe!.evaluate(body, timeout: .milliseconds(300))
+                    try await probe!.evaluate(body, arguments: ["startToken": entry.token], timeout: .milliseconds(300))
                 }
+                try #require(entry.received, "The script must actually enter the fault before recovery is assessed")
                 let waitDuration = started.duration(to: clock.now)
                 #expect(heartbeat.ticks > 0)
                 #expect(probe!.results.pendingCount == 0)
+                probe!.webView.configuration.userContentController.removeScriptMessageHandler(forName: "recoveryStarted")
                 probe!.close()
                 probe = nil
                 observe("closed", fault: fault, repetition: repetition)
@@ -59,6 +64,7 @@ struct WebKitRecoveryTests {
                 try await Task.sleep(for: .seconds(2))
                 observe("observation-ended", fault: fault, repetition: repetition)
             } catch {
+                probe?.webView.configuration.userContentController.removeScriptMessageHandler(forName: "recoveryStarted")
                 probe?.close()
                 ticker.cancel()
                 await ticker.value
@@ -77,5 +83,27 @@ struct WebKitRecoveryTests {
 
     @MainActor
     private final class MainActorHeartbeat { var ticks = 0 }
+
+    @MainActor
+    private final class FaultEntryObservation: NSObject, WKScriptMessageHandler {
+        let token = UUID().uuidString
+        private(set) var received = false
+        private let fault: String
+        private let repetition: Int
+
+        init(fault: String, repetition: Int) {
+            self.fault = fault
+            self.repetition = repetition
+            super.init()
+        }
+
+        func userContentController(_ userContentController: WKUserContentController,
+                                   didReceive message: WKScriptMessage) {
+            guard message.name == "recoveryStarted", message.frameInfo.isMainFrame,
+                  message.body as? String == token, !received else { return }
+            received = true
+            print("RecoveryEvent epochSeconds=\(Date().timeIntervalSince1970) stage=fault-entered fault=\(fault) repetition=\(repetition)")
+        }
+    }
 }
 #endif
