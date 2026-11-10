@@ -1,6 +1,5 @@
 #if os(iOS) && DEBUG
 import Foundation
-import UIKit
 import WebKit
 
 /// Debug-only worker for the App's real background/foreground UI fixture.
@@ -8,7 +7,7 @@ import WebKit
 public final class RuntimeLifecycleSession: NSObject, WKScriptMessageHandler {
     private let probe: WebKitRuntimeProbe
     private var entered: (@MainActor @Sendable () -> Void)?
-    public var view: UIView { probe.webView }
+    public var view: WKWebView { probe.webView }
     public private(set) var preparationStage = "document"
 
     public init(dataStore: WKWebsiteDataStore) {
