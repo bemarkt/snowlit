@@ -78,12 +78,12 @@ def verify(evidence, mode):
     log = (evidence / "webkit-tests.log").read_text(encoding="utf-8")
     if mode == "reader-ui":
         tests = re.findall(r"Test Case '-\[SnowlitUITests\.ReaderInteractionUITests (\w+)\]' passed", log)
-        expected = ["testSystemCurlCommitsCompletedGesturesAndKeepsPageAfterCancellation"]
-        if tests != expected or "Test Suite 'ReaderInteractionUITests' passed" not in log:
+        expected = {"testSystemCurlCommitsCompletedGesturesAndKeepsPageAfterCancellation", "testBackgroundClosesPendingRuntimeAndForegroundStartsFreshWork"}
+        if len(tests) != len(expected) or set(tests) != expected or "Test Suite 'ReaderInteractionUITests' passed" not in log:
             raise ValueError("The actual Reader interaction UI test did not pass")
-        return {"mode": mode, "suites": ["ReaderInteractionUITests"], "reportedTests": 1, "result": "passed"}
+        return {"mode": mode, "suites": ["ReaderInteractionUITests"], "reportedTests": len(tests), "result": "passed"}
     suites = {
-        "integration": ["WebKitRuntimeProbeTests", "ReaderProbeTests"],
+        "integration": ["WebKitRuntimeProbeTests", "ReaderProbeTests", "SourceContractProbeTests"],
         "recovery": ["WebKitRecoveryTests"],
     }[mode]
     counts = [int(count) for count in re.findall(r"Test run with (\d+) tests? in \d+ suites? passed", log)]
@@ -99,6 +99,15 @@ def verify(evidence, mode):
         if not (evidence / "process-samples.jsonl").is_file():
             raise ValueError("Process observations are missing")
         result["samplingCoverage"] = verify_recovery_observations(evidence, log, status["processSamples"])
+        terminations = status.get('testTerminations', [])
+        completed = re.findall(r'TerminationCompleted token=([0-9a-f-]{36}) hostPID=(\d+)', log)
+        if len(terminations) != 3 or any(row.get('result') != 'signalled' for row in terminations):
+            raise ValueError('Three controlled native process terminations are required')
+        expected = {(row['token'], str(row['hostPID'])) for row in terminations}
+        requested = re.findall(r'TerminationRequest token=([0-9a-f-]{36}) hostPID=(\d+)', log)
+        if len(expected) != 3 or len(completed) != 3 or set(completed) != expected or set(requested) != expected:
+            raise ValueError('Native termination callbacks and successful replacements are incomplete')
+        result['nativeTerminations'] = terminations
     return result
 
 

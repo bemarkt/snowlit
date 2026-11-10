@@ -6,6 +6,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A10000000000000000000006 /* RuntimeLifecycleProbeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000006 /* RuntimeLifecycleProbeView.swift */; };
+		A10000000000000000000030 /* SourceContractProbeTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000030 /* SourceContractProbeTests.swift */; };
 		A10000000000000000000029 /* CredentialStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* CredentialStoreTests.swift */; };
 		A10000000000000000000032 /* SnowlitStorage in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000002 /* SnowlitStorage */; };
 		A10000000000000000000028 /* GeneratedModuleCorpus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* GeneratedModuleCorpus.swift */; };
@@ -36,6 +38,8 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A20000000000000000000006 /* RuntimeLifecycleProbeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Experiments/RuntimeLifecycleProbeView.swift; sourceTree = "<group>"; };
+		A20000000000000000000030 /* SourceContractProbeTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/SourceContractProbeTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000029 /* CredentialStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/CredentialStoreTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000028 /* GeneratedModuleCorpus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/GeneratedModuleCorpus.swift; sourceTree = "<group>"; };
 		A20000000000000000000001 /* SnowlitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitApp.swift; sourceTree = "<group>"; };
@@ -89,6 +93,7 @@
 				A20000000000000000000003 /* StartupModel.swift */,
 				A20000000000000000000004 /* StartupView.swift */,
 				A20000000000000000000005 /* StorageProcessProbeView.swift */,
+				A20000000000000000000006 /* RuntimeLifecycleProbeView.swift */,
 			);
 			path = App;
 			sourceTree = "<group>";
@@ -115,6 +120,7 @@
 				A20000000000000000000026 /* ReaderProbeTests.swift */,
 				A20000000000000000000028 /* GeneratedModuleCorpus.swift */,
 				A20000000000000000000029 /* CredentialStoreTests.swift */,
+				A20000000000000000000030 /* SourceContractProbeTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -211,7 +217,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A30000000000000000000012 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000021, A10000000000000000000023, A10000000000000000000024, A10000000000000000000025, A10000000000000000000026, A10000000000000000000028, A10000000000000000000029,); runOnlyForDeploymentPostprocessing = 0; };
+		A30000000000000000000012 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000021, A10000000000000000000023, A10000000000000000000024, A10000000000000000000025, A10000000000000000000026, A10000000000000000000028, A10000000000000000000029, A10000000000000000000030,); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000022 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000022, A10000000000000000000027,); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;
@@ -222,6 +228,7 @@
 				A10000000000000000000003 /* StartupModel.swift in Sources */,
 				A10000000000000000000004 /* StartupView.swift in Sources */,
 				A10000000000000000000005 /* StorageProcessProbeView.swift in Sources */,
+				A10000000000000000000006 /* RuntimeLifecycleProbeView.swift in Sources */,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};

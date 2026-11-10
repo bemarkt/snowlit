@@ -7,6 +7,44 @@ import WebKit
 @Suite(.serialized, .timeLimit(.minutes(1)))
 @MainActor
 struct WebKitRecoveryTests {
+    /// The supervising script injects the OS process fault only after proving
+    /// one WebContent child belongs to this test host's dedicated launchd_sim.
+    /// Bounded touched allocations exercise retained page memory before the
+    /// fault; 64 MiB is fixture data, not a product budget or an OOM guarantee.
+    @Test func nativeTerminationInvalidatesPendingWorkAndRebuildsAfterMemoryGrowth() async throws {
+        let page = URL(string: "http://127.0.0.1:18731/health")!
+        for _ in 1...3 {
+            var probe: WebKitRuntimeProbe? = WebKitRuntimeProbe(dataStore: .nonPersistent())
+            defer { probe?.close() }
+            try await probe!.load(page)
+            #expect(try await probe!.evaluate("""
+                globalThis.retainedProbeBuffers = [];
+                for (let i = 0; i < 16; i++) {
+                  const bytes = new Uint8Array(4 * 1024 * 1024); bytes.fill(i + 1);
+                  globalThis.retainedProbeBuffers.push(bytes);
+                }
+                return String(globalThis.retainedProbeBuffers.reduce((sum, bytes) => sum + bytes.byteLength, 0));
+                """) == "67108864")
+            let active = probe!
+            let pending = Task { try await active.evaluate("return await new Promise(() => {});", timeout: .seconds(5)) }
+            defer { pending.cancel() }
+            try await FixtureScenario.eventually { active.results.pendingCount == 1 }
+            let token = UUID().uuidString.lowercased()
+            let request = "TerminationRequest token=\(token) hostPID=\(ProcessInfo.processInfo.processIdentifier)\n"
+            FileHandle.standardOutput.write(Data(request.utf8))
+            await #expect(throws: ProbeResultRegistry<String>.Interruption.webContentTerminated) { try await pending.value }
+            try #require(active.terminationCount == 1)
+            #expect(active.results.pendingCount == 0)
+            active.close()
+            probe = nil
+            let replacement = WebKitRuntimeProbe(dataStore: .nonPersistent())
+            defer { replacement.close() }
+            try await replacement.load(page, timeout: .seconds(5))
+            #expect(try await replacement.evaluate("return 'restored after native termination';", timeout: .seconds(5)) == "restored after native termination")
+            FileHandle.standardOutput.write(Data("TerminationCompleted token=\(token) hostPID=\(ProcessInfo.processInfo.processIdentifier)\n".utf8))
+        }
+    }
+
     /// Only run with scripts/probe_ios.sh phone recovery. It owns a dedicated simulator
     /// and a process deadline. A new WKWebView is not assumed to own a new WebContent process.
     @Test(arguments: ["spin", "never"])

@@ -17,7 +17,7 @@ case "$kind" in
 esac
 test_timeout=60
 case "$mode" in
-  integration) selection=(-only-testing:SnowlitAppTests/WebKitRuntimeProbeTests -only-testing:SnowlitAppTests/ReaderProbeTests) ;;
+  integration) selection=(-only-testing:SnowlitAppTests/WebKitRuntimeProbeTests -only-testing:SnowlitAppTests/ReaderProbeTests -only-testing:SnowlitAppTests/SourceContractProbeTests) ;;
   recovery) selection=(-only-testing:SnowlitAppTests/WebKitRecoveryTests) ;;
   reader-ui) selection=(-only-testing:SnowlitUITests/ReaderInteractionUITests); test_timeout=120 ;;
   *) printf 'Unknown probe mode: %s\n' "$mode" >&2; exit 2 ;;
@@ -110,7 +110,7 @@ xcrun simctl bootstatus "$simulator" -b
 
 supervision=(python3 "$root/scripts/probes/supervise.py" --timeout 900 --log "$evidence/webkit-tests.log")
 if [ "$mode" = recovery ]; then
-  supervision+=(--process-samples "$evidence/process-samples.jsonl" --process-sampler "$SNOWLIT_PROCESS_SAMPLER")
+  supervision+=(--process-samples "$evidence/process-samples.jsonl" --process-sampler "$SNOWLIT_PROCESS_SAMPLER" --allow-test-termination)
 fi
 "${supervision[@]}" -- \
   xcodebuild test-without-building -project Snowlit.xcodeproj -scheme Snowlit -configuration Debug \

@@ -2,6 +2,30 @@ import XCTest
 
 final class ReaderInteractionUITests: XCTestCase {
     @MainActor
+    func testBackgroundClosesPendingRuntimeAndForegroundStartsFreshWork() {
+        let app = XCUIApplication()
+        app.launchArguments = ["-snowlit-probe-runtime-lifecycle"]
+        app.launch()
+        let status = app.staticTexts["probe.runtime-status"]
+        XCTAssertTrue(status.waitForExistence(timeout: 10))
+        expect(status, containing: "ready=1;")
+        for repetition in 1...3 {
+            app.buttons["probe.runtime-start"].tap()
+            expect(status, containing: "entered=\(repetition);")
+            XCUIDevice.shared.press(.home)
+            app.activate()
+            expect(status, containing: "background=\(repetition);")
+            expect(status, containing: "discarded=\(repetition);")
+            expect(status, containing: "ready=\(repetition + 1);")
+            XCTAssertTrue(status.label.contains("writes=0;failures=0;"), status.label)
+        }
+        let attachment = XCTAttachment(screenshot: XCUIScreen.main.screenshot())
+        attachment.name = "Runtime after three Home and activate cycles"
+        attachment.lifetime = .keepAlways
+        add(attachment)
+    }
+
+    @MainActor
     func testSystemCurlCommitsCompletedGesturesAndKeepsPageAfterCancellation() {
         let app = XCUIApplication()
         app.launchArguments = ["-snowlit-probe-reader-interaction"]

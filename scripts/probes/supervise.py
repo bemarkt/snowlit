@@ -11,6 +11,7 @@ import sys
 import time
 
 from process_samples import ProcessSamples
+from termination_control import TerminationControl
 
 
 def main():
@@ -19,6 +20,7 @@ def main():
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--process-samples", type=Path)
     parser.add_argument("--process-sampler", type=Path)
+    parser.add_argument("--allow-test-termination", action="store_true")
     parser.add_argument("command", nargs=argparse.REMAINDER)
     args = parser.parse_args()
     command = args.command[1:] if args.command[:1] == ["--"] else args.command
@@ -30,6 +32,8 @@ def main():
         parser.error("Process sampling requires macOS libproc")
     if args.process_samples and (not args.process_sampler or not args.process_sampler.is_file()):
         parser.error("Process sampling requires the compiled host sampler")
+    if args.allow_test_termination and not args.process_samples:
+        parser.error("Test termination requires simulator process observations")
     args.log.parent.mkdir(parents=True, exist_ok=True)
     started = time.monotonic()
     timed_out = False
@@ -58,6 +62,7 @@ def main():
 
     signal.signal(signal.SIGTERM, interrupt)
     samples = ProcessSamples(args.process_samples, args.process_sampler) if args.process_samples else None
+    termination = TerminationControl(args.log) if args.allow_test_termination else None
     if samples:
         samples.sample("before-command")
     with args.log.open("wb") as output:
@@ -75,7 +80,9 @@ def main():
                 except subprocess.TimeoutExpired:
                     if not samples:
                         raise
-                    samples.sample("command-running")
+                    snapshot = samples.sample("command-running")
+                    if termination and snapshot:
+                        termination.poll(snapshot, lambda: samples.sample("before-test-termination"))
         except subprocess.TimeoutExpired:
             timed_out = True
             stop_group()
@@ -90,6 +97,8 @@ def main():
         samples.close()
         if samples.errors and exit_code == 0:
             exit_code = 1
+    if termination and termination.errors and exit_code == 0:
+        exit_code = 1
     result = {
         "command": command, "exitCode": exit_code, "processExitCode": process.returncode,
         "commandExitCode": command_exit_code,
@@ -97,6 +106,7 @@ def main():
         "elapsedSeconds": time.monotonic() - started,
         "processSamples": samples.samples if samples else None,
         "processSamplingErrors": samples.errors if samples else None,
+        "testTerminations": termination.results if termination else [],
     }
     args.log.with_suffix(".status.json").write_text(json.dumps(result, indent=2) + "\n")
     print(json.dumps(result), flush=True)

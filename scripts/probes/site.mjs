@@ -1,6 +1,9 @@
 import { createServer } from 'node:http';
 import { randomUUID } from 'node:crypto';
 import { pathToFileURL } from 'node:url';
+import { readFileSync } from 'node:fs';
+
+const authorExample = readFileSync(new URL('../../protocols/yingxue/examples/fixture.source.js', import.meta.url), 'utf8');
 
 export const fixtureVersion = 'runtime-probe-1';
 export const contentHTML = `<!doctype html><html><head><title>合成章节</title></head><body>
@@ -94,7 +97,7 @@ export async function startFixture({ port = 0 } = {}) {
       scenario.gates.delete(key);
       return send(response, 200, { released: count });
     }
-    if (request.method === 'POST' && ['auth/login', 'auth/rotate', 'auth/logout'].includes(path)) {
+    if (request.method === 'POST' && ['auth/login', 'auth/rotate', 'auth/logout', 'author/login'].includes(path)) {
       if (path === 'auth/logout') {
         scenario.loggedIn = false;
         scenario.revision += 1;
@@ -104,7 +107,7 @@ export async function startFixture({ port = 0 } = {}) {
       if (path === 'auth/rotate' && (!scenario.loggedIn || !cookieValues.includes(`sid=${sid}`))) {
         return send(response, 401, { error: 'sessionExpired' });
       }
-      if (path === 'auth/login') {
+      if (path === 'auth/login' || path === 'author/login') {
         const body = await readBody(request);
         const password = request.headers['content-type']?.startsWith('application/json')
           ? JSON.parse(body).password : new URLSearchParams(body).get('password');
@@ -117,6 +120,32 @@ export async function startFixture({ port = 0 } = {}) {
     }
     if (request.method !== 'GET') return send(response, 405, { error: 'Method not allowed' });
     switch (path) {
+      case 'author.source.js': {
+        // Bind the reviewed public example to this isolated loopback scenario.
+        // These exact substitutions change only fixture origins/base paths.
+        const origin = `http://127.0.0.1:${server.address().port}`;
+        const source = authorExample
+          .replaceAll('{"scheme":"https","host":"fixture.invalid"}', JSON.stringify({scheme: 'http', host: '127.0.0.1', port: server.address().port}))
+          .replaceAll("scheme: 'https', host: 'fixture.invalid'", `scheme: 'http', host: '127.0.0.1', port: ${server.address().port}`)
+          .replaceAll('https://fixture.invalid/', origin + base + 'author/');
+        return send(response, 200, source, 'text/javascript; charset=utf-8');
+      }
+      case 'author/search':
+        return send(response, 200, {items: [{reference: {key: 'book'}, title: 'Synthetic book'}], nextCursor: null});
+      case 'author/books/book':
+        return send(response, 200, {reference: {key: 'book'}, title: 'Synthetic book'});
+      case 'author/books/book/chapters': {
+        const last = url.searchParams.get('cursor') === 'page2';
+        return send(response, 200, {book: {key: 'book'}, revision: 'catalog-1',
+          items: [{key: last ? 'c2' : 'c1', title: last ? 'Chapter 2' : 'Chapter 1'}], nextCursor: last ? null : 'page2'});
+      }
+      case 'author/session':
+        return send(response, 200, {authenticated: scenario.loggedIn && cookieValues.includes(`sid=${sid}`)});
+      case 'author/books/book/chapters/c1':
+      case 'author/books/book/chapters/c2':
+        return scenario.loggedIn && cookieValues.includes(`sid=${sid}`)
+          ? send(response, 200, {revision: 'content-1', html: '<main><p>中文</p><p>第二段</p></main>'})
+          : send(response, 401, {error: 'needsAuthentication'});
       case 'page':
         return send(response, 200, '<!doctype html><title>Snowlit probe</title><main>Ready</main>', 'text/html; charset=utf-8');
       case 'module.mjs':

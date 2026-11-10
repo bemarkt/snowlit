@@ -15,6 +15,8 @@ struct SnowlitApp: App {
                 StorageProcessProbeView()
             } else if ProcessInfo.processInfo.arguments.contains("-snowlit-probe-reader-interaction") {
                 ReaderInteractionProbeView()
+            } else if ProcessInfo.processInfo.arguments.contains("-snowlit-probe-runtime-lifecycle") {
+                RuntimeLifecycleProbeView()
             } else {
                 StartupView(model: startup)
             }
@@ -30,4 +32,5 @@ private struct ReaderInteractionProbeView: UIViewControllerRepresentable {
     func makeUIViewController(context: Context) -> UIViewController { makeReaderInteractionProbe() }
     func updateUIViewController(_ controller: UIViewController, context: Context) {}
 }
+
 #endif

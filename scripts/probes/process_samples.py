@@ -138,6 +138,7 @@ class ProcessSamples:
             snapshot = parse_native_snapshot(self.read_snapshot())
             self.write(dict(kind="sample", stage=stage, supervisorElapsedSeconds=time.monotonic() - started, **snapshot))
             self.samples += 1
+            return snapshot
         except (OSError, subprocess.SubprocessError, UnicodeError, ValueError, KeyError, TypeError) as error:
             self.stop_helper(force=True)
             self.errors += 1

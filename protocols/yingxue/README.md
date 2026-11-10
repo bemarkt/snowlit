@@ -89,6 +89,8 @@ Validating a reply keeps its ticket active while the caller normalizes or saves 
 
 ## Host calls
 
+`ctx.readConfiguration` returns an immutable public-settings snapshot for the operation's configuration revision. Values use the manifest's exact keys and types; choice values are returned as text. Missing native overrides use declared defaults. Unknown/duplicate keys, wrong types, and choices absent from the manifest fail validation. The native snapshot is bound to the installation, script digest, and configuration revision. Changing configuration invalidates prior operations. Credentials and mutable source state use their separate APIs.
+
 `HostCall` contains a call UUID, complete operation context, and a typed host request. `HostReply` echoes both IDs and returns that method's typed result or a classified failure. The operation gate rejects duplicate call IDs, mismatched replies, and replies after operation cancellation. Completing a host call reserves its ID until the enclosing operation ends, preventing replay of a website write. Backend dispatch must use the gate's host ticket and recheck it before sending a reply. An accepted envelope alone does not perform the requested capability.
 
 `ctx.http` accepts an HTTP(S) URL/reference, an explicit method, headers, and an empty/byte/form body. Header and form values may use a credential handle with a prefix/suffix. The native preparer resolves those values against the credential audience, rejects control characters and host-owned transport/session headers, and encodes forms in UTF-8. Duplicate headers are rejected without regard to ASCII case; repeated form fields retain order. GET/HEAD cannot carry a body. Prepared native requests redact diagnostics and are not wire-serializable.
@@ -114,6 +116,8 @@ The host checks the operation and navigation before evaluation and after the nat
 The App-hosted WebKit corpus exercises dynamic DOM extraction, isolated-world inputs, serialization failures, navigation and cancellation with delayed native callbacks. Until that corpus runs for the candidate SHA, portable tests establish only contract behavior.
 
 ## Local checks
+
+The [capability matrix](capabilities.md) maps each operation/host method to its declaration and available corpus. App-hosted source tests execute the public author example with loopback fixture origins, the native wire gate, URLSession, SwiftSoup and Keychain. The form decision is injected by the test; this does not verify the product's form UI or installation screens.
 
 ```sh
 python3 scripts/generate_yingxue.py --check

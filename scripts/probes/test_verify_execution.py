@@ -18,8 +18,8 @@ class VerifyExecutionTests(unittest.TestCase):
             "processSamples": 4, "processSamplingErrors": 0,
         }))
         (root / "webkit-tests.log").write_text("\n".join([
-            "Suite WebKitRuntimeProbeTests passed", "Suite ReaderProbeTests passed",
-            "Test run with 14 tests in 2 suites passed",
+            "Suite WebKitRuntimeProbeTests passed", "Suite ReaderProbeTests passed", "Suite SourceContractProbeTests passed",
+            "Test run with 15 tests in 3 suites passed",
         ]))
 
     def test_missing_bundle_or_execution_log_is_rejected(self):
@@ -41,8 +41,9 @@ class VerifyExecutionTests(unittest.TestCase):
             path = root / "webkit-tests.log"
             method = "testSystemCurlCommitsCompletedGesturesAndKeepsPageAfterCancellation"
             path.write_text(f"Test Case '-[SnowlitUITests.ReaderInteractionUITests {method}]' passed\n"
+                            "Test Case '-[SnowlitUITests.ReaderInteractionUITests testBackgroundClosesPendingRuntimeAndForegroundStartsFreshWork]' passed\n"
                             "Test Suite 'ReaderInteractionUITests' passed")
-            self.assertEqual(verify(root, "reader-ui")["reportedTests"], 1)
+            self.assertEqual(verify(root, "reader-ui")["reportedTests"], 2)
             path.write_text(path.read_text().replace("' passed", "' failed", 1))
             with self.assertRaises(ValueError):
                 verify(root, "reader-ui")
@@ -67,7 +68,7 @@ class VerifyExecutionTests(unittest.TestCase):
         with tempfile.TemporaryDirectory() as folder:
             root = Path(folder)
             self.fixture(root)
-            self.assertEqual(verify(root, "integration")["reportedTests"], 14)
+            self.assertEqual(verify(root, "integration")["reportedTests"], 15)
             (root / "webkit-tests.log").write_text(
                 "Suite WebKitRecoveryTests passed\nTest run with 1 test in 1 suite passed")
             with self.assertRaises(ValueError):
@@ -77,6 +78,12 @@ class VerifyExecutionTests(unittest.TestCase):
 
     def recovery_observations(self, root):
         log = ["Suite WebKitRecoveryTests passed", "Test run with 1 test in 1 suite passed"]
+        terminations = []
+        for repetition in range(3):
+            token = f'{repetition:08x}-0000-0000-0000-000000000000'
+            log.append(f'TerminationRequest token={token} hostPID=100')
+            log.append(f'TerminationCompleted token={token} hostPID=100')
+            terminations.append(dict(token=token, hostPID=100, result='signalled', targetPID=200+repetition))
         samples = [dict(kind="metadata", format=3)]
         for fault_index, fault in enumerate(["spin", "never"]):
             for repetition in range(1, 4):
@@ -96,7 +103,18 @@ class VerifyExecutionTests(unittest.TestCase):
         status_path = root / "webkit-tests.status.json"
         status = json.loads(status_path.read_text())
         status["processSamples"] = len(samples) - 1
+        status["testTerminations"] = terminations
         status_path.write_text(json.dumps(status))
+
+    def test_termination_signals_without_matching_native_completion_are_rejected(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder)
+            self.fixture(root)
+            self.recovery_observations(root)
+            log = root/'webkit-tests.log'
+            log.write_text(log.read_text().replace('TerminationCompleted', 'NoCallback', 1))
+            with self.assertRaises(ValueError):
+                verify(root, 'recovery')
 
     def test_missing_fault_entry_empty_processes_and_observation_gaps_are_rejected(self):
         with tempfile.TemporaryDirectory() as folder:

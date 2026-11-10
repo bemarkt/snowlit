@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { startFixture, fixtureVersion } from './site.mjs';
+import { inspectSourceFile } from '../../protocols/yingxue/source-file.mjs';
 
 async function setup(t) {
   const fixture = await startFixture();
@@ -18,6 +19,25 @@ async function waitUntil(check) {
     await new Promise(resolve => setTimeout(resolve, 5));
   }
 }
+
+test('native contract fixture binds the author file and serves paged protected content', async t => {
+  const { base, origin } = await setup(t);
+  const source = Buffer.from(await (await fetch(base + 'author.source.js')).arrayBuffer());
+  const inspected = inspectSourceFile(source);
+  assert.equal(inspected.report.kind, 'accepted');
+  assert.equal(inspected.manifest.origins[0].port, Number(new URL(origin).port));
+  assert.equal(source.toString().includes('https://fixture.invalid/'), false);
+  const first = await (await fetch(base + 'author/books/book/chapters')).json();
+  const second = await (await fetch(base + 'author/books/book/chapters?cursor=' + first.nextCursor)).json();
+  assert.deepEqual([first.items[0].key, second.items[0].key, second.nextCursor], ['c1', 'c2', null]);
+  assert.equal((await fetch(base + 'author/books/book/chapters/c1')).status, 401);
+  const login = await fetch(base + 'author/login', {method: 'POST',
+    headers: {'Content-Type': 'application/x-www-form-urlencoded'}, body: 'password=fixture-password'});
+  assert.equal(login.status, 200);
+  const cookie = login.headers.getSetCookie()[0].split(';')[0];
+  assert.equal((await (await fetch(base + 'author/session', {headers: {Cookie: cookie}})).json()).authenticated, true);
+  assert.equal((await fetch(base + 'author/books/book/chapters/c1', {headers: {Cookie: cookie}})).status, 200);
+});
 
 test('health identifies the exact fixture instance that owns the listening port', async t => {
   const first = await setup(t);
