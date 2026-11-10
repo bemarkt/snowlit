@@ -37,6 +37,19 @@ def validate_marker(marker, *, token, mode, point, pid):
     return details
 
 
+def read_progress(path, *, token, mode, point, pid):
+    if not path.is_file():
+        return None
+    marker = json.loads(path.read_text())
+    expected = dict(token=token, mode=mode, point=point, pid=pid, stage="progress")
+    if any(marker.get(key) != value for key, value in expected.items()):
+        raise ValueError("Progress identity does not match this launch")
+    phase = marker.get("details", {}).get("phase")
+    if not isinstance(phase, str) or not phase:
+        raise ValueError("Progress phase is missing")
+    return phase
+
+
 def verify_reopened(kind, point, first, second):
     expected = "replacement" if point in {"afterCommit", "pointerCommitted", "adopted"} else "original"
     for details in (first, second):
@@ -118,6 +131,7 @@ class Probe:
         identity = None
         started = time.monotonic()
         marker = self.container / "Library/Caches/SnowlitStorageProcessProbes" / trial / (token + ".json")
+        progress = marker.with_suffix(".progress.json")
         try:
             print(f"Storage operation {mode}/{point} token={token}: launching", flush=True)
             output = self.command("launch", self.simulator, BUNDLE, "-snowlit-probe-storage",
@@ -134,6 +148,10 @@ class Probe:
             print(f"Storage operation {mode}/{point} token={token}: pid={pid}, waiting for marker", flush=True)
             deadline = time.monotonic() + 20
             while not marker.exists():
+                phase = read_progress(progress, token=token, mode=mode, point=point, pid=pid)
+                if phase is not None and phase != record.get("lastProgress"):
+                    record["lastProgress"] = phase
+                    print(f"Storage operation {mode}/{point} token={token}: {phase}", flush=True)
                 if time.monotonic() >= deadline:
                     raise TimeoutError("App did not publish the requested checkpoint")
                 if self.identity(pid) != identity:
@@ -153,6 +171,18 @@ class Probe:
             # marker for diagnosis, but never accept it as a verified launch.
             if "marker" not in record and marker.is_file():
                 record["unverifiedMarker"] = marker.read_text()
+            if progress.is_file():
+                record["unverifiedProgress"] = progress.read_text()
+            # A short sample of this exact owned App is diagnostic only. It can
+            # distinguish launch/UI scheduling from a blocked database reopen.
+            if identity is not None and self.identity(identity["pid"]) == identity:
+                destination = self.evidence / (token + ".sample.txt")
+                try:
+                    sample = subprocess.run(["/usr/bin/sample", str(identity["pid"]), "1", "-file", str(destination)],
+                                            capture_output=True, text=True, timeout=5)
+                    record["diagnosticSample"] = dict(exitCode=sample.returncode, file=destination.name)
+                except (OSError, subprocess.TimeoutExpired) as diagnostic:
+                    record["diagnosticSample"] = dict(errorType=type(diagnostic).__name__)
             print(f"Storage operation {mode}/{point} token={token}: failed ({type(error).__name__})", flush=True)
             raise
         finally:

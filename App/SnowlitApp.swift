@@ -7,12 +7,15 @@ import UIKit
 @main
 struct SnowlitApp: App {
     @State private var startup = AppComposition.makeStartup()
+    #if DEBUG
+    @UIApplicationDelegateAdaptor(StorageProcessProbeDelegate.self) private var storageProbe
+    #endif
 
     var body: some Scene {
         WindowGroup {
             #if DEBUG
             if ProcessInfo.processInfo.arguments.contains("-snowlit-probe-storage") {
-                StorageProcessProbeView()
+                StorageProcessProbeView(probe: storageProbe)
             } else if ProcessInfo.processInfo.arguments.contains("-snowlit-probe-reader-interaction") {
                 ReaderInteractionProbeView()
             } else if ProcessInfo.processInfo.arguments.contains("-snowlit-probe-runtime-lifecycle") {

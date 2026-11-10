@@ -1,11 +1,28 @@
 import unittest
 import uuid
+import json
+import tempfile
+from pathlib import Path
 from unittest.mock import patch
 
-from storage_process import DIGESTS, Probe, validate_marker, verify_reopened
+from storage_process import DIGESTS, Probe, read_progress, validate_marker, verify_reopened
 
 
 class StorageProcessEvidenceTests(unittest.TestCase):
+    def test_progress_is_diagnostic_and_cannot_satisfy_a_completed_checkpoint(self):
+        expected = dict(token="this-operation", mode="dataset-check", point="candidateValidated", pid=123)
+        with tempfile.TemporaryDirectory() as folder:
+            path = Path(folder) / "progress.json"
+            self.assertIsNone(read_progress(path, **expected))
+            marker = dict(expected, stage="progress", details={"phase": "opening-dataset-store"})
+            path.write_text(json.dumps(marker))
+            self.assertEqual(read_progress(path, **expected), "opening-dataset-store")
+            with self.assertRaises(ValueError):
+                validate_marker(marker, **expected)
+            path.write_text(json.dumps(dict(marker, token="previous-launch")))
+            with self.assertRaises(ValueError):
+                read_progress(path, **expected)
+
     def test_completed_operation_uses_simulator_lifecycle_and_observes_process_exit(self):
         probe = object.__new__(Probe)
         probe.simulator = "owned-simulator"
