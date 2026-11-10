@@ -8,25 +8,32 @@ import subprocess
 import time
 
 
-def parse_processes(output):
+def parse_processes(output, *, metrics=True):
     processes = {}
     for line in output.splitlines():
         if not line.strip():
             continue
-        fields = line.split(None, 9)
-        if len(fields) != 10:
+        expected = 10 if metrics else 8
+        fields = line.split(None, expected - 1)
+        if len(fields) != expected:
             raise ValueError("Incomplete ps row")
-        pid, parent, rss = map(int, fields[:3])
-        if pid in processes or pid < 0 or parent < 0 or rss < 0:
+        pid, parent = map(int, fields[:2])
+        if pid in processes or pid < 0 or parent < 0:
             raise ValueError("Invalid or duplicate process identity")
-        started = datetime.strptime(" ".join(fields[4:9]), "%a %b %d %H:%M:%S %Y")
+        date_start = 4 if metrics else 2
+        started = datetime.strptime(" ".join(fields[date_start:date_start + 5]), "%a %b %d %H:%M:%S %Y")
         # comm contains the executable path, never argv or the environment.
-        name = fields[9].rsplit("/", 1)[-1]
+        name = fields[-1].rsplit("/", 1)[-1]
         processes[pid] = {
-            "pid": pid, "parentPID": parent, "rssKiB": rss,
-            "cpuTime": fields[3], "startedUTC": started.replace(tzinfo=timezone.utc).isoformat(),
+            "pid": pid, "parentPID": parent,
+            "startedUTC": started.replace(tzinfo=timezone.utc).isoformat(),
             "executable": name,
         }
+        if metrics:
+            rss = int(fields[2])
+            if rss < 0:
+                raise ValueError("Invalid resident size")
+            processes[pid].update(rssKiB=rss, cpuTime=fields[3])
     candidates = {
         pid for pid, process in processes.items()
         if process["executable"].startswith("com.apple.WebKit.")
@@ -67,11 +74,28 @@ class ProcessSamples:
         environment = dict(os.environ, LC_ALL="C", TZ="UTC")
         try:
             result = subprocess.run(
-                ["/bin/ps", "-Aww", "-o", "pid=,ppid=,rss=,time=,lstart=,comm="],
+                ["/bin/ps", "-Aww", "-o", "pid=,ppid=,lstart=,comm="],
                 env=environment, capture_output=True, text=True, encoding="utf-8",
                 timeout=2, check=True,
             )
-            self.write({"kind": "sample", "stage": stage, "processes": parse_processes(result.stdout)})
+            identities = parse_processes(result.stdout, metrics=False)
+            measured = []
+            if identities:
+                # Resource lookup for every host process can stall a busy CI runner.
+                # Read task metrics only for the observed candidates and their ancestors.
+                pids = ",".join(str(process["pid"]) for process in identities)
+                result = subprocess.run(
+                    ["/bin/ps", "-ww", "-p", pids, "-o", "pid=,ppid=,rss=,time=,lstart=,comm="],
+                    env=environment, capture_output=True, text=True, encoding="utf-8", timeout=2,
+                )
+                # All selected processes may have exited between the two snapshots.
+                empty = result.returncode == 1 and not result.stdout.strip() and not result.stderr.strip()
+                if not empty:
+                    result.check_returncode()
+                    selected = {(process["pid"], process["startedUTC"]) for process in identities}
+                    measured = [process for process in parse_processes(result.stdout)
+                                if (process["pid"], process["startedUTC"]) in selected]
+            self.write({"kind": "sample", "stage": stage, "processes": measured})
             self.samples += 1
         except (OSError, subprocess.SubprocessError, UnicodeError, ValueError) as error:
             self.errors += 1

@@ -6,6 +6,16 @@ from process_samples import parse_processes
 
 
 class ProcessSampleTests(unittest.TestCase):
+    def test_identity_scan_selects_candidates_without_inventing_resource_metrics(self):
+        rows = parse_processes("\n".join([
+            "1 0 Tue Nov 10 00:00:00 2026 /sbin/launchd",
+            "30 1 Tue Nov 10 00:00:01 2026 /runtime/com.apple.WebKit.WebContent",
+            "40 1 Tue Nov 10 00:00:02 2026 /unrelated/other",
+        ]), metrics=False)
+        self.assertEqual([row["pid"] for row in rows], [1, 30])
+        self.assertTrue(rows[1]["candidate"])
+        self.assertTrue(all("cpuTime" not in row and "rssKiB" not in row for row in rows))
+
     def test_candidates_keep_ancestors_and_cpu_rss_without_executable_paths(self):
         output = """
   1 0 100 0:01.20 Tue Nov 10 00:00:00 2026 /sbin/launchd
