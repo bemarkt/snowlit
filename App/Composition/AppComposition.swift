@@ -15,6 +15,7 @@ struct AppComposition {
     let authentication: SourceAuthenticationModel
     let search: SourceSearchModel
     let shelf: LibraryShelfModel
+    let backup: BackupModel
     let makeBook: @MainActor (SourceSearchModel.Item) -> SourceBookModel
 
     init() {
@@ -25,6 +26,9 @@ struct AppComposition {
         let storage = LibraryBootstrap()
         #endif
         let files = SourceFileReader()
+        let backups = BackupWorkspace(openLibrary: { try await storage.open() })
+        backup = BackupModel(export: { try await backups.export(includeCache: $0) },
+            inspect: { try await backups.preview($0) }, clear: { try await backups.clear() })
         let validator = SourceCandidateValidator()
         let runtime = SourceRuntime(openLibrary: { try await storage.open() },
             digest: { bytes in SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() })

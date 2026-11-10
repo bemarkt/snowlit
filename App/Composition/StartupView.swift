@@ -9,6 +9,7 @@ struct StartupView: View {
     let authentication: SourceAuthenticationModel
     let search: SourceSearchModel
     let shelf: LibraryShelfModel
+    let backup: BackupModel
     let makeBook: @MainActor (SourceSearchModel.Item) -> SourceBookModel
     @State private var retry = 0
 
@@ -19,7 +20,7 @@ struct StartupView: View {
                 ProgressView("正在打开…")
             case .ready:
                 LibraryRootView(sources: sources, management: management, candidateValidator: candidateValidator,
-                    runtime: runtime, authentication: authentication, search: search, shelf: shelf, makeBook: makeBook)
+                    runtime: runtime, authentication: authentication, search: search, shelf: shelf, backup: backup, makeBook: makeBook)
             case .failed(let operationID):
                 VStack(spacing: 16) {
                     Text("暂时无法打开")

@@ -24,13 +24,13 @@ struct SnowlitApp: App {
                 StartupView(model: composition.startup, sources: composition.sources,
                     management: composition.management, candidateValidator: composition.candidateValidator,
                     runtime: composition.runtime, authentication: composition.authentication,
-                    search: composition.search, shelf: composition.shelf, makeBook: composition.makeBook)
+                    search: composition.search, shelf: composition.shelf, backup: composition.backup, makeBook: composition.makeBook)
             }
             #else
             StartupView(model: composition.startup, sources: composition.sources,
                 management: composition.management, candidateValidator: composition.candidateValidator,
                 runtime: composition.runtime, authentication: composition.authentication,
-                search: composition.search, shelf: composition.shelf, makeBook: composition.makeBook)
+                search: composition.search, shelf: composition.shelf, backup: composition.backup, makeBook: composition.makeBook)
             #endif
         }
     }

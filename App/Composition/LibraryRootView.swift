@@ -9,6 +9,7 @@ struct LibraryRootView: View {
     let authentication: SourceAuthenticationModel
     let search: SourceSearchModel
     let shelf: LibraryShelfModel
+    let backup: BackupModel
     let makeBook: @MainActor (SourceSearchModel.Item) -> SourceBookModel
     @Environment(\.scenePhase) private var scenePhase
 
@@ -21,6 +22,8 @@ struct LibraryRootView: View {
             SourceLibraryView(model: sources, management: management, candidateValidator: candidateValidator,
                 authentication: authentication)
                 .tabItem { Label("书源", systemImage: "network") }
+            NavigationStack { BackupView(model: backup) }
+                .tabItem { Label("备份", systemImage: "externaldrive") }
         }
         .background {
             if let session = runtime.active {
