@@ -1,6 +1,6 @@
 #if os(iOS)
 import CoreText
-import SnowlitCore
+@testable import SnowlitCore
 import Testing
 import UIKit
 @testable import SnowlitReader
