@@ -2,6 +2,7 @@
 import Foundation
 import UIKit
 import SwiftUI
+import WebKit
 @_spi(Experiments) import YingxueKit
 
 struct RuntimeLifecycleProbeView: UIViewControllerRepresentable {
@@ -16,6 +17,10 @@ private final class RuntimeLifecycleProbe: UIViewController {
     private enum Phase: String { case inactive, preparing, ready, pending, failed }
     private let status = UILabel()
     private let start = UIButton(type: .system)
+    // Foreground rebuilds replace execution, not the source's website session.
+    // Keep this one fixture's store alive to test whether repeated store/process
+    // creation caused the third foreground preparation timeout.
+    private let websiteDataStore = WKWebsiteDataStore.nonPersistent()
     private var runtime: RuntimeLifecycleSession?
     private var work: Task<Void, Never>?
     private var generation = UUID()
@@ -60,7 +65,7 @@ private final class RuntimeLifecycleProbe: UIViewController {
         guard UIApplication.shared.applicationState == .active,
               runtime == nil, isViewLoaded, view.window != nil else { return }
         let current = generation
-        let probe = RuntimeLifecycleSession()
+        let probe = RuntimeLifecycleSession(dataStore: websiteDataStore)
         runtime = probe
         phase = .preparing
         render()

@@ -5,10 +5,13 @@ import WebKit
 /// Debug-only worker for the App's real background/foreground UI fixture.
 @_spi(Experiments) @MainActor
 public final class RuntimeLifecycleSession: NSObject, WKScriptMessageHandler {
-    private let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
+    private let probe: WebKitRuntimeProbe
     private var entered: (@MainActor @Sendable () -> Void)?
 
-    public override init() { super.init() }
+    public init(dataStore: WKWebsiteDataStore) {
+        probe = WebKitRuntimeProbe(dataStore: dataStore)
+        super.init()
+    }
 
     public func prepare() async throws {
         try await probe.loadHTML("<!doctype html><html><head><title>Lifecycle probe</title></head><body></body></html>")
