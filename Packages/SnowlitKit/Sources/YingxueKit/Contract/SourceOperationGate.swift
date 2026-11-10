@@ -21,13 +21,19 @@ public actor SourceOperationGate {
     private var enabled: Bool
     private var closed = false
     private var pending: [UUID: YingxueWire.OperationContext] = [:]
+    var credentialPolicy: SourceCredentialPolicy?
+    var credentialHandles: [UUID: SourceCredentialLease] = [:]
+    var revokedCredentialConsents: Set<UUID> = []
 
     public init(installationID: SourceInstallationID, scriptSHA256: String,
-                configurationRevision: Int, sessionRevision: Int, enabled: Bool = true) throws {
+                configurationRevision: Int, sessionRevision: Int, enabled: Bool = true,
+                credentialPolicy: SourceCredentialPolicy? = nil) throws {
         try Self.validate(scriptSHA256: scriptSHA256, configurationRevision: configurationRevision, sessionRevision: sessionRevision)
+        try Self.validate(credentialPolicy, installationID: installationID, scriptSHA256: scriptSHA256)
         self.installationID = installationID; self.scriptSHA256 = scriptSHA256
         self.configurationRevision = configurationRevision; self.sessionRevision = sessionRevision
         self.enabled = enabled
+        self.credentialPolicy = credentialPolicy
     }
 
     public var pendingCount: Int { pending.count }
@@ -71,6 +77,7 @@ public actor SourceOperationGate {
     public func finish(_ ticket: Ticket) throws {
         try check(ticket)
         pending.removeValue(forKey: ticket.id)
+        discardCredentials(for: ticket.call.context.requestID)
     }
 
     /// Cancels exactly this owned consumer. Backends still receive explicit cancellation.
@@ -78,6 +85,7 @@ public actor SourceOperationGate {
     public func cancel(_ ticket: Ticket) -> Bool {
         guard pending[ticket.id] == ticket.call.context else { return false }
         pending.removeValue(forKey: ticket.id)
+        discardCredentials(for: ticket.call.context.requestID)
         return true
     }
 
@@ -85,12 +93,15 @@ public actor SourceOperationGate {
     /// generation even if the caller repeats the same revision. Returns operations
     /// whose backend/network/UI resources must be cancelled by their owner.
     @discardableResult
-    public func replace(scriptSHA256: String, configurationRevision: Int, sessionRevision: Int, enabled: Bool) throws -> [String] {
+    public func replace(scriptSHA256: String, configurationRevision: Int, sessionRevision: Int, enabled: Bool,
+                        credentialPolicy: SourceCredentialPolicy? = nil) throws -> [String] {
         guard !closed else { throw Failure.closed }
         try Self.validate(scriptSHA256: scriptSHA256, configurationRevision: configurationRevision, sessionRevision: sessionRevision)
+        try Self.validate(credentialPolicy, installationID: installationID, scriptSHA256: scriptSHA256)
         let invalidated = invalidate()
         self.scriptSHA256 = scriptSHA256; self.configurationRevision = configurationRevision
         self.sessionRevision = sessionRevision; self.enabled = enabled
+        self.credentialPolicy = credentialPolicy
         return invalidated
     }
 
@@ -100,9 +111,10 @@ public actor SourceOperationGate {
         return invalidate()
     }
 
-    private func invalidate() -> [String] {
+    func invalidate() -> [String] {
         let requests = pending.values.map(\.requestID).sorted()
         pending.removeAll()
+        credentialHandles.removeAll()
         generation = UUID()
         return requests
     }
@@ -112,6 +124,15 @@ public actor SourceOperationGate {
         try YingxueWireCodec.validate(encoder.encode(scriptSHA256), as: "SHA256")
         try YingxueWireCodec.validate(encoder.encode(configurationRevision), as: "Revision")
         try YingxueWireCodec.validate(encoder.encode(sessionRevision), as: "Revision")
+    }
+
+    private static func validate(_ policy: SourceCredentialPolicy?, installationID: SourceInstallationID,
+                                 scriptSHA256: String) throws {
+        if let policy {
+            guard policy.installationID == installationID, policy.scriptSHA256 == scriptSHA256 else {
+                throw SourceCredentialFailure.invalidPolicy
+            }
+        }
     }
 }
 

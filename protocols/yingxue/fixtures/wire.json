@@ -238,5 +238,59 @@
     "type": "OperationError",
     "json": "{\"code\":\"network\",\"stage\":\"http\",\"retryable\":true,\"message\":\"synthetic-private\"}",
     "valid": false
+  },
+  {
+    "name": "manifest-plaintext-declared-not-granted",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1,\"sourceID\":\"org.example.reader\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\",\"credentials.read\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": true
+  },
+  {
+    "name": "manifest-plaintext-wrong-capability",
+    "type": "Manifest",
+    "json": "{\"protocolVersion\":1,\"sourceID\":\"org.example.reader\",\"name\":\"示例映雪源\",\"scriptVersion\":\"1.0.0\",\"referenceVersion\":1,\"stateVersion\":1,\"capabilities\":[\"http\",\"dom\",\"credentialsRead\"],\"origins\":[{\"scheme\":\"https\",\"host\":\"fixture.invalid\"}],\"authentication\":[],\"publicConfiguration\":[{\"kind\":\"choice\",\"key\":\"category\",\"label\":\"分类\",\"initial\":\"all\",\"choices\":[{\"value\":\"all\",\"label\":\"全部\"}]}]}",
+    "valid": false
+  },
+  {
+    "name": "credential-handle",
+    "type": "CredentialHandle",
+    "json": "{\"id\":\"01234567-1234-1234-1234-123456789abc\"}",
+    "valid": true
+  },
+  {
+    "name": "credential-read-request",
+    "type": "CredentialReadRequest",
+    "json": "{\"handle\":{\"id\":\"01234567-1234-1234-1234-123456789abc\"}}",
+    "valid": true
+  },
+  {
+    "name": "credential-value",
+    "type": "CredentialReadResult",
+    "json": "{\"value\":\"synthetic-secret\"}",
+    "valid": true
+  },
+  {
+    "name": "credential-empty-value",
+    "type": "CredentialReadResult",
+    "json": "{\"value\":\"\"}",
+    "valid": true
+  },
+  {
+    "name": "credential-value-null",
+    "type": "CredentialReadResult",
+    "json": "{\"value\":null}",
+    "valid": false
+  },
+  {
+    "name": "credential-request-cannot-grant-permission",
+    "type": "CredentialReadRequest",
+    "json": "{\"handle\":{\"id\":\"01234567-1234-1234-1234-123456789abc\"},\"consent\":true}",
+    "valid": false
+  },
+  {
+    "name": "credential-handle-cannot-specify-installation",
+    "type": "CredentialHandle",
+    "json": "{\"id\":\"01234567-1234-1234-1234-123456789abc\",\"installationID\":\"01234567-1234-1234-1234-123456789abc\"}",
+    "valid": false
   }
 ]

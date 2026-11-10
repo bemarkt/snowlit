@@ -44,8 +44,9 @@ def quote(value):
 
 
 def case_name(value):
-    assert re.fullmatch('[A-Za-z][A-Za-z0-9]*', value)
-    return '`' + value[0].lower() + value[1:] + '`'
+    assert re.fullmatch(r'[A-Za-z][A-Za-z0-9]*(?:\.[A-Za-z][A-Za-z0-9]*)*', value)
+    first, *rest = value.split('.')
+    return '`' + first[0].lower() + first[1:] + ''.join(part[0].upper() + part[1:] for part in rest) + '`'
 
 
 def alternatives(schema):
@@ -68,6 +69,7 @@ def swift():
             values = schema.get('enum', [schema['const']] if 'const' in schema else [])
             if values:
                 assert t == 'string'
+                assert len({case_name(v) for v in values}) == len(values), values
                 output += [f'    public enum {name}: String, Codable, Hashable, Sendable {{']
                 output += [f'        case {case_name(v)} = {quote(v)}' for v in values]
                 output += ['    }']
@@ -92,8 +94,9 @@ def swift():
             output += [f'    public typealias {name} = [{item}]']
             rule = f'.array(item: "{item}", unique: {str(schema.get("uniqueItems",False)).lower()})'
         elif t == 'object':
-            assert set(schema) == {'type','properties','required','additionalProperties'}
+            assert set(schema) - {'x-sensitive'} == {'type','properties','required','additionalProperties'}
             assert schema['additionalProperties'] is False
+            assert schema.get('x-sensitive', True) is True
             props, required = schema['properties'], set(schema['required'])
             assert required <= props.keys()
             output += [f'    public struct {name}: YingxueWireModel, Equatable {{', f'        public static let wireType = "{name}"']
@@ -105,6 +108,10 @@ def swift():
                 fields += [f'{key}: {ptype}' + ('? = nil' if optional else '')]
                 assignments += [f'            self.{key} = {key}']
             output += ['        public init(' + ', '.join(fields) + ') {', *assignments, '        }']
+            if schema.get('x-sensitive'):
+                output += ['        public var description: String { "[redacted]" }',
+                           '        public var debugDescription: String { description }',
+                           '        public var customMirror: Mirror { Mirror(self, children: [:]) }']
             output += ['        private enum CodingKeys: String, CodingKey { case ' + ', '.join(props) + ' }', '        public func encode(to encoder: any Encoder) throws {', '            var container = encoder.container(keyedBy: CodingKeys.self)']
             output += [f'            try container.' + ('encode' if key in required else 'encodeIfPresent') + f'({key}, forKey: .{key})' for key in props]
             output += ['        }', '    }']
@@ -123,7 +130,11 @@ def swift():
         else:
             raise ValueError(t)
         rules += [f'        "{name}": {rule},']
-    output += ['}', '', 'enum GeneratedWireSchema {', '    static let rules: [String: WireRule] = [', *rules, '    ]', '}',
+    output += ['}', '']
+    for name, schema in DEFS.items():
+        if schema.get('x-sensitive'):
+            output += [f'extension YingxueWire.{name}: CustomStringConvertible, CustomDebugStringConvertible, CustomReflectable {{}}']
+    output += ['', 'enum GeneratedWireSchema {', '    static let rules: [String: WireRule] = [', *rules, '    ]', '}',
                'enum GeneratedModulePolicy {', '    static let requiredExports = [' + ', '.join(map(quote,SCHEMA['x-module']['requiredExports'])) + ']', '}', '']
     return '\n'.join(output)
 

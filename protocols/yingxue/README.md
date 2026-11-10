@@ -2,7 +2,7 @@
 
 `schema.json` is the single structural contract for protocol 1 metadata and reading operations. `scripts/generate_yingxue.py` generates the Swift models, Swift validation rules, TypeScript declarations, and the Swift copy of the shared corpus. Run the generator with `--check` to detect drift. Change the schema or corpus first, then regenerate.
 
-The contract is a development candidate. Authentication host messages, the execution envelope, and runtime acceptance are separate work; declaring a capability does not prove its iOS implementation. Static structure, semantic validation, host execution, and the App reading flow are distinct checks.
+The contract is a development candidate. Authentication host messages and runtime acceptance remain in progress; declaring a capability does not prove its iOS implementation. Static structure, semantic validation, host execution, and the App reading flow are distinct checks.
 
 ## Source file
 
@@ -54,6 +54,18 @@ Use `YingxueWireCodec` at Swift wire boundaries. Direct `JSONDecoder` or `JSONEn
 ## Manual upgrades
 
 An update must retain the source family ID and the host installation identity. `SourceUpgradeAssessment` reports newly requested capabilities, authentication modes, and effective origins for review. Changing `referenceVersion` requires explicit reference migration; changing `stateVersion` requires public state migration. The assessment never activates a script, resets state, substitutes chapters, or deletes local books. A failed or unapproved candidate leaves the current version usable.
+
+## Credentials
+
+The host manages passwords/tokens separately from public settings and source state. A native form or trusted token capture stores a secret and issues a random `CredentialHandle` valid only for its current operation. The handle is not a persistent storage key. Passwords, cookies, tokens, and plaintext grants are excluded from ordinary backups and shareable logs. Keychain storage uses installation-specific services, device-only foreground accessibility, and no iCloud synchronization.
+
+Host-managed transport can resolve a handle without granting plaintext to the source. Before sending a credential, it checks both the source's declared origin and the credential's narrower audience. It must repeat the check for every redirect and must not forward an already filled header/body blindly. The native value must never be encoded into a script callback, public state, or a diagnostic payload.
+
+To read a stored secret, the source declares `credentials.read`. The install/upgrade UI separately asks the user to authorize the exact installation and source-file SHA-256. A declaration is not consent. Updated scripts need new confirmation even if the declaration is unchanged; `SourceUpgradeAssessment.credentialReadConsentRequired` reports this independently of added permissions. A refused update leaves the prior active version intact. The host can continue using managed credentials without plaintext consent.
+
+`CredentialReadRequest` contains a temporary handle. Its authorized `CredentialReadResult` contains UTF-8 text. Missing, malformed, stale, and unauthorized requests fail explicitly. The host checks operation/session validity and consent before storage access and again after it returns. Logout, disablement, source replacement, operation closure, and cancellation invalidate outstanding handles. Revocation invalidates running operations; the backend owner must close their network/UI/runtime resources. Replacing a policy cannot reuse a revoked confirmation.
+
+Native secret values are not Codable and redact printing/reflection. The dedicated sensitive wire result supports explicit transport encoding and redacts ordinary Swift diagnostics. This is not automatic taint tracking or guaranteed memory erasure: an authorized source can use the returned secret, including sending it to permitted sites. Transport logs and public-state/backup services must continue to enforce their own exclusions.
 
 ## Execution identity and results
 

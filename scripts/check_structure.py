@@ -17,7 +17,7 @@ DEPENDENCIES = {
 }
 IMPORTS = {
     "SnowlitCore": {"Foundation"},
-    "SnowlitStorage": {"Foundation", "SnowlitCore", "GRDB"},
+    "SnowlitStorage": {"Foundation", "SnowlitCore", "GRDB", "Security"},
     "YingxueKit": {"Foundation", "SnowlitCore", "WebKit", "SwiftSoup"},
     "SnowlitReader": {"Foundation", "SnowlitCore", "UIKit"},
 }
@@ -149,7 +149,7 @@ def check_project():
     require(app_products == set(DEPENDENCIES), "App must link the four package products")
     probe_products = {objects[p]["productName"]
                       for p in targets["SnowlitAppTests"]["packageProductDependencies"]}
-    require(probe_products == {"SnowlitCore", "YingxueKit", "SnowlitReader"},
+    require(probe_products == {"SnowlitCore", "SnowlitStorage", "YingxueKit", "SnowlitReader"},
             "Hosted probes must use the package products")
     references = [objects[p] for p in root["packageReferences"]]
     require(len(references) == 1

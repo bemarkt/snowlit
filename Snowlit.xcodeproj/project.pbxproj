@@ -6,6 +6,8 @@
 	objects = {
 
 /* Begin PBXBuildFile section */
+		A10000000000000000000029 /* CredentialStoreTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000029 /* CredentialStoreTests.swift */; };
+		A10000000000000000000032 /* SnowlitStorage in Frameworks */ = {isa = PBXBuildFile; productRef = A90000000000000000000002 /* SnowlitStorage */; };
 		A10000000000000000000028 /* GeneratedModuleCorpus.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000028 /* GeneratedModuleCorpus.swift */; };
 		A10000000000000000000001 /* SnowlitApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000001 /* SnowlitApp.swift */; };
 		A10000000000000000000002 /* AppComposition.swift in Sources */ = {isa = PBXBuildFile; fileRef = A20000000000000000000002 /* AppComposition.swift */; };
@@ -34,6 +36,7 @@
 /* End PBXContainerItemProxy section */
 
 /* Begin PBXFileReference section */
+		A20000000000000000000029 /* CredentialStoreTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/CredentialStoreTests.swift; sourceTree = "<group>"; };
 		A20000000000000000000028 /* GeneratedModuleCorpus.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitAppTests/Probes/GeneratedModuleCorpus.swift; sourceTree = "<group>"; };
 		A20000000000000000000001 /* SnowlitApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SnowlitApp.swift; sourceTree = "<group>"; };
 		A20000000000000000000002 /* AppComposition.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = Composition/AppComposition.swift; sourceTree = "<group>"; };
@@ -53,7 +56,7 @@
 /* End PBXFileReference section */
 
 /* Begin PBXFrameworksBuildPhase section */
-		A30000000000000000000011 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000031, A10000000000000000000033, A10000000000000000000034,); runOnlyForDeploymentPostprocessing = 0; };
+		A30000000000000000000011 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000031, A10000000000000000000032, A10000000000000000000033, A10000000000000000000034,); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000021 = {isa = PBXFrameworksBuildPhase; buildActionMask = 2147483647; files = (); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000001 /* Frameworks */ = {
 			isa = PBXFrameworksBuildPhase;
@@ -111,6 +114,7 @@
 				A20000000000000000000025 /* WebKitRecoveryTests.swift */,
 				A20000000000000000000026 /* ReaderProbeTests.swift */,
 				A20000000000000000000028 /* GeneratedModuleCorpus.swift */,
+				A20000000000000000000029 /* CredentialStoreTests.swift */,
 			);
 			path = Tests;
 			sourceTree = "<group>";
@@ -125,7 +129,7 @@
 			buildRules = ();
 			dependencies = (A00000000000000000000011,);
 			name = SnowlitAppTests;
-			packageProductDependencies = (A90000000000000000000001, A90000000000000000000003, A90000000000000000000004,);
+			packageProductDependencies = (A90000000000000000000001, A90000000000000000000002, A90000000000000000000003, A90000000000000000000004,);
 			productName = SnowlitAppTests;
 			productReference = A20000000000000000000012;
 			productType = "com.apple.product-type.bundle.unit-test";
@@ -207,7 +211,7 @@
 /* End PBXResourcesBuildPhase section */
 
 /* Begin PBXSourcesBuildPhase section */
-		A30000000000000000000012 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000021, A10000000000000000000023, A10000000000000000000024, A10000000000000000000025, A10000000000000000000026, A10000000000000000000028,); runOnlyForDeploymentPostprocessing = 0; };
+		A30000000000000000000012 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000021, A10000000000000000000023, A10000000000000000000024, A10000000000000000000025, A10000000000000000000026, A10000000000000000000028, A10000000000000000000029,); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000022 = {isa = PBXSourcesBuildPhase; buildActionMask = 2147483647; files = (A10000000000000000000022, A10000000000000000000027,); runOnlyForDeploymentPostprocessing = 0; };
 		A30000000000000000000002 /* Sources */ = {
 			isa = PBXSourcesBuildPhase;

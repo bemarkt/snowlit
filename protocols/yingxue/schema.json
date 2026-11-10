@@ -177,7 +177,8 @@
         "http",
         "dom",
         "browser",
-        "publicState"
+        "publicState",
+        "credentials.read"
       ]
     },
     "Authentication": {
@@ -1087,7 +1088,8 @@
         "unsupportedVersion",
         "runtimeTerminated",
         "resourceFailure",
-        "stale"
+        "stale",
+        "permissionDenied"
       ]
     },
     "FailureStage": {
@@ -1097,7 +1099,8 @@
         "http",
         "parse",
         "interaction",
-        "normalization"
+        "normalization",
+        "credentials"
       ]
     },
     "OperationError": {
@@ -1362,6 +1365,43 @@
           "$ref": "#/$defs/FailureReply"
         }
       ]
+    },
+    "CredentialHandle": {
+      "type": "object",
+      "properties": {
+        "id": {
+          "$ref": "#/$defs/UUIDString"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "additionalProperties": false
+    },
+    "CredentialReadRequest": {
+      "type": "object",
+      "properties": {
+        "handle": {
+          "$ref": "#/$defs/CredentialHandle"
+        }
+      },
+      "required": [
+        "handle"
+      ],
+      "additionalProperties": false
+    },
+    "CredentialReadResult": {
+      "type": "object",
+      "properties": {
+        "value": {
+          "$ref": "#/$defs/Text"
+        }
+      },
+      "required": [
+        "value"
+      ],
+      "additionalProperties": false,
+      "x-sensitive": true
     }
   }
 }

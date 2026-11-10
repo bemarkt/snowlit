@@ -65,6 +65,9 @@ public struct SourceUpgradeAssessment: Equatable, Sendable {
     public let addedOrigins: [String]
     public let addedCapabilities: [YingxueWire.Capability]
     public let addedAuthentication: [YingxueWire.Authentication]
+    /// Required even when an update repeats the current capability declaration.
+    /// This is a preview requirement, never a stored or implicit user grant.
+    public let credentialReadConsentRequired: Bool
     public var permissionsExpanded: Bool {
         !addedOrigins.isEmpty || !addedCapabilities.isEmpty || !addedAuthentication.isEmpty
     }
@@ -79,5 +82,6 @@ public struct SourceUpgradeAssessment: Equatable, Sendable {
         addedOrigins = candidate.origins.map(SourceFileHeader.originKey).filter { !origins.contains($0) }
         addedCapabilities = candidate.capabilities.filter { !current.capabilities.contains($0) }
         addedAuthentication = candidate.authentication.filter { !current.authentication.contains($0) }
+        credentialReadConsentRequired = candidate.capabilities.contains(.credentialsRead)
     }
 }
