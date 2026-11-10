@@ -13,8 +13,9 @@ struct WebKitRecoveryTests {
     @Test(arguments: [false, true])
     func comparePreparationWithWindowAttachment(attached: Bool) async throws {
         let clock = ContinuousClock()
-        let window = try #require(UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
-            .flatMap(\.windows).first(where: \.isKeyWindow))
+        let candidateWindow = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).first(where: \.isKeyWindow)
+        let window = try #require(candidateWindow)
         for repetition in 1...3 {
             let probe = WebKitRuntimeProbe(dataStore: .nonPersistent())
             defer { probe.close() }
