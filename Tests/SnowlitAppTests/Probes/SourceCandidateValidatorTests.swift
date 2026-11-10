@@ -126,6 +126,9 @@ struct SourceCandidateValidatorTests {
                 installed = signedOut
                 #expect(signedOut.websiteSessionID != current.websiteSessionID && signedOut.id == current.id)
                 #expect(signedOut.pendingCleanup == nil && management.problem == nil)
+                // Cleanup retries use the exact deleted ID and must not create
+                // a fresh network session or alter the replacement store.
+                try await cleaner.cleanup(current.id, token: .init(websiteSessionID: current.websiteSessionID))
                 let anonymous = try await invoke(runtime, input: chapter, expected: signedOut)
                 guard case .failure(let anonymous) = anonymous else { throw FixtureScenario.Failure.invalidResponse }
                 #expect(anonymous.error.code == .needsAuthentication)

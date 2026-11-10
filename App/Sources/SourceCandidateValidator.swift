@@ -47,14 +47,15 @@ final class SourceCandidateValidator {
 
     func cleanup(_ installation: SourceInstallationID, token: SourceSessionCleanup) async throws {
         try await invalidate(installation)
-        // Exact cleanup token remains in Storage until this awaited operation
-        // succeeds. Creating the named store also makes a retry after deletion
-        // idempotent, without touching another website-session identifier.
+        // Exact cleanup token remains in Storage until deletion succeeds.
+        // Do not open the named store here: querying/erasing it starts a network
+        // session which prevents removal of that very store. Enumerating the
+        // identifiers also makes a retry after deletion a no-op for website data.
         let task = Task { @MainActor in
-            let store = WKWebsiteDataStore(forIdentifier: token.websiteSessionID)
-            let website = SourceWebsiteSession(dataStore: store)
-            try await website.erase()
-            try await WKWebsiteDataStore.remove(forIdentifier: token.websiteSessionID)
+            let identifiers = await WKWebsiteDataStore.allDataStoreIdentifiers
+            if identifiers.contains(token.websiteSessionID) {
+                try await WKWebsiteDataStore.remove(forIdentifier: token.websiteSessionID)
+            }
             try await KeychainCredentialStore().removeAll(for: installation)
         }
         try await task.value
