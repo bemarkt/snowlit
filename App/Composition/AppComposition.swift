@@ -26,9 +26,8 @@ struct AppComposition {
         let storage = LibraryBootstrap()
         #endif
         let files = SourceFileReader()
-        let backups = BackupWorkspace(openLibrary: { try await storage.open() })
-        backup = BackupModel(export: { try await backups.export(includeCache: $0) },
-            inspect: { try await backups.preview($0) }, clear: { try await backups.clear() })
+        let backups = BackupWorkspace(openLibrary: { try await storage.open() },
+            adoptDataset: { try await storage.restore($0) })
         let validator = SourceCandidateValidator()
         let runtime = SourceRuntime(openLibrary: { try await storage.open() },
             digest: { bytes in SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() })
@@ -48,10 +47,11 @@ struct AppComposition {
             let reply = try await runtime.invoke(.authenticate(.init(kind: .authenticate, input: .init(reason: .signIn))), expected: signedOut)
             return (signedOut, reply)
         }
-        sources = SourceLibraryModel(openLibrary: { try await storage.open() },
+        let sourceLibrary = SourceLibraryModel(openLibrary: { try await storage.open() },
             inspect: { source, requirements in try await SourceFileInspector.inspect(source, requirements: requirements) },
             digest: { bytes in SHA256.hash(data: bytes).map { String(format: "%02x", $0) }.joined() },
             readFile: { url in try await files.read(url) })
+        sources = sourceLibrary
         let invoke: SourceInvocation = { input, expected in try await runtime.invoke(input, expected: expected) }
         search = SourceSearchModel(invoke: invoke)
         let shelf = LibraryShelfModel(load: { try await storage.open().books() },
@@ -63,6 +63,14 @@ struct AppComposition {
                 })
             })
         self.shelf = shelf
+        backup = BackupModel(export: { try await backups.export(includeCache: $0) },
+            inspect: { try await backups.preview($0) },
+            restore: { try await backups.adopt() },
+            clear: { try await backups.clear() },
+            refresh: {
+                await shelf.refresh()
+                await sourceLibrary.refresh()
+            })
         makeBook = { item in
             SourceBookModel(item: item, invoke: invoke) { installed, details, catalog in
                 let book = try await storage.open().addBook(reference: catalog.book, title: details.title,

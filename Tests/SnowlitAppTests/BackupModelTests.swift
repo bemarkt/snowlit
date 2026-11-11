@@ -40,10 +40,26 @@ struct BackupModelTests {
         #expect(model.exported != nil && model.preview == nil && !model.isBusy)
     }
 
+    @Test func restoreUsesTheValidatedCandidateAndRefreshesVisibleData() async {
+        let fixture = Fixture()
+        let model = BackupModel(export: { _ in .init(file: URL(fileURLWithPath: "/backup"), summary: Self.summary) },
+            inspect: { _ in Self.summary },
+            restore: { Self.summary },
+            clear: { await fixture.clear() },
+            refresh: { await fixture.refresh() })
+        await model.run(.preview(URL(fileURLWithPath: "/backup")))
+        #expect(model.preview == Self.summary)
+        await model.run(.restore)
+        #expect(model.restored == Self.summary && model.preview == nil && model.problem == nil)
+        #expect(await fixture.refreshes == 1)
+    }
+
     nonisolated private static let summary = LibraryBackupSummary(createdAt: Date(timeIntervalSince1970: 0), includesCache: false, sources: 0, books: 0, cachedChapters: 0)
 
     private actor Fixture {
         var cleanups = 0
+        var refreshes = 0
+        func refresh() { refreshes += 1 }
         private var started = false
         private var startWaiter: CheckedContinuation<Void, Never>?
         private var exportWaiter: CheckedContinuation<BackupModel.Export, Never>?

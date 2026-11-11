@@ -117,6 +117,113 @@ struct LibraryBootstrapTests {
     }
     #endif
 
+    @Test func restoreSwitchesTheWholeDatasetAndSurvivesReopen() async throws {
+        try await withDirectory { root in
+            let fixtures = root.appendingPathComponent("fixtures", isDirectory: true)
+            try FileManager.default.createDirectory(at: fixtures, withIntermediateDirectories: false)
+            let bootstrap = LibraryBootstrap(directory: root)
+            let original = try await bootstrap.open()
+            let originalReference = try SourceBookReference(installationID: .init(), referenceVersion: 1, key: "original")
+            let originalBook = try await original.addBook(reference: originalReference, title: "Original", author: nil)
+            let prepared = try await preparedBackup(title: "Restored", in: fixtures)
+            let summary = try await bootstrap.restore(prepared)
+            #expect(summary.books == 1 && summary.sources == 0)
+            let switched = try await bootstrap.open()
+            #expect(try await switched.books().map(\.title) == ["Restored"])
+            await #expect(throws: LibraryDatabase.Failure.closed) { try await original.books() }
+
+            let descriptor = try JSONSerialization.jsonObject(
+                with: Data(contentsOf: root.appendingPathComponent("library.json"))) as? [String: Any]
+            #expect(descriptor?["formatVersion"] as? Int == 2)
+            #expect((descriptor?["directory"] as? String)?.hasPrefix("Datasets/") == true)
+            let retained = try LibraryDatabase(existingAt: root.appendingPathComponent("Library").appendingPathComponent("library.sqlite"))
+            #expect(try await retained.books() == [originalBook])
+            try await retained.close()
+            try await switched.close()
+
+            let reopened = try await LibraryBootstrap(directory: root).open()
+            #expect(try await reopened.books().map(\.title) == ["Restored"])
+            try await reopened.close()
+        }
+    }
+
+    @Test func invalidRestoreCandidateKeepsTheOriginalDataset() async throws {
+        try await withDirectory { root in
+            let fixtures = root.appendingPathComponent("fixtures", isDirectory: true)
+            try FileManager.default.createDirectory(at: fixtures, withIntermediateDirectories: false)
+            let bootstrap = LibraryBootstrap(directory: root)
+            let original = try await bootstrap.open()
+            let reference = try SourceBookReference(installationID: .init(), referenceVersion: 1, key: "original")
+            let book = try await original.addBook(reference: reference, title: "Original", author: nil)
+            let prepared = try await preparedBackup(title: "Restored", in: fixtures)
+            try Data("not a database".utf8).write(to: prepared.databaseURL)
+            await #expect(throws: (any Error).self) { try await bootstrap.restore(prepared) }
+            let active = try await bootstrap.open()
+            #expect(try await active.books() == [book])
+            let descriptor = try JSONSerialization.jsonObject(
+                with: Data(contentsOf: root.appendingPathComponent("library.json"))) as? [String: Any]
+            #expect(descriptor?["formatVersion"] as? Int == 1)
+            try await active.close()
+        }
+    }
+
+    @Test func restoreFaultAfterClosingTheOldWriterReopensTheOriginalDataset() async throws {
+        try await withDirectory { root in
+            let fixtures = root.appendingPathComponent("fixtures", isDirectory: true)
+            try FileManager.default.createDirectory(at: fixtures, withIntermediateDirectories: false)
+            let bootstrap = LibraryBootstrap(directory: root)
+            let original = try await bootstrap.open()
+            let reference = try SourceBookReference(installationID: .init(), referenceVersion: 1, key: "original")
+            let book = try await original.addBook(reference: reference, title: "Original", author: nil)
+            let prepared = try await preparedBackup(title: "Restored", in: fixtures)
+            await #expect(throws: (any Error).self) {
+                try await bootstrap.restore(prepared, fault: .oldClosed, checkpoint: { _ in })
+            }
+            let active = try await bootstrap.open()
+            #expect(try await active.books() == [book])
+            try await active.close()
+        }
+    }
+
+    @Test func restoreFaultAfterDescriptorCommitReopensTheNewDataset() async throws {
+        try await withDirectory { root in
+            let fixtures = root.appendingPathComponent("fixtures", isDirectory: true)
+            try FileManager.default.createDirectory(at: fixtures, withIntermediateDirectories: false)
+            let bootstrap = LibraryBootstrap(directory: root)
+            _ = try await bootstrap.open()
+            let prepared = try await preparedBackup(title: "Restored", in: fixtures)
+            await #expect(throws: (any Error).self) {
+                try await bootstrap.restore(prepared, fault: .descriptorCommitted, checkpoint: { _ in })
+            }
+            let active = try await bootstrap.open()
+            #expect(try await active.books().map(\.title) == ["Restored"])
+            try await active.close()
+            let reopened = try await LibraryBootstrap(directory: root).open()
+            #expect(try await reopened.books().map(\.title) == ["Restored"])
+            try await reopened.close()
+        }
+    }
+
+    private static let digest: LibraryBackup.Digest = { try ProbeFileStoreTests.sha256($0) }
+
+    private func preparedBackup(title: String, in directory: URL) async throws -> PreparedLibraryBackup {
+        let source = directory.appendingPathComponent("source-\(UUID())", isDirectory: true)
+        try FileManager.default.createDirectory(at: source, withIntermediateDirectories: false)
+        let database = try LibraryDatabase.create(at: source.appendingPathComponent("library.sqlite"))
+        do {
+            let reference = try SourceBookReference(installationID: .init(), referenceVersion: 1, key: "restored")
+            _ = try await database.addBook(reference: reference, title: title, author: nil)
+            let archive = directory.appendingPathComponent("backup-\(UUID()).snowlitbackup")
+            _ = try await database.exportBackup(to: archive, includeCache: false, digest: Self.digest)
+            try await database.close()
+            return try await LibraryBackup.preflight(file: archive,
+                into: directory.appendingPathComponent("candidate-\(UUID())"), digest: Self.digest)
+        } catch {
+            do { try await database.close() } catch { Issue.record(error, "Unable to close backup source") }
+            throw error
+        }
+    }
+
     private func withDirectory(_ body: (URL) async throws -> Void) async throws {
         let root = FileManager.default.temporaryDirectory.appendingPathComponent("SnowlitBootstrap-\(UUID())")
         try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)

@@ -6,6 +6,7 @@ struct BackupView: View {
     let model: BackupModel
     @State private var includeCache = false
     @State private var showImporter = false
+    @State private var showRestoreConfirm = false
     @State private var request: BackupModel.Request?
 
     var body: some View {
@@ -34,6 +35,14 @@ struct BackupView: View {
                     Text("备份检查通过").font(.headline).accessibilityIdentifier("backup.preview.ready")
                     summary(preview)
                     Text("本机数据尚未替换。").font(.footnote).foregroundStyle(.secondary)
+                    Button("恢复此备份…", role: .destructive) { showRestoreConfirm = true }
+                        .frame(minHeight: 44).disabled(model.isBusy).accessibilityIdentifier("backup.restore")
+                }
+                if let restored = model.restored {
+                    Text("恢复完成").font(.headline).accessibilityIdentifier("backup.restored")
+                    summary(restored)
+                    Text("已整套替换为备份数据；原库保留用于回滚。网站登录需要重新进行。")
+                        .font(.footnote).foregroundStyle(.secondary)
                 }
             }
             if model.isBusy {
@@ -55,6 +64,12 @@ struct BackupView: View {
             case .success(let file): request = .init(action: .preview(file))
             case .failure(let error): model.report(error)
             }
+        }
+        .confirmationDialog("替换本机全部数据？", isPresented: $showRestoreConfirm, titleVisibility: .visible) {
+            Button("恢复并替换", role: .destructive) { request = .init(action: .restore) }
+            Button("取消", role: .cancel) {}
+        } message: {
+            Text("将用备份中的书架、进度和书源整套替换本机数据。成功后才切换，失败时保留原库；网站登录需要重新进行。")
         }
         .task(id: request?.id) { if let request { await model.run(request.action) } }
         .onDisappear { request = nil }
