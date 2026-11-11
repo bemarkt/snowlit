@@ -225,28 +225,24 @@ struct SourceCandidateValidatorTests {
             #expect(runtime.active == nil && session.phase == .finished)
             try await awaitRelease(session: session, lifetime: websiteLifetime,
                                     interaction: retainedWebInteraction, page: presentedPage)
-            #expect(session.websiteDataStore == nil && websiteLifetime.store == nil)
-            if let retainedWebInteraction {
-                #expect(retainedWebInteraction.container.subviews.isEmpty && presentedPage == nil)
-            }
+            #expect(retainedWebInteraction?.container.subviews.isEmpty ?? true && presentedPage == nil)
             return reply
         } catch {
             do { try await runtime.invalidate(expected.id) }
             catch { Issue.record(error, "Installed operation cleanup failed") }
             _ = await work.result
-            // WebKit releases page/data-store objects on its own queue after the
-            // native owner has already detached them. A bounded wait observes
-            // that release without hiding an owner that never lets go.
+            // WebKit releases page objects on its own queue after the native
+            // owner has detached them. A bounded wait observes that release
+            // without hiding an owner that never lets go.
             try? await awaitRelease(session: session, lifetime: websiteLifetime,
                                     interaction: retainedWebInteraction, page: presentedPage)
-            #expect(session.websiteDataStore == nil && websiteLifetime.store == nil)
-            if let retainedWebInteraction {
-                #expect(retainedWebInteraction.container.subviews.isEmpty && presentedPage == nil)
-            }
+            #expect(retainedWebInteraction?.container.subviews.isEmpty ?? true && presentedPage == nil)
             throw error
         }
     }
 
+    /// Keeps a missing native presentation distinguishable from a deadline by
+    /// reporting which phase the session reached. No source text is printed.
     @MainActor
     private func presented(_ stage: String, session: SourceExecutionSession,
                            _ wait: () async throws -> Void) async throws {
@@ -258,11 +254,16 @@ struct SourceCandidateValidatorTests {
         }
     }
 
+    /// One operation must not destroy its installation's persistent website
+    /// session: signing out is a separate management action. WebKit caches a
+    /// `WKWebsiteDataStore(forIdentifier:)` object for the identifier, so the
+    /// behavioral invariant is that the native owner stops referencing it while
+    /// the persistent store stays usable for the next operation.
     @MainActor
     private func awaitRelease(session: SourceExecutionSession, lifetime: WebsiteLifetime,
                               interaction: SourceWebInteraction?, page: WKWebView?) async throws {
         try await FixtureScenario.eventually(.seconds(5)) {
-            session.websiteDataStore == nil && lifetime.store == nil
+            session.websiteDataStore == nil && lifetime.store != nil
                 && (interaction?.container.subviews.isEmpty ?? true) && page == nil
         }
     }

@@ -48,9 +48,19 @@ struct WebKitRecoveryTests {
     /// fault; 64 MiB is fixture data, not a product budget or an OOM guarantee.
     @Test func nativeTerminationInvalidatesPendingWorkAndRebuildsAfterMemoryGrowth() async throws {
         let page = URL(string: "http://127.0.0.1:18731/health")!
+        // A detached probe is not part of the window's compositing, so WebKit
+        // may idle-exit its GPU process (observed as gpuProcessExited reason=IdleExit)
+        // and miss the first-navigation budget. The other two scenarios mount the
+        // probe for the same reason; assertions and deadlines are unchanged.
+        let candidateWindow = UIApplication.shared.connectedScenes.compactMap { $0 as? UIWindowScene }
+            .flatMap(\.windows).first(where: \.isKeyWindow)
+        let window = try #require(candidateWindow)
         for _ in 1...3 {
             var probe: WebKitRuntimeProbe? = WebKitRuntimeProbe(dataStore: .nonPersistent())
             defer { probe?.close() }
+            probe!.webView.frame = window.bounds
+            window.addSubview(probe!.webView)
+            #expect(probe!.webView.window === window)
             try await probe!.load(page)
             #expect(try await probe!.evaluate("""
                 globalThis.retainedProbeBuffers = [];
@@ -88,6 +98,9 @@ struct WebKitRecoveryTests {
             probe = nil
             let replacement = WebKitRuntimeProbe(dataStore: .nonPersistent())
             defer { replacement.close() }
+            replacement.webView.frame = window.bounds
+            window.addSubview(replacement.webView)
+            #expect(replacement.webView.window === window)
             // A replacement owns a fresh WebContent process; allow its native
             // startup budget under a loaded full-verify runner.
             try await replacement.load(page, timeout: .seconds(10))

@@ -119,25 +119,6 @@ run_ci_command simulator-create 75 "$evidence/simulator-create.log" \
 simulator="$(python3 -c 'import json,sys; print(json.load(open(sys.argv[1]))["udid"])' "$evidence/simulator.json")"
 run_ci_command simulator-boot 45 "$evidence/simulator-boot.log" xcrun simctl boot "$simulator"
 run_ci_command simulator-ready 240 "$evidence/simulator-ready.log" xcrun simctl bootstatus "$simulator" -b
-case "$mode" in
-  product-ui|reader-flow|reader-ui)
-    # XCUITest's first launch after installing into a fresh simulator can wait
-    # for SpringBoard/LaunchServices longer than its own launch-progress budget.
-    # Warm the exact built app once, then terminate it before xcodebuild owns it.
-    # This changes only simulator state; the tests still launch the real app.
-    app="$root/build/app-$kind/Build/Products/Debug-iphonesimulator/Snowlit.app"
-    if [ ! -d "$app" ]; then
-      printf 'Missing simulator app for warm-up: %s\n' "$app" >&2
-      exit 1
-    fi
-    run_ci_command warmup-install 60 "$evidence/warmup-install.log" \
-      xcrun simctl install "$simulator" "$app"
-    run_ci_command warmup-launch 60 "$evidence/warmup-launch.log" \
-      xcrun simctl launch "$simulator" io.github.bemarkt.snowlit
-    sleep 2
-    xcrun simctl terminate "$simulator" io.github.bemarkt.snowlit > "$evidence/warmup-terminate.log" 2>&1 || true
-    ;;
-esac
 printf 'Simulator boot completed. Starting %s tests; test output follows.\n' "$mode"
 
 supervision=(python3 "$root/scripts/probes/supervise.py" --label "$mode-tests" --timeout 900 --log "$evidence/webkit-tests.log")
