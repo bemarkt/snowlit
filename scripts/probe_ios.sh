@@ -22,7 +22,7 @@ test_timeout=60
 case "$mode" in
   integration) selection=(-only-testing:SnowlitAppTests/WebKitRuntimeProbeTests -only-testing:SnowlitAppTests/ReaderProbeTests -only-testing:SnowlitAppTests/ReadingViewportTests -only-testing:SnowlitAppTests/SourceContractProbeTests -only-testing:SnowlitAppTests/SourceCandidateValidatorTests -only-testing:SnowlitUITests/LibraryFlowUITests -only-testing:SnowlitUITests/ReaderFlowUITests) ;;
   auth) selection=(-only-testing:SnowlitAppTests/SourceCandidateValidatorTests -only-testing:SnowlitAppTests/SourceContractProbeTests); test_timeout=120 ;;
-  recovery) selection=(-only-testing:SnowlitAppTests/WebKitRecoveryTests) ;;
+  recovery) selection=(-only-testing:SnowlitAppTests/WebKitRecoveryTests); test_timeout=120 ;;
   reader-ui) selection=(-only-testing:SnowlitUITests/ReaderInteractionUITests); test_timeout=120 ;;
   *) printf 'Unknown probe mode: %s\n' "$mode" >&2; exit 2 ;;
 esac
