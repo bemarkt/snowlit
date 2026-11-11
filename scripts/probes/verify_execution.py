@@ -82,6 +82,19 @@ def verify(evidence, mode):
         if len(tests) != len(expected) or set(tests) != expected or "Test Suite 'ReaderInteractionUITests' passed" not in log:
             raise ValueError("The actual Reader interaction UI test did not pass")
         return {"mode": mode, "suites": ["ReaderInteractionUITests"], "reportedTests": len(tests), "result": "passed"}
+    if mode == "product-ui":
+        ui = {
+            "LibraryFlowUITests": ["testAdoptAnImportedSourceThroughManagementUI",
+                                   "testSearchAllCatalogPagesAddAndReopenFromTheShelf"],
+            "ReaderFlowUITests": ["testChapterNavigationSettingsAndCachedResumeAfterRelaunch"],
+        }
+        for suite, methods in ui.items():
+            if f"Test Suite '{suite}' passed" not in log:
+                raise ValueError(f"Required product UI suite did not pass: {suite}")
+            for method in methods:
+                if f"Test Case '-[SnowlitUITests.{suite} {method}]' passed" not in log:
+                    raise ValueError(f"Required product UI did not pass: {suite}.{method}")
+        return {"mode": mode, "suites": list(ui), "reportedTests": sum(len(v) for v in ui.values()), "result": "passed"}
     suites = {
         "integration": ["WebKitRuntimeProbeTests", "ReaderProbeTests", "SourceContractProbeTests", "SourceCandidateValidatorTests", "ReadingViewportTests"],
         "recovery": ["WebKitRecoveryTests"],
@@ -93,16 +106,6 @@ def verify(evidence, mode):
         if f"Suite {suite} passed" not in log:
             raise ValueError(f"Required suite did not pass: {suite}")
     result = {"mode": mode, "suites": suites, "reportedTests": sum(counts), "result": "passed"}
-    if mode == "integration":
-        ui = {
-            "LibraryFlowUITests": "testAdoptSearchAllCatalogPagesAddAndReopenFromTheShelf",
-            "ReaderFlowUITests": "testChapterNavigationSettingsAndCachedResumeAfterRelaunch",
-        }
-        for suite, method in ui.items():
-            if (f"Test Case '-[SnowlitUITests.{suite} {method}]' passed" not in log
-                    or f"Test Suite '{suite}' passed" not in log):
-                raise ValueError(f"Required product UI did not pass: {suite}")
-        result["productUISuites"] = list(ui)
     if mode == "recovery":
         if status.get("processSamplingErrors") != 0 or not status.get("processSamples"):
             raise ValueError("Process observation did not complete")
@@ -124,7 +127,7 @@ def verify(evidence, mode):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("evidence", type=Path)
-    parser.add_argument("mode", choices=["integration", "recovery", "reader-ui"])
+    parser.add_argument("mode", choices=["integration", "recovery", "product-ui", "reader-ui"])
     args = parser.parse_args()
     result = verify(args.evidence, args.mode)
     (args.evidence / "execution-verification.json").write_text(json.dumps(result, indent=2) + "\n")
