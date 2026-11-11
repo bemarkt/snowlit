@@ -57,12 +57,19 @@ public final class ReadingViewportController: UIViewController, UITextViewDelega
         pending = nil
         let preserving: VisiblePosition?
         if navigationID == id, let old = window {
-            // The caller's position is the semantic reading anchor. Measure its
-            // current screen offset before rebuilding text; re-hit-testing the
-            // top edge can select a different character and drift by a line.
-            if (try? old.offset(of: position)) != nil, let y = try? visibleY(of: position) {
-                preserving = VisiblePosition(anchor: position, y: y)
+            if old.chapters == next.chapters {
+                // The same window is being reflowed (font/theme/width). Measure
+                // the caller's semantic anchor before rebuilding text.
+                if (try? old.offset(of: position)) != nil, let y = try? visibleY(of: position) {
+                    preserving = VisiblePosition(anchor: position, y: y)
+                } else if let lastVisible, (try? next.offset(of: lastVisible.anchor)) != nil {
+                    preserving = lastVisible
+                } else {
+                    preserving = VisiblePosition(anchor: position, y: 24)
+                }
             } else if let lastVisible, (try? next.offset(of: lastVisible.anchor)) != nil {
+                // A window replacement may evict the old chapter; only keep the
+                // last visible anchor when it still belongs to the new window.
                 preserving = lastVisible
             } else {
                 preserving = VisiblePosition(anchor: position, y: 24)

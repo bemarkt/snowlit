@@ -30,8 +30,9 @@ struct ReadingViewportTests {
             // Make the target chapter resident in the intended window before
             // measuring an exact offset; a chapter at a window edge may not have
             // enough following text to place it 80pt below the top.
+            let current = try controller.capture()
             try controller.update(window: expectedWindow, preferences: preferences,
-                position: anchor, navigationID: id)
+                position: current.anchor, navigationID: id)
             try controller.restore(.init(anchor: anchor, y: 80))
             let restoredY = try controller.visibleY(of: anchor)
             #expect(abs(restoredY - 80) <= 1)
@@ -43,7 +44,7 @@ struct ReadingViewportTests {
                 // would assert against a position the reader no longer shows.
                 let before = try controller.capture()
                 controller.view.frame.size.width = width
-                preferences = .init(fontSize: size, theme: theme)
+                preferences = try .init(fontSize: size, theme: theme)
                 try controller.update(window: expectedWindow, preferences: preferences,
                     position: before.anchor, navigationID: id)
                 let measuredY = try controller.visibleY(of: before.anchor)
