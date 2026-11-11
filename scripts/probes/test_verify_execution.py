@@ -93,11 +93,14 @@ class VerifyExecutionTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     verify(root, 'integration')
             for required in ["Test Case '-[SnowlitUITests.LibraryFlowUITests testAdoptAnImportedSourceThroughManagementUI]' passed",
-                             "Test Case '-[SnowlitUITests.LibraryFlowUITests testSearchAllCatalogPagesAddAndReopenFromTheShelf]' passed",
-                             "Test Case '-[SnowlitUITests.ReaderFlowUITests testChapterNavigationSettingsAndCachedResumeAfterRelaunch]' passed"]:
+                             "Test Case '-[SnowlitUITests.LibraryFlowUITests testSearchAllCatalogPagesAddAndReopenFromTheShelf]' passed"]:
                 log.write_text(complete.replace(required, 'omitted'))
                 with self.assertRaises(ValueError):
                     verify(root, 'product-ui')
+            reader_method = "Test Case '-[SnowlitUITests.ReaderFlowUITests testChapterNavigationSettingsAndCachedResumeAfterRelaunch]' passed"
+            log.write_text(complete.replace(reader_method, 'omitted'))
+            with self.assertRaises(ValueError):
+                verify(root, 'reader-flow')
 
     def recovery_observations(self, root):
         log = ["Suite WebKitRecoveryTests passed", "Test run with 1 test in 1 suite passed"]

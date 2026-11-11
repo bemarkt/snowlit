@@ -10,7 +10,7 @@ on:
       task:
         description: Full verification or a focused experiment
         type: choice
-        options: ['verify', 'integration', 'auth', 'recovery', 'product-ui', 'reader-ui', 'storage', 'ipa', 'runtime-check']
+        options: ['verify', 'integration', 'auth', 'recovery', 'product-ui', 'reader-flow', 'reader-ui', 'storage', 'ipa', 'runtime-check']
         default: 'verify'
       ios_runtime:
         description: iPhone simulator runtime to verify
@@ -38,7 +38,7 @@ jobs:
         device: [phone]
         # Each suite owns its runner and simulator. A failing recovery probe
         # cannot delay, cancel or leave processes behind for the other suites.
-        suite: ${{ fromJSON((inputs.task == 'verify' || inputs.task == '') && '["baseline","integration","recovery","product-ui","reader-ui","storage"]' || format('["{0}"]', inputs.task)) }}
+        suite: ${{ fromJSON((inputs.task == 'verify' || inputs.task == '') && '["baseline","integration","recovery","product-ui","reader-flow","reader-ui","storage"]' || format('["{0}"]', inputs.task)) }}
     env:
       DEVELOPER_DIR: /Applications/Xcode_26.6.app/Contents/Developer
       SNOWLIT_IOS_RUNTIME: ${{ inputs.ios_runtime || '26.5' }}
@@ -93,6 +93,12 @@ jobs:
         env:
           SNOWLIT_PROBE_TOOLS_PREPARED: ${{ steps.probe-tools.conclusion == 'success' }}
         run: bash scripts/probe_ios.sh "${{ matrix.device }}" product-ui
+      - name: Run product reader flow
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && matrix.suite == 'reader-flow' }}
+        timeout-minutes: 20
+        env:
+          SNOWLIT_PROBE_TOOLS_PREPARED: ${{ steps.probe-tools.conclusion == 'success' }}
+        run: bash scripts/probe_ios.sh "${{ matrix.device }}" reader-flow
       - name: Observe recovery from uncooperative JavaScript
         if: ${{ !cancelled() && steps.host.conclusion == 'success' && matrix.suite == 'recovery' }}
         timeout-minutes: 25

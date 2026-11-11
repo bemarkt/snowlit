@@ -82,12 +82,16 @@ def verify(evidence, mode):
         if len(tests) != len(expected) or set(tests) != expected or "Test Suite 'ReaderInteractionUITests' passed" not in log:
             raise ValueError("The actual Reader interaction UI test did not pass")
         return {"mode": mode, "suites": ["ReaderInteractionUITests"], "reportedTests": len(tests), "result": "passed"}
-    if mode == "product-ui":
+    if mode in {"product-ui", "reader-flow"}:
         ui = {
-            "LibraryFlowUITests": ["testAdoptAnImportedSourceThroughManagementUI",
-                                   "testSearchAllCatalogPagesAddAndReopenFromTheShelf"],
-            "ReaderFlowUITests": ["testChapterNavigationSettingsAndCachedResumeAfterRelaunch"],
-        }
+            "product-ui": {
+                "LibraryFlowUITests": ["testAdoptAnImportedSourceThroughManagementUI",
+                                       "testSearchAllCatalogPagesAddAndReopenFromTheShelf"],
+            },
+            "reader-flow": {
+                "ReaderFlowUITests": ["testChapterNavigationSettingsAndCachedResumeAfterRelaunch"],
+            },
+        }[mode]
         for suite, methods in ui.items():
             if f"Test Suite '{suite}' passed" not in log:
                 raise ValueError(f"Required product UI suite did not pass: {suite}")
@@ -127,7 +131,7 @@ def verify(evidence, mode):
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("evidence", type=Path)
-    parser.add_argument("mode", choices=["integration", "recovery", "product-ui", "reader-ui"])
+    parser.add_argument("mode", choices=["integration", "recovery", "product-ui", "reader-flow", "reader-ui"])
     args = parser.parse_args()
     result = verify(args.evidence, args.mode)
     (args.evidence / "execution-verification.json").write_text(json.dumps(result, indent=2) + "\n")
