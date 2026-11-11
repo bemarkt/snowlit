@@ -33,6 +33,7 @@ final class ReaderFlowUITests: XCTestCase {
         XCTAssertEqual(title.label, "Chapter Two")
         XCTAssertFalse(app.otherElements["reader.failure"].exists)
         attachScreenshot("Resumed persisted text")
+        app.terminate()
     }
 
     @MainActor

@@ -61,6 +61,8 @@ final class LibraryFlowUITests: XCTestCase {
         XCTAssertEqual(app.buttons["library.chapter.1"].label, "Chapter Two")
         XCTAssertEqual(app.staticTexts["library.book.title"].label, "Fixture Novel")
         attachScreenshot("Reopened local catalog")
+        // Leave no running instance for the next UI test in the same host.
+        app.terminate()
     }
 
     @MainActor
