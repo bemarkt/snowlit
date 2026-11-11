@@ -96,6 +96,7 @@ struct AppComposition {
             #if DEBUG
             let library = try await storage.open()
             if ProcessInfo.processInfo.arguments.contains("-snowlit-test-reader-flow") { try await LibraryFlowFixture.prepareReading(library) }
+            else if ProcessInfo.processInfo.arguments.contains("-snowlit-test-library-flow") { try await LibraryFlowFixture.prepareInstalledSource(library) }
             else if fixtureDirectory != nil { try await LibraryFlowFixture.prepare(library) }
             #else
             _ = try await storage.open()
