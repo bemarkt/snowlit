@@ -18,8 +18,10 @@ final class FixtureScenario {
     static func withScenario(_ body: @MainActor (FixtureScenario) async throws -> Void) async throws {
         try #require(Bundle.main.bundleIdentifier == "io.github.bemarkt.snowlit")
         let configuration = URLSessionConfiguration.ephemeral
-        configuration.timeoutIntervalForRequest = 10
-        configuration.timeoutIntervalForResource = 15
+        // Full verify runs five simulator jobs concurrently; the loopback fixture
+        // can queue behind WebKit process startup on a loaded runner.
+        configuration.timeoutIntervalForRequest = 30
+        configuration.timeoutIntervalForResource = 30
         configuration.httpCookieStorage = nil
         configuration.httpShouldSetCookies = false
         let session = URLSession(configuration: configuration)

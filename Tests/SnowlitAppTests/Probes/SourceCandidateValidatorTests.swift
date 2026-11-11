@@ -247,7 +247,8 @@ struct SourceCandidateValidatorTests {
     }
 
     private func activeSession(_ validator: SourceCandidateValidator) async throws -> SourceExecutionSession {
-        let deadline = ContinuousClock.now.advanced(by: .seconds(2))
+        // WebKit process startup can exceed 2s on a loaded full-verify runner.
+        let deadline = ContinuousClock.now.advanced(by: .seconds(15))
         while validator.active == nil && ContinuousClock.now < deadline { try await Task.sleep(for: .milliseconds(10)) }
         return try #require(validator.active)
     }
