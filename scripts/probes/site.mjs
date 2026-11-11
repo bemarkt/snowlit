@@ -78,7 +78,7 @@ export async function startFixture({ port = 0 } = {}) {
     const [, id, path] = match;
     const base = `/scenarios/${id}/`;
     // Observation polling must not grow the scenario's request history itself.
-    if (path !== 'status') scenario.requests.push({ method: request.method, path });
+    if (path !== 'status') scenario.requests.push({ method: request.method, path, cookie: request.headers.cookie ?? null });
     if (path === 'worker-source.mjs' && request.method === 'GET') {
       return send(response, 200, workerSource, 'text/javascript; charset=utf-8');
     }
@@ -221,7 +221,7 @@ export async function startFixture({ port = 0 } = {}) {
       case 'redirect':
         return send(response, 302, '', 'text/plain', { Location: `${base}content` });
       case 'status':
-        return send(response, 200, { requests: scenario.requests, aborted: scenario.aborted,
+        return send(response, 200, { requests: scenario.requests, aborted: scenario.aborted, loggedIn: scenario.loggedIn,
           pending: [...scenario.gates.values()].reduce((count, values) => count + values.size, 0) });
       case 'faults/never.mjs':
         return send(response, 200, 'export function run() { return new Promise(() => {}); }', 'text/javascript');
