@@ -123,10 +123,17 @@ public final class ReadingViewportController: UIViewController, UITextViewDelega
     }
 
     public func restore(_ position: VisiblePosition) throws {
+        // Programmatic offsets and layout refinement also invoke scroll delegates.
+        // Do not replace the saved pre-resize position with an intermediate hit.
+        let wasApplying = applying
+        applying = true
+        defer { applying = wasApplying }
         // TextKit may refine paragraph geometry after scrolling. Re-measure
         // within a finite layout pass, preserving the experiment's 1pt contract.
-        for _ in 0..<3 {
+        for pass in 1...3 {
             view.layoutIfNeeded(); textView.layoutIfNeeded()
+            guard let layout = textView.textLayoutManager, let content = layout.textContentManager else { throw Failure.unavailableLayout }
+            layout.ensureLayout(for: content.documentRange)
             let delta = try visibleY(of: position.anchor) - position.y
             let minimum = -textView.adjustedContentInset.top
             let maximum = max(minimum, textView.contentSize.height - textView.bounds.height + textView.adjustedContentInset.bottom)
@@ -134,15 +141,31 @@ public final class ReadingViewportController: UIViewController, UITextViewDelega
             let clamped = min(maximum, max(minimum, proposed))
             textView.setContentOffset(CGPoint(x: 0, y: clamped), animated: false)
             textView.layoutIfNeeded()
-            if abs(try visibleY(of: position.anchor) - position.y) <= 1 { return }
-            // The beginning/end cannot scroll beyond the actual content.
-            if proposed < minimum || proposed > maximum { return }
+            let observed = try visibleY(of: position.anchor)
+            #if DEBUG
+            print("ReadingRestoration pass=\(pass) expectedY=\(position.y) observedY=\(observed) requestedOffset=\(proposed) actualOffset=\(textView.contentOffset.y) contentHeight=\(textView.contentSize.height) width=\(textView.bounds.width)")
+            #endif
+            if abs(observed - position.y) <= 1 {
+                lastVisible = try capture()
+                return
+            }
+            // Only accept an actual document edge after all geometry refinements.
+            // A pre-scroll estimated contentSize is not evidence of an edge.
+            if pass == 3 {
+                let finalMinimum = -textView.adjustedContentInset.top
+                let finalMaximum = max(finalMinimum, textView.contentSize.height - textView.bounds.height + textView.adjustedContentInset.bottom)
+                let actual = textView.contentOffset.y
+                let atStart = abs(actual - finalMinimum) <= 1 && observed < position.y
+                let atEnd = abs(actual - finalMaximum) <= 1 && observed > position.y
+                if atStart || atEnd { lastVisible = try capture(); return }
+            }
         }
         throw Failure.unsettledPosition
     }
 
     public func scrollViewDidScroll(_ scrollView: UIScrollView) {
-        guard !applying, window != nil else { return }
+        guard !applying, window != nil, textView.bounds.size == lastSize,
+              scrollView.isDragging || scrollView.isDecelerating || scrollView.isTracking else { return }
         do { lastVisible = try capture() } catch { onFailure?(error) }
     }
     public func scrollViewDidEndDragging(_ scrollView: UIScrollView, willDecelerate decelerate: Bool) {

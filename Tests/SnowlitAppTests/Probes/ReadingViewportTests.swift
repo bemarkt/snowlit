@@ -26,6 +26,8 @@ struct ReadingViewportTests {
             let anchor = try ReadingPosition(chapter: document.content.chapter, documentRevision: document.revision,
                 normalizationVersion: 1, elementID: "p10", utf16Offset: 0)
             try controller.restore(.init(anchor: anchor, y: 80))
+            let restoredY = try controller.visibleY(of: anchor)
+            #expect(abs(restoredY - 80) <= 1)
             let visible = try controller.capture()
             #expect(visible.anchor.chapter == document.content.chapter)
             for (width, size, theme) in [(390.0, 28.0, ReaderPreferences.Theme.dark), (844.0, 18.0, .light), (390.0, 20.0, .system)] {
@@ -33,8 +35,11 @@ struct ReadingViewportTests {
                 let expectedWindow = try ReadingWindow(chapters: Array(chapters[range]))
                 try controller.update(window: expectedWindow, preferences: .init(fontSize: size, theme: theme),
                     position: visible.anchor, navigationID: id)
-                #expect(abs(try controller.visibleY(of: visible.anchor) - visible.y) <= 1)
-                #expect(try controller.capture().anchor.chapter == document.content.chapter)
+                let measuredY = try controller.visibleY(of: visible.anchor)
+                let captured = try controller.capture()
+                print("ReadingWindowCheck chapter=\(index) width=\(width) size=\(size) expectedY=\(visible.y) measuredY=\(measuredY) expectedElement=\(visible.anchor.elementID) capturedElement=\(captured.anchor.elementID)")
+                #expect(abs(measuredY - visible.y) <= 1)
+                #expect(captured.anchor.chapter == document.content.chapter)
                 #expect(controller.textView.textLayoutManager != nil)
                 #expect(controller.textView.text.contains("👩🏽‍💻"))
                 #expect(controller.textView.attributedText.length == expectedWindow.text.utf16.count)
