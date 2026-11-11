@@ -72,11 +72,14 @@ final class FixtureScenario {
         return value
     }
 
-    static func eventually(_ check: @MainActor () async throws -> Bool) async throws {
+    static func eventually(_ timeout: Duration = .seconds(15),
+                           _ check: @MainActor () async throws -> Bool) async throws {
         let clock = ContinuousClock()
-        // Presentation can include one real WebKit page load (15-second budget);
-        // keep the test wait aligned with that native budget instead of a 5s one.
-        let deadline = clock.now.advanced(by: .seconds(15))
+        // Presentation can include one real WebKit page load (15-second budget)
+        // and content-rule compilation on a loaded full-verify runner. The
+        // default stays at the native page budget; callers measuring a longer
+        // presentation pass an explicit allowance.
+        let deadline = clock.now.advanced(by: timeout)
         while try await !check() {
             guard clock.now < deadline else { throw Failure.deadline }
             try await Task.sleep(for: .milliseconds(10))

@@ -9,7 +9,7 @@ import WebKit
 import YingxueKit
 @testable import Snowlit
 
-@Suite(.serialized, .timeLimit(.minutes(1)))
+@Suite(.serialized, .timeLimit(.minutes(2)))
 @MainActor
 struct SourceCandidateValidatorTests {
     @Test func nativePresentationMountsAndReleasesAValidCandidate() async throws {
@@ -205,12 +205,16 @@ struct SourceCandidateValidatorTests {
         weak var presentedPage: WKWebView?
         do {
             if let action {
-                try await FixtureScenario.eventually { session.formSession?.form != nil }
+                try await presented("form", session: session) {
+                    try await FixtureScenario.eventually(.seconds(30)) { session.formSession?.form != nil }
+                }
                 let form = try #require(session.formSession?.form)
                 await action(form)
             }
             if let webAction {
-                try await FixtureScenario.eventually { session.webInteraction != nil }
+                try await presented("web", session: session) {
+                    try await FixtureScenario.eventually(.seconds(30)) { session.webInteraction != nil }
+                }
                 let interaction = try #require(session.webInteraction)
                 retainedWebInteraction = interaction
                 presentedPage = interaction.container.subviews.first as? WKWebView
@@ -219,6 +223,8 @@ struct SourceCandidateValidatorTests {
             }
             let reply = try await work.value
             #expect(runtime.active == nil && session.phase == .finished)
+            try await awaitRelease(session: session, lifetime: websiteLifetime,
+                                    interaction: retainedWebInteraction, page: presentedPage)
             #expect(session.websiteDataStore == nil && websiteLifetime.store == nil)
             if let retainedWebInteraction {
                 #expect(retainedWebInteraction.container.subviews.isEmpty && presentedPage == nil)
@@ -228,11 +234,36 @@ struct SourceCandidateValidatorTests {
             do { try await runtime.invalidate(expected.id) }
             catch { Issue.record(error, "Installed operation cleanup failed") }
             _ = await work.result
+            // WebKit releases page/data-store objects on its own queue after the
+            // native owner has already detached them. A bounded wait observes
+            // that release without hiding an owner that never lets go.
+            try? await awaitRelease(session: session, lifetime: websiteLifetime,
+                                    interaction: retainedWebInteraction, page: presentedPage)
             #expect(session.websiteDataStore == nil && websiteLifetime.store == nil)
             if let retainedWebInteraction {
                 #expect(retainedWebInteraction.container.subviews.isEmpty && presentedPage == nil)
             }
             throw error
+        }
+    }
+
+    @MainActor
+    private func presented(_ stage: String, session: SourceExecutionSession,
+                           _ wait: () async throws -> Void) async throws {
+        do { try await wait() }
+        catch {
+            print("SourceCandidatePresentationStage stage=\(stage) phase=\(session.phase) " +
+                  "form=\(session.formSession != nil) web=\(session.webInteraction != nil)")
+            throw error
+        }
+    }
+
+    @MainActor
+    private func awaitRelease(session: SourceExecutionSession, lifetime: WebsiteLifetime,
+                              interaction: SourceWebInteraction?, page: WKWebView?) async throws {
+        try await FixtureScenario.eventually(.seconds(5)) {
+            session.websiteDataStore == nil && lifetime.store == nil
+                && (interaction?.container.subviews.isEmpty ?? true) && page == nil
         }
     }
 

@@ -7,6 +7,14 @@ from pathlib import Path
 import re
 
 
+# A full verify runs several simulator jobs on shared hardware. The host
+# sampler itself is a separate process, so an OS scheduling stall can leave a
+# visible gap even though the sampler stayed healthy. Keep the coverage bound
+# tight but tolerant of one such stall; missing data still fails below.
+MAX_SAMPLE_GAP_SECONDS = 2.0
+MIN_WINDOW_SAMPLES = 3
+
+
 def verify_recovery_observations(evidence, log, expected_count):
     records = [json.loads(line) for line in (evidence / "process-samples.jsonl").read_text().splitlines()]
     if not records or records[0].get("format") != 3:
@@ -61,7 +69,7 @@ def verify_recovery_observations(evidence, log, expected_count):
             measured.sort()
             boundaries = [start, *measured, end]
             gap = max(right - left for left, right in zip(boundaries, boundaries[1:]))
-            if len(measured) < 2 or gap > 1:
+            if len(measured) < MIN_WINDOW_SAMPLES or gap > MAX_SAMPLE_GAP_SECONDS:
                 raise ValueError(f"Incomplete App/WebContent sampling: {fault}/{repetition}/{label}")
             results.append(dict(fault=fault, repetition=repetition, window=label,
                                 samples=len(measured), maximumGapSeconds=gap))

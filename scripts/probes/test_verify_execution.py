@@ -159,7 +159,7 @@ class VerifyExecutionTests(unittest.TestCase):
                     else:
                         for row in records[1:]:
                             stamp = datetime.fromisoformat(row["observedUTC"]).timestamp()
-                            if damage == "empty" or 101.1 < stamp < 102.4:
+                            if damage == "empty" or 100.4 < stamp < 102.75:
                                 row["processes"] = []
                     path.write_text("\n".join(json.dumps(row) for row in records))
                 with self.assertRaises(ValueError, msg=damage):
