@@ -5,7 +5,9 @@ import UIKit
 import WebKit
 @testable import YingxueKit
 
-@Suite(.serialized, .timeLimit(.minutes(1)))
+// Recovery includes six real fault repetitions and native process sampling;
+// its measured runtime on a loaded full-verify runner exceeds 60 seconds.
+@Suite(.serialized, .timeLimit(.minutes(2)))
 @MainActor
 struct WebKitRecoveryTests {
     /// A controlled preparation comparison, separate from the required fault
@@ -175,8 +177,10 @@ struct WebKitRecoveryTests {
                 window.addSubview(replacement.webView)
                 #expect(replacement.webView.window === window)
                 let recoveryStarted = clock.now
-                try await replacement.load(page, timeout: .seconds(5))
-                #expect(try await replacement.evaluate("return 'fresh operation';", timeout: .seconds(5)) == "fresh operation")
+                // The replacement owns a new WebContent process; startup can
+                // exceed the old 5s local deadline under full-verify load.
+                try await replacement.load(page, timeout: .seconds(10))
+                #expect(try await replacement.evaluate("return 'fresh operation';", timeout: .seconds(10)) == "fresh operation")
                 print("RecoveryObservation fault=\(fault) repetition=\(repetition) waiter=\(waitDuration) heartbeats=\(heartbeat.ticks) newOperation=\(recoveryStarted.duration(to: clock.now)) wrapperReleased=\(lifetime.view == nil)")
                 observe("replacement-ready", fault: fault, repetition: repetition)
                 // Keep the test process alive so host sampling can observe post-close CPU/RSS.

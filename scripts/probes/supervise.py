@@ -21,6 +21,7 @@ def main():
     parser.add_argument("--log", type=Path, required=True)
     parser.add_argument("--label")
     parser.add_argument("--heartbeat-interval", type=float, default=30)
+    parser.add_argument("--sample-interval", type=float, default=0.25)
     parser.add_argument("--process-samples", type=Path)
     parser.add_argument("--process-sampler", type=Path)
     parser.add_argument("--allow-test-termination", action="store_true")
@@ -31,6 +32,8 @@ def main():
         parser.error("A command and a finite positive timeout are required")
     if not math.isfinite(args.heartbeat_interval) or args.heartbeat_interval <= 0:
         parser.error("A finite positive heartbeat interval is required")
+    if not math.isfinite(args.sample_interval) or args.sample_interval <= 0:
+        parser.error("A finite positive sample interval is required")
     if os.name != "posix":
         parser.error("Apple probe supervision requires POSIX process groups")
     if args.process_samples and sys.platform != "darwin":
@@ -96,7 +99,7 @@ def main():
                 if remaining <= 0:
                     raise subprocess.TimeoutExpired(command, args.timeout)
                 try:
-                    exit_code = process.wait(timeout=min(0.25, remaining))
+                    exit_code = process.wait(timeout=min(args.sample_interval, remaining))
                     break
                 except subprocess.TimeoutExpired:
                     if samples:

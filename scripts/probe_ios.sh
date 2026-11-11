@@ -121,7 +121,7 @@ printf 'Simulator boot completed. Starting %s tests; test output follows.\n' "$m
 
 supervision=(python3 "$root/scripts/probes/supervise.py" --label "$mode-tests" --timeout 900 --log "$evidence/webkit-tests.log")
 if [ "$mode" = recovery ]; then
-  supervision+=(--process-samples "$evidence/process-samples.jsonl" --process-sampler "$SNOWLIT_PROCESS_SAMPLER" --allow-test-termination)
+  supervision+=(--process-samples "$evidence/process-samples.jsonl" --process-sampler "$SNOWLIT_PROCESS_SAMPLER" --allow-test-termination --sample-interval 0.1)
 fi
 "${supervision[@]}" -- \
   xcodebuild test-without-building -project Snowlit.xcodeproj -scheme Snowlit -configuration Debug \
