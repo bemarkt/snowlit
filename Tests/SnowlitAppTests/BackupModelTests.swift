@@ -1,4 +1,5 @@
 import Foundation
+import SnowlitCore
 import SnowlitStorage
 import Testing
 @testable import Snowlit
@@ -53,6 +54,40 @@ struct BackupModelTests {
         #expect(model.restored == Self.summary && model.preview == nil && model.problem == nil)
         #expect(await fixture.refreshes == 1)
     }
+
+    #if canImport(CryptoKit)
+    @Test func workspacePreviewAndAdoptSwitchTheWholeLibrary() async throws {
+        let root = FileManager.default.temporaryDirectory.appendingPathComponent("SnowlitBackupWorkspace-\(UUID())")
+        try FileManager.default.createDirectory(at: root, withIntermediateDirectories: true)
+        defer {
+            do { try FileManager.default.removeItem(at: root) }
+            catch { Issue.record(error, "Unable to remove backup workspace fixture") }
+        }
+        let bootstrap = LibraryBootstrap(directory: root)
+        let database = try await bootstrap.open()
+        let first = try await database.addBook(
+            reference: .init(installationID: .init(), referenceVersion: 1, key: "first"),
+            title: "Before", author: nil)
+        do {
+            let workspace = BackupWorkspace(openLibrary: { try await bootstrap.open() },
+                adoptDataset: { try await bootstrap.restore($0) })
+            let exported = try await workspace.export(includeCache: false)
+            _ = try await database.addBook(
+                reference: .init(installationID: .init(), referenceVersion: 1, key: "second"),
+                title: "After", author: nil)
+            let preview = try await workspace.preview(exported.file)
+            #expect(preview.books == 1)
+            let adopted = try await workspace.adopt()
+            #expect(adopted.books == 1)
+            let active = try await bootstrap.open()
+            #expect(try await active.books() == [first])
+            try await active.close()
+        } catch {
+            do { try await database.close() } catch { Issue.record(error, "Unable to close backup fixture") }
+            throw error
+        }
+    }
+    #endif
 
     nonisolated private static let summary = LibraryBackupSummary(createdAt: Date(timeIntervalSince1970: 0), includesCache: false, sources: 0, books: 0, cachedChapters: 0)
 
