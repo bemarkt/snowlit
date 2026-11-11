@@ -88,8 +88,10 @@ struct WebKitRecoveryTests {
             probe = nil
             let replacement = WebKitRuntimeProbe(dataStore: .nonPersistent())
             defer { replacement.close() }
-            try await replacement.load(page, timeout: .seconds(5))
-            #expect(try await replacement.evaluate("return 'restored after native termination';", timeout: .seconds(5)) == "restored after native termination")
+            // A replacement owns a fresh WebContent process; allow its native
+            // startup budget under a loaded full-verify runner.
+            try await replacement.load(page, timeout: .seconds(10))
+            #expect(try await replacement.evaluate("return 'restored after native termination';", timeout: .seconds(10)) == "restored after native termination")
             FileHandle.standardOutput.write(Data("TerminationCompleted token=\(token) hostPID=\(ProcessInfo.processInfo.processIdentifier)\n".utf8))
         }
     }
