@@ -72,7 +72,9 @@ final class FixtureScenario {
 
     static func eventually(_ check: @MainActor () async throws -> Bool) async throws {
         let clock = ContinuousClock()
-        let deadline = clock.now.advanced(by: .seconds(5))
+        // Presentation can include one real WebKit page load (15-second budget);
+        // keep the test wait aligned with that native budget instead of a 5s one.
+        let deadline = clock.now.advanced(by: .seconds(15))
         while try await !check() {
             guard clock.now < deadline else { throw Failure.deadline }
             try await Task.sleep(for: .milliseconds(10))

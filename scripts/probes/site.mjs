@@ -78,7 +78,7 @@ export async function startFixture({ port = 0 } = {}) {
     const [, id, path] = match;
     const base = `/scenarios/${id}/`;
     // Observation polling must not grow the scenario's request history itself.
-    if (path !== 'status') scenario.requests.push({ method: request.method, path, cookie: request.headers.cookie ?? null });
+    if (path !== 'status') scenario.requests.push({ method: request.method, path, cookie: request.headers.cookie ?? '' });
     if (path === 'worker-source.mjs' && request.method === 'GET') {
       return send(response, 200, workerSource, 'text/javascript; charset=utf-8');
     }
