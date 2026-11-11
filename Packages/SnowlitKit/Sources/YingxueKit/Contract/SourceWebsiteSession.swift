@@ -24,14 +24,21 @@ public final class SourceWebsiteSession {
     private var requests: [UUID: Request] = [:]
     private var closed = false
     private var closing: Task<Void, Never>?
+    private let initialCookies: [HTTPCookie]
+    private let onCookies: (@MainActor ([HTTPCookie]) -> Void)?
 
-    public init(dataStore: WKWebsiteDataStore) { self.dataStore = dataStore }
+    public init(dataStore: WKWebsiteDataStore, initialCookies: [HTTPCookie] = [],
+                onCookies: (@MainActor ([HTTPCookie]) -> Void)? = nil) {
+        self.dataStore = dataStore
+        self.initialCookies = initialCookies
+        self.onCookies = onCookies
+    }
 
     public func perform(_ request: YingxueWire.HTTPRequest, policy: SourceHostPolicy, gate: SourceOperationGate,
                         ticket: SourceOperationGate.Ticket, credentials: any CredentialStore) async throws -> YingxueWire.HTTPResponse {
         try checkOpen()
         try await gate.check(ticket)
-        let before = await dataStore.httpCookieStore.allCookies()
+        let before = Self.merge(initialCookies, await dataStore.httpCookieStore.allCookies())
         try checkOpen()
         try await gate.check(ticket)
         // An in-flight request owns its own native jar, including redirects.
@@ -47,6 +54,7 @@ public final class SourceWebsiteSession {
             try await applyChanges(from: before, to: transport.cookies, gate: gate, ticket: ticket)
             try checkOpen()
             try await gate.check(ticket)
+            onCookies?(transport.cookies)
             return response
         }
         requests[id] = .init(work: work, transport: transport)
@@ -117,6 +125,13 @@ public final class SourceWebsiteSession {
             // the website supplied while this request was in flight.
             if let current, Self.same(current, cookie) { await store.deleteCookie(current) }
         }
+    }
+
+    private static func merge(_ initial: [HTTPCookie], _ stored: [HTTPCookie]) -> [HTTPCookie] {
+        var values: [CookieKey: HTTPCookie] = [:]
+        for cookie in initial { values[CookieKey(cookie)] = cookie }
+        for cookie in stored { values[CookieKey(cookie)] = cookie }
+        return Array(values.values)
     }
 
     private static func same(_ a: HTTPCookie, _ b: HTTPCookie) -> Bool {

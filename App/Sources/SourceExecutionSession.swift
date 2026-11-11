@@ -7,6 +7,20 @@ import SnowlitCore
 import SnowlitStorage
 import YingxueKit
 
+/// Keeps the source's native cookie values across per-operation sessions.
+/// WebKit does not persist session cookies across separately created
+/// WKWebsiteDataStore objects, so the native owner carries the latest jar.
+/// MainActor-isolated; cleared when the installation's website session is removed.
+@MainActor
+final class WebsiteCookieCache {
+    static let shared = WebsiteCookieCache()
+    private var cookies: [UUID: [HTTPCookie]] = [:]
+
+    func cookies(for identifier: UUID) -> [HTTPCookie] { cookies[identifier] ?? [] }
+    func update(_ values: [HTTPCookie], for identifier: UUID) { cookies[identifier] = values }
+    func clear(_ identifier: UUID) { cookies.removeValue(forKey: identifier) }
+}
+
 @MainActor
 @Observable
 final class SourceExecutionSession: Identifiable {
@@ -79,7 +93,10 @@ final class SourceExecutionSession: Identifiable {
         gate = try .init(installationID: installationID, scriptSHA256: script.sha256,
             configurationRevision: installation.revision, sessionRevision: installation.revision, credentialPolicy: credentialPolicy)
         credentials = try KeychainCredentialStore()
-        website = SourceWebsiteSession(dataStore: WKWebsiteDataStore(forIdentifier: installation.websiteSessionID))
+        let sessionID = installation.websiteSessionID
+        website = SourceWebsiteSession(dataStore: WKWebsiteDataStore(forIdentifier: sessionID),
+            initialCookies: WebsiteCookieCache.shared.cookies(for: sessionID),
+            onCookies: { WebsiteCookieCache.shared.update($0, for: sessionID) })
     }
 
     func attach(to view: UIView) {

@@ -52,6 +52,7 @@ final class SourceCandidateValidator {
         // session which prevents removal of that very store. Enumerating the
         // identifiers also makes a retry after deletion a no-op for website data.
         let task = Task { @MainActor in
+            WebsiteCookieCache.shared.clear(token.websiteSessionID)
             let identifiers = await WKWebsiteDataStore.allDataStoreIdentifiers
             if identifiers.contains(token.websiteSessionID) {
                 try await WKWebsiteDataStore.remove(forIdentifier: token.websiteSessionID)
