@@ -21,7 +21,8 @@ class VerifyExecutionTests(unittest.TestCase):
             "Suite WebKitRuntimeProbeTests passed", "Suite ReaderProbeTests passed", "Suite SourceContractProbeTests passed",
             "Suite SourceCandidateValidatorTests passed", "Suite ReadingViewportTests passed",
             "Test run with 15 tests in 5 suites passed",
-            "Test Case '-[SnowlitUITests.LibraryFlowUITests testAdoptSearchAllCatalogPagesAddAndReopenFromTheShelf]' passed",
+            "Test Case '-[SnowlitUITests.LibraryFlowUITests testAdoptAnImportedSourceThroughManagementUI]' passed",
+            "Test Case '-[SnowlitUITests.LibraryFlowUITests testSearchAllCatalogPagesAddAndReopenFromTheShelf]' passed",
             "Test Suite 'LibraryFlowUITests' passed",
             "Test Case '-[SnowlitUITests.ReaderFlowUITests testChapterNavigationSettingsAndCachedResumeAfterRelaunch]' passed",
             "Test Suite 'ReaderFlowUITests' passed",
@@ -87,11 +88,16 @@ class VerifyExecutionTests(unittest.TestCase):
             self.fixture(root)
             log = root / 'webkit-tests.log'
             complete = log.read_text()
-            for required in ['Suite ReadingViewportTests passed', 'Suite SourceCandidateValidatorTests passed',
-                             "Test Suite 'LibraryFlowUITests' passed", "Test Suite 'ReaderFlowUITests' passed"]:
+            for required in ['Suite ReadingViewportTests passed', 'Suite SourceCandidateValidatorTests passed']:
                 log.write_text(complete.replace(required, 'omitted'))
                 with self.assertRaises(ValueError):
                     verify(root, 'integration')
+            for required in ["Test Case '-[SnowlitUITests.LibraryFlowUITests testAdoptAnImportedSourceThroughManagementUI]' passed",
+                             "Test Case '-[SnowlitUITests.LibraryFlowUITests testSearchAllCatalogPagesAddAndReopenFromTheShelf]' passed",
+                             "Test Case '-[SnowlitUITests.ReaderFlowUITests testChapterNavigationSettingsAndCachedResumeAfterRelaunch]' passed"]:
+                log.write_text(complete.replace(required, 'omitted'))
+                with self.assertRaises(ValueError):
+                    verify(root, 'product-ui')
 
     def recovery_observations(self, root):
         log = ["Suite WebKitRecoveryTests passed", "Test run with 1 test in 1 suite passed"]
