@@ -14,6 +14,14 @@ struct SourceLibraryView: View {
 
     private struct Selection: Identifiable { let id = UUID(); let url: URL }
 
+    // File providers do not consistently report a UTI for user-created
+    // `.source.js` and `.json` files. Keep the specific types for providers
+    // that do report them, and include `item` so the system picker does not
+    // disable otherwise valid files before our UTF-8/header inspection runs.
+    static let sourceImportTypes: [UTType] = [
+        .item, .javaScript, .json, .plainText, .data
+    ]
+
     var body: some View {
         NavigationStack {
             List {
@@ -91,7 +99,7 @@ struct SourceLibraryView: View {
             .refreshable { model.clearProblem(); await model.refresh() }
         }
         .task(id: refreshRequest) { await model.refresh() }
-        .fileImporter(isPresented: $showImporter, allowedContentTypes: [.javaScript, .plainText, .data]) { result in
+        .fileImporter(isPresented: $showImporter, allowedContentTypes: Self.sourceImportTypes) { result in
             switch result {
             case .success(let url):
                 selection = .init(url: url)

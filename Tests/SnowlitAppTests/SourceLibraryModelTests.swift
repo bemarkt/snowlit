@@ -2,11 +2,24 @@ import Foundation
 import SnowlitCore
 import SnowlitStorage
 import Testing
+#if canImport(SwiftUI)
+import UniformTypeIdentifiers
+#endif
 import YingxueKit
 @testable import Snowlit
 
 @MainActor
 struct SourceLibraryModelTests {
+    #if canImport(SwiftUI)
+    @Test func fileImporterAcceptsProvidersWithoutSourceUTI() {
+        #expect(SourceLibraryView.sourceImportTypes.contains(.item))
+        #expect(SourceLibraryView.sourceImportTypes.contains(.javaScript))
+        #expect(SourceLibraryView.sourceImportTypes.contains(.json))
+        #expect(SourceLibraryView.sourceImportTypes.contains(.plainText))
+        #expect(SourceLibraryView.sourceImportTypes.contains(.data))
+    }
+    #endif
+
     @Test func previewCancelAndSaveDoNotActivateOrGrantCredentials() async throws {
         try await withLibrary { path, library in
             let model = makeModel(library)
