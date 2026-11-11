@@ -11,8 +11,8 @@ struct ReadingViewportTests {
     @Test func productionWindowRetainsExactVisibleTextAcrossChapterFontThemeAndWidthChanges() throws {
         let book = try SourceBookReference(installationID: .init(), referenceVersion: 1, key: "book")
         let chapters = try (0..<5).map { n in
-            let content = try ChapterContent(chapter: .init(book: book, key: "c\(n)"), sourceRevision: "r1", blocks: (0..<40).map { p in
-                .paragraph(.init(id: "p\(p)", runs: [.text(String(repeating: "中文 repeated 👩🏽‍💻 e\u{301}。", count: 12), .init(strong: p == 0))]))
+            let content = try ChapterContent(chapter: .init(book: book, key: "c\(n)"), sourceRevision: "r1", blocks: (0..<120).map { p in
+                .paragraph(.init(id: "p\(p)", runs: [.text(String(repeating: "中文 repeated 👩🏽‍💻 e\u{301}。", count: 6), .init(strong: p == 0))]))
             })
             return try ReadingWindow.Chapter(title: "Chapter \(n)", document: .init(content: content, digest: Self.digest))
         }
