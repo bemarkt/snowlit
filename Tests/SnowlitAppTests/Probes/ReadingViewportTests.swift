@@ -23,6 +23,7 @@ struct ReadingViewportTests {
         try controller.update(window: .init(chapters: Array(chapters[0...2])), preferences: .defaults, position: initial, navigationID: id)
         var preferences = ReaderPreferences.defaults
         for (index, range) in [(2, 1...3), (3, 2...4), (2, 1...3), (1, 0...2)] {
+            let windowID = UUID()
             let document = chapters[index].document
             let anchor = try ReadingPosition(chapter: document.content.chapter, documentRevision: document.revision,
                 normalizationVersion: 1, elementID: "p10", utf16Offset: 0)
@@ -30,9 +31,8 @@ struct ReadingViewportTests {
             // Make the target chapter resident in the intended window before
             // measuring an exact offset; a chapter at a window edge may not have
             // enough following text to place it 80pt below the top.
-            let current = try controller.capture()
             try controller.update(window: expectedWindow, preferences: preferences,
-                position: current.anchor, navigationID: id)
+                position: anchor, navigationID: windowID)
             try controller.restore(.init(anchor: anchor, y: 80))
             let restoredY = try controller.visibleY(of: anchor)
             #expect(abs(restoredY - 80) <= 1)
@@ -46,7 +46,7 @@ struct ReadingViewportTests {
                 controller.view.frame.size.width = width
                 preferences = try .init(fontSize: size, theme: theme)
                 try controller.update(window: expectedWindow, preferences: preferences,
-                    position: before.anchor, navigationID: id)
+                    position: before.anchor, navigationID: windowID)
                 let measuredY = try controller.visibleY(of: before.anchor)
                 let captured = try controller.capture()
                 print("ReadingWindowCheck chapter=\(index) width=\(width) size=\(size) expectedY=\(before.y) measuredY=\(measuredY) expectedElement=\(before.anchor.elementID) capturedElement=\(captured.anchor.elementID)")

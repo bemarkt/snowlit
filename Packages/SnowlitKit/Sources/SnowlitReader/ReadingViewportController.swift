@@ -46,6 +46,9 @@ public final class ReadingViewportController: UIViewController, UITextViewDelega
     public func update(window next: ReadingWindow, preferences nextPreferences: ReaderPreferences,
                        position: ReadingPosition, navigationID id: UUID) throws {
         loadViewIfNeeded()
+        // Keep the last settled screen offset before a pending width-change
+        // layout pass can invalidate it.
+        let priorVisible = lastVisible
         view.layoutIfNeeded()
         if textView.bounds.width <= 0 || textView.bounds.height <= 0 {
             pending = (next, nextPreferences, position, id); return
@@ -58,19 +61,20 @@ public final class ReadingViewportController: UIViewController, UITextViewDelega
         let preserving: VisiblePosition?
         if navigationID == id, let old = window {
             if old.chapters == next.chapters {
-                // The same window is being reflowed (font/theme/width). Measure
-                // the caller's semantic anchor before rebuilding text.
-                if (try? old.offset(of: position)) != nil, let y = try? visibleY(of: position) {
+                // The same window is being reflowed (font/theme/width). Prefer
+                // the settled visible position; otherwise measure the caller's
+                // semantic anchor in the old geometry.
+                if let priorVisible, priorVisible.anchor == position {
+                    preserving = priorVisible
+                } else if (try? old.offset(of: position)) != nil, let y = try? visibleY(of: position) {
                     preserving = VisiblePosition(anchor: position, y: y)
-                } else if let lastVisible, (try? next.offset(of: lastVisible.anchor)) != nil {
-                    preserving = lastVisible
                 } else {
                     preserving = VisiblePosition(anchor: position, y: 24)
                 }
-            } else if let lastVisible, (try? next.offset(of: lastVisible.anchor)) != nil {
+            } else if let priorVisible, (try? next.offset(of: priorVisible.anchor)) != nil {
                 // A window replacement may evict the old chapter; only keep the
                 // last visible anchor when it still belongs to the new window.
-                preserving = lastVisible
+                preserving = priorVisible
             } else {
                 preserving = VisiblePosition(anchor: position, y: 24)
             }
