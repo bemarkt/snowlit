@@ -183,7 +183,13 @@ struct SourceCandidateValidatorTests {
                         form action: (@MainActor (SourceFormModel) async -> Void)? = nil,
                         web webAction: (@MainActor (SourceWebInteraction) -> Void)? = nil) async throws -> YingxueWire.OperationReply {
         let work = Task { try await runtime.invoke(input, expected: expected) }
-        try await FixtureScenario.eventually { runtime.active != nil }
+        do {
+            try await FixtureScenario.eventually { runtime.active != nil }
+        } catch {
+            if case .failure(let failure) = await work.result { throw failure }
+            print("SourceCandidateInvokeNoSession operation=\(input.operation) active=\(runtime.active != nil)")
+            throw error
+        }
         let session = try #require(runtime.active)
         let websiteLifetime = WebsiteLifetime(session.websiteDataStore)
         #expect(websiteLifetime.store != nil)
