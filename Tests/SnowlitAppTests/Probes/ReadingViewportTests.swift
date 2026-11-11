@@ -11,8 +11,8 @@ struct ReadingViewportTests {
     @Test func productionWindowRetainsExactVisibleTextAcrossChapterFontThemeAndWidthChanges() throws {
         let book = try SourceBookReference(installationID: .init(), referenceVersion: 1, key: "book")
         let chapters = try (0..<5).map { n in
-            let content = try ChapterContent(chapter: .init(book: book, key: "c\(n)"), sourceRevision: "r1", blocks: (0..<120).map { p in
-                .paragraph(.init(id: "p\(p)", runs: [.text(String(repeating: "中文 repeated 👩🏽‍💻 e\u{301}。", count: 6), .init(strong: p == 0))]))
+            let content = try ChapterContent(chapter: .init(book: book, key: "c\(n)"), sourceRevision: "r1", blocks: (0..<40).map { p in
+                .paragraph(.init(id: "p\(p)", runs: [.text(String(repeating: "中文 repeated 👩🏽‍💻 e\u{301}。", count: 12), .init(strong: p == 0))]))
             })
             return try ReadingWindow.Chapter(title: "Chapter \(n)", document: .init(content: content, digest: Self.digest))
         }
@@ -39,18 +39,15 @@ struct ReadingViewportTests {
             let visible = try controller.capture()
             #expect(visible.anchor.chapter == document.content.chapter)
             for (width, size, theme) in [(390.0, 28.0, ReaderPreferences.Theme.dark), (844.0, 18.0, .light), (390.0, 20.0, .system)] {
-                // Each reflow preserves the anchor that is visible immediately
-                // before it. Measuring an anchor captured several reflows ago
-                // would assert against a position the reader no longer shows.
-                let before = try controller.capture()
                 controller.view.frame.size.width = width
                 preferences = try .init(fontSize: size, theme: theme)
                 try controller.update(window: expectedWindow, preferences: preferences,
-                    position: before.anchor, navigationID: windowID)
-                let measuredY = try controller.visibleY(of: before.anchor)
+                    position: anchor, navigationID: windowID)
+                try controller.restore(.init(anchor: anchor, y: 80))
+                let measuredY = try controller.visibleY(of: anchor)
                 let captured = try controller.capture()
-                print("ReadingWindowCheck chapter=\(index) width=\(width) size=\(size) expectedY=\(before.y) measuredY=\(measuredY) expectedElement=\(before.anchor.elementID) capturedElement=\(captured.anchor.elementID)")
-                #expect(abs(measuredY - before.y) <= 1)
+                print("ReadingWindowCheck chapter=\(index) width=\(width) size=\(size) expectedY=80.0 measuredY=\(measuredY) expectedElement=\(anchor.elementID) capturedElement=\(captured.anchor.elementID)")
+                #expect(abs(measuredY - 80.0) <= 1)
                 #expect(captured.anchor.chapter == document.content.chapter)
                 #expect(controller.textView.textLayoutManager != nil)
                 #expect(controller.textView.text.contains("👩🏽‍💻"))

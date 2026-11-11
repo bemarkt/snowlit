@@ -129,6 +129,7 @@ public final class ReadingViewportController: UIViewController, UITextViewDelega
 
     public func capture() throws -> VisiblePosition {
         guard let window else { throw Failure.unavailablePosition }
+        ensureFullLayout()
         let point = CGPoint(x: textView.bounds.minX + textView.textContainerInset.left + textView.textContainer.lineFragmentPadding + 1,
             y: textView.bounds.minY + textView.adjustedContentInset.top + 1)
         guard let hit = textView.closestPosition(to: inputViewCoordinates.convert(point, from: textView)) else { throw Failure.unavailablePosition }
@@ -137,10 +138,17 @@ public final class ReadingViewportController: UIViewController, UITextViewDelega
     }
 
     public func visibleY(of anchor: ReadingPosition) throws -> CGFloat {
-        guard let window, let location = textView.position(from: textView.beginningOfDocument, offset: try window.offset(of: anchor)) else {
+        guard let window else { throw Failure.unavailablePosition }
+        ensureFullLayout()
+        guard let location = textView.position(from: textView.beginningOfDocument, offset: try window.offset(of: anchor)) else {
             throw Failure.unavailablePosition
         }
         return view.convert(textView.caretRect(for: location), from: inputViewCoordinates).minY - textView.frame.minY
+    }
+
+    private func ensureFullLayout() {
+        guard let layout = textView.textLayoutManager, let content = layout.textContentManager else { return }
+        layout.ensureLayout(for: content.documentRange)
     }
 
     public func restore(_ position: VisiblePosition) throws {
