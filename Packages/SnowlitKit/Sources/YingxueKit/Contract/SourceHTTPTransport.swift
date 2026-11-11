@@ -17,27 +17,36 @@ public final class SourceHTTPTransport {
     }
     private let session: URLSession
     private var pending: [UUID: Pending] = [:]
+    private var cookieJar: [HTTPCookie]
     private var closed = false
     private var closing: Task<Void, Never>?
 
     public convenience init() { self.init(cookies: []) }
 
     /// Native website-session transfer only. Cookies are never exposed on Wire.
+    /// URLSession's own cookie storage is deliberately disabled: a new transport
+    /// is created per request, so the jar must live in this object and match
+    /// paths/hosts explicitly.
     init(cookies: [HTTPCookie]) {
         let configuration = URLSessionConfiguration.ephemeral
         configuration.timeoutIntervalForRequest = 15
         configuration.timeoutIntervalForResource = 30
         configuration.urlCache = nil
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieStorage = nil
         session = URLSession(configuration: configuration, delegate: SourceRedirectDelegate(), delegateQueue: nil)
-        for cookie in cookies { session.configuration.httpCookieStorage?.setCookie(cookie) }
+        cookieJar = cookies
     }
 
-    var cookies: [HTTPCookie] { session.configuration.httpCookieStorage?.cookies ?? [] }
+    var cookies: [HTTPCookie] { cookieJar }
 
     // A local test can inject an isolated URLProtocol without changing production
     // session behavior or replacing the redirect/credential/gate implementation.
     init(configuration: URLSessionConfiguration) {
+        configuration.httpShouldSetCookies = false
+        configuration.httpCookieStorage = nil
         session = URLSession(configuration: configuration, delegate: SourceRedirectDelegate(), delegateQueue: nil)
+        cookieJar = []
     }
 
     public func perform(_ request: YingxueWire.HTTPRequest, policy: SourceHostPolicy, gate: SourceOperationGate,
@@ -52,6 +61,9 @@ public final class SourceHTTPTransport {
             var native = URLRequest(url: prepared.url)
             native.httpMethod = prepared.method; native.httpBody = prepared.body
             native.allHTTPHeaderFields = prepared.headers
+            if let cookie = cookieHeader(for: prepared.url) {
+                native.addValue(cookie, forHTTPHeaderField: "Cookie")
+            }
             let id = UUID()
             // Finite native I/O owned by this request and by close(). Parent
             // cancellation forwards to data(for:) and awaits its termination.
@@ -76,6 +88,7 @@ public final class SourceHTTPTransport {
             guard !closed else { throw SourceHTTPTransportFailure.closed }
             guard let response = response as? HTTPURLResponse, let url = response.url,
                   url == prepared.url else { throw SourceHTTPTransportFailure.invalidResponse }
+            acceptCookies(from: response, for: url)
             if [301, 302, 303, 307, 308].contains(response.statusCode),
                let location = response.value(forHTTPHeaderField: "Location") {
                 _ = try redirects.follow(status: response.statusCode, location: location)
@@ -87,6 +100,42 @@ public final class SourceHTTPTransport {
             return try SourceHTTPContract.response(status: response.statusCode, finalURL: url,
                 headers: headers, body: bytes, policy: policy)
         }
+    }
+
+    private func cookieHeader(for url: URL) -> String? {
+        let now = Date()
+        let host = url.host?.lowercased() ?? ""
+        let path = url.path.isEmpty ? "/" : url.path
+        let matching = cookieJar.filter { cookie in
+            if let expires = cookie.expiresDate, expires <= now { return false }
+            if cookie.isSecure && url.scheme?.lowercased() != "https" { return false }
+            let domain = cookie.domain.lowercased().hasPrefix(".")
+                ? String(cookie.domain.lowercased().dropFirst()) : cookie.domain.lowercased()
+            guard !domain.isEmpty, host == domain || host.hasSuffix("." + domain) else { return false }
+            let cookiePath = cookie.path.isEmpty ? "/" : cookie.path
+            return path.hasPrefix(cookiePath)
+        }.sorted { $0.path.count > $1.path.count }
+        guard !matching.isEmpty else { return nil }
+        return matching.map { "\($0.name)=\($0.value)" }.joined(separator: "; ")
+    }
+
+    private func acceptCookies(from response: HTTPURLResponse, for url: URL) {
+        let values = response.allHeaderFields.compactMap { key, value -> String? in
+            guard let name = key as? String, name.caseInsensitiveCompare("Set-Cookie") == .orderedSame else { return nil }
+            return value as? String
+        }
+        guard !values.isEmpty else { return }
+        let parsed = HTTPCookie.cookies(withResponseHeaderFields: ["Set-Cookie": values.joined(separator: ", ")], for: url)
+        let now = Date()
+        for cookie in parsed {
+            cookieJar.removeAll { sameCookieIdentity($0, cookie) }
+            if let expires = cookie.expiresDate, expires <= now { continue }
+            cookieJar.append(cookie)
+        }
+    }
+
+    private func sameCookieIdentity(_ a: HTTPCookie, _ b: HTTPCookie) -> Bool {
+        a.name == b.name && a.domain.caseInsensitiveCompare(b.domain) == .orderedSame && a.path == b.path
     }
 
     /// Idempotent awaited shutdown. A new login/source generation gets a new

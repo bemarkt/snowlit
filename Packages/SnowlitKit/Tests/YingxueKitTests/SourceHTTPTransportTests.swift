@@ -28,6 +28,24 @@ struct SourceHTTPTransportTests {
         await fixture.transport.close()
     }
 
+    @Test func cookiesAreStoredAndReplayedByPathAndHost() async throws {
+        let fixture = try await Fixture()
+        HTTPTransportFixture.reset([
+            "/login": .init(status: 200, headers: ["Set-Cookie": "sid=abc; Path=/; HttpOnly"], text: "ok"),
+            "/echo": .init(status: 200, text: "ok")
+        ])
+        do {
+            _ = try await fixture.transport.perform(fixture.request("/login"), policy: fixture.policy,
+                gate: fixture.gate, ticket: fixture.ticket, credentials: fixture.credentials)
+            _ = try await fixture.transport.perform(fixture.request("/echo"), policy: fixture.policy,
+                gate: fixture.gate, ticket: fixture.ticket, credentials: fixture.credentials)
+            #expect(HTTPTransportFixture.requests.last?.value(forHTTPHeaderField: "Cookie") == "sid=abc")
+            #expect(fixture.transport.cookies.contains { $0.name == "sid" && $0.value == "abc" })
+            try await fixture.gate.finish(fixture.ticket)
+        } catch { await fixture.transport.close(); throw error }
+        await fixture.transport.close()
+    }
+
     @Test func undeclaredRedirectNeverReachesItsDestination() async throws {
         let fixture = try await Fixture()
         HTTPTransportFixture.reset(["/start": .init(status: 302, headers: ["Location": "https://denied.invalid/private"])])
