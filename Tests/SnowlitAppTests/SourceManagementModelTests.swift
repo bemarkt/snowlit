@@ -8,6 +8,36 @@ import YingxueKit
 @Suite(.serialized)
 @MainActor
 struct SourceManagementModelTests {
+    @Test func diagnosticReportsInspectionLocationWithoutSourceText() {
+        let rejected = YingxueWire.ModuleRejected(kind: .rejected, reason: .syntax, line: 12, column: 7)
+        let diagnostic = SourceDiagnostic.capture(SourceModuleInspection.Failure.rejected(rejected),
+            stage: "source-import.inspect", scriptSHA256: String(repeating: "a", count: 64))
+        #expect(diagnostic.category == .inspection)
+        #expect(diagnostic.code == "inspection.syntax")
+        #expect(diagnostic.message.contains("第 12 行第 7 列"))
+        #expect(diagnostic.shareableText.contains("source=\(String(repeating: "a", count: 64))"))
+        #expect(diagnostic.shareableText.contains("stage=source-import.inspect"))
+    }
+
+    @Test func diagnosticNeverEchoesUnknownErrorDescriptions() {
+        let secret = "password=fixture-secret; cookie=session-token"
+        let diagnostic = SourceDiagnostic.capture(NSError(domain: "fixture", code: 9,
+            userInfo: [NSLocalizedDescriptionKey: secret]), stage: "source-management.confirm")
+        #expect(diagnostic.category == .unexpected)
+        #expect(!diagnostic.shareableText.contains("fixture-secret"))
+        #expect(!diagnostic.shareableText.contains("session-token"))
+        #expect(diagnostic.shareableText.contains("stage=source-management.confirm"))
+    }
+
+    @Test func diagnosticClassifiesHostAndCleanupFailures() {
+        let host = SourceDiagnostic.capture(SourceHostFailure.originDenied, stage: "source-operation")
+        #expect(host.category == .hostContract && host.code == "host.originDenied")
+        let cleanup = SourceDiagnostic.capture(SourceExecutionSession.Failure.cleanupRequired,
+            stage: "source-operation", installationID: UUID(), scriptSHA256: String(repeating: "b", count: 64))
+        #expect(cleanup.category == .cleanup && cleanup.code == "session.cleanupRequired")
+        #expect(cleanup.shareableText.contains("installation="))
+    }
+
     @Test func validationDoesNotInstallAndConfirmationPersistsOnlyTheSelectedGrant() async throws {
         try await withLibrary { path, library in
             let receipt = try await Self.stage(library)

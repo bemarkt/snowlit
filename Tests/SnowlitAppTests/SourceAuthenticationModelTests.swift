@@ -41,9 +41,12 @@ struct SourceAuthenticationModelTests {
         let cancelled = SourceAuthenticationModel { _ in throw CancellationError() }
         await cancelled.authenticate(expected: installed)
         #expect(cancelled.result(for: installed) == nil && cancelled.problem == "已取消网站登录。")
+        #expect(cancelled.diagnostic == nil)
         let failed = SourceAuthenticationModel { _ in throw SourceAuthenticationModel.Failure.resetFailed }
         await failed.authenticate(expected: installed)
         #expect(failed.result(for: installed) == nil && failed.problem != nil && failed.busy == nil)
+        #expect(failed.diagnostic?.stage == "source-authentication")
+        #expect(failed.diagnostic?.installationID == installed.id.rawValue)
     }
 
     private func installation(id: SourceInstallationID = .init(), revision: Int = 1) throws -> SourceInstallationSnapshot {

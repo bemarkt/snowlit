@@ -46,6 +46,9 @@ struct SourceManagementView: View {
                     Text(problem.message).accessibilityIdentifier("sources.management.failure")
                     Text("错误编号：\(problem.id.uuidString)")
                         .font(.caption).foregroundStyle(.secondary).textSelection(.enabled)
+                    if let diagnostic = problem.diagnostic {
+                        SourceDiagnosticDisclosure(diagnostic: diagnostic)
+                    }
                 }
             }
             if let installed, installed.pendingCleanup != nil {
@@ -62,6 +65,9 @@ struct SourceManagementView: View {
                             .frame(minHeight: 44).accessibilityIdentifier("sources.authenticate")
                         if authentication.busy == installed.id { ProgressView("正在准备网站登录…") }
                         if let problem = authentication.problem { Text(problem).accessibilityIdentifier("sources.authentication.failure") }
+                        if let diagnostic = authentication.diagnostic {
+                            SourceDiagnosticDisclosure(diagnostic: diagnostic)
+                        }
                     }
                     Button(installed.state == .enabled ? "停用书源" : "启用书源") {
                         request(installed.state == .enabled ? .disable : .enable, installed)
@@ -253,6 +259,9 @@ private struct SourceAdoptionView: View {
                     Section {
                         Text(problem.message).accessibilityIdentifier("sources.adoption.failure")
                         Text("错误编号：\(problem.id.uuidString)").font(.caption).textSelection(.enabled)
+                        if let diagnostic = problem.diagnostic {
+                            SourceDiagnosticDisclosure(diagnostic: diagnostic)
+                        }
                     }
                 }
                 Section {
@@ -347,5 +356,22 @@ private struct SourceAdoptionView: View {
             configuration.append(.boolean(key: key, value: value))
             acknowledgedChanges.remove(Data(key.utf8))
         }
+    }
+}
+
+struct SourceDiagnosticDisclosure: View {
+    let diagnostic: SourceDiagnostic
+
+    var body: some View {
+        DisclosureGroup("诊断报告（可分享）") {
+            Text(diagnostic.shareableText)
+                .font(.system(.caption, design: .monospaced))
+                .textSelection(.enabled)
+            ShareLink(item: diagnostic.shareableText) {
+                Label("分享诊断报告", systemImage: "square.and.arrow.up")
+            }
+            .frame(minHeight: 44)
+        }
+        .accessibilityIdentifier("source.diagnostic")
     }
 }

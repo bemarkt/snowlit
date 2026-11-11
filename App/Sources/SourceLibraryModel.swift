@@ -31,6 +31,7 @@ final class SourceLibraryModel {
     struct Problem: Identifiable {
         let id = UUID()
         let message: String
+        var diagnostic: SourceDiagnostic? = nil
     }
 
     private(set) var imports: [SavedImport] = []
@@ -79,7 +80,8 @@ final class SourceLibraryModel {
             installations = installed
         } catch {
             guard refreshID == attempt, !(error is CancellationError), !Task.isCancelled else { return }
-            problem = .init(message: "暂时无法读取书源，请重试。已有文件会保留。")
+            problem = .init(message: "暂时无法读取书源，请重试。已有文件会保留。",
+                diagnostic: .capture(error, stage: "source-library.refresh"))
         }
     }
 
@@ -141,7 +143,8 @@ final class SourceLibraryModel {
                 existing: existing, upgrade: upgrade, retainedBooks: retained)
         } catch {
             guard inspectionID == attempt, !(error is CancellationError), !Task.isCancelled else { return }
-            problem = .init(message: Self.message(for: error))
+            problem = .init(message: Self.message(for: error),
+                diagnostic: .capture(error, stage: "source-import.inspect"))
         }
     }
 
@@ -169,7 +172,9 @@ final class SourceLibraryModel {
             await refresh()
         } catch {
             guard !(error is CancellationError), !Task.isCancelled else { return }
-            problem = .init(message: "未能保存书源，请重试。当前启用的版本没有改变。")
+            problem = .init(message: "未能保存书源，请重试。当前启用的版本没有改变。",
+                diagnostic: .capture(error, stage: "source-import.save",
+                    scriptSHA256: candidate.script.sha256))
         }
     }
 

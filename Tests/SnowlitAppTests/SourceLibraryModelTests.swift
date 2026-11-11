@@ -50,11 +50,13 @@ struct SourceLibraryModelTests {
             let malformed = makeModel(library)
             await malformed.preview(bytes: Data([0xff]), fileName: "bad.js")
             #expect(malformed.problem != nil && malformed.review == nil && !malformed.isInspecting)
+            #expect(malformed.problem?.diagnostic?.stage == "source-import.inspect")
             let rejected = makeModel(library, inspect: { _, _ in
                 Data(#"{"kind":"accepted","exports":[]}"#.utf8)
             })
             await rejected.preview(bytes: Self.fixture, fileName: "bad.js")
             #expect(rejected.problem != nil && rejected.review == nil)
+            #expect(rejected.problem?.diagnostic?.category == .inspection)
             #expect(try await library.sourceImports().isEmpty)
             #expect(try await library.sourceInstallations().isEmpty)
         }

@@ -16,6 +16,7 @@ final class SourceAuthenticationModel {
     }
     private(set) var busy: SourceInstallationID?
     private(set) var problem: String?
+    private(set) var diagnostic: SourceDiagnostic?
     private(set) var changed = 0
     private var results: [SourceInstallationID: Result] = [:]
     @ObservationIgnored private let signIn: @MainActor (SourceInstallationSnapshot) async throws -> (SourceInstallationSnapshot, YingxueWire.OperationReply)
@@ -33,7 +34,7 @@ final class SourceAuthenticationModel {
     /// session. The injected action must await logout cleanup before signing in.
     func authenticate(expected: SourceInstallationSnapshot) async {
         guard busy == nil else { return }
-        busy = expected.id; problem = nil; results.removeValue(forKey: expected.id)
+        busy = expected.id; problem = nil; diagnostic = nil; results.removeValue(forKey: expected.id)
         defer { busy = nil; changed += 1 }
         do {
             let (current, reply) = try await signIn(expected)
@@ -51,10 +52,18 @@ final class SourceAuthenticationModel {
                     message: authenticated ? "书源已确认网站登录有效。" : "书源未确认登录成功，可以重试。", authenticated: authenticated)
             case .failure(let reply) where reply.operation == .authenticate:
                 problem = reply.error.code == .cancelled ? "已取消网站登录。" : "网站登录未完成，请检查后重试。"
+                diagnostic = .capture(SourceBrowsingFailure.source(reply.error), stage: "source-authentication",
+                    installationID: current.id.rawValue, scriptSHA256: current.scriptSHA256)
             default: throw Failure.invalidReply
             }
         } catch {
             problem = error is CancellationError || Task.isCancelled ? "已取消网站登录。" : "网站登录未完成。请先处理书源管理或会话清理提示，再重试。"
+            if error is CancellationError || Task.isCancelled {
+                diagnostic = nil
+            } else {
+                diagnostic = .capture(error, stage: "source-authentication", installationID: expected.id.rawValue,
+                    scriptSHA256: expected.scriptSHA256)
+            }
         }
     }
 }

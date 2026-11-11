@@ -119,6 +119,19 @@ The host checks the operation and navigation before evaluation and after the nat
 
 The App-hosted WebKit corpus exercises dynamic DOM extraction, isolated-world inputs, serialization failures, navigation and cancellation with delayed native callbacks. Until that corpus runs for the candidate SHA, portable tests establish only contract behavior.
 
+## Diagnostics
+
+Import, management and validation failures expose a shareable report with the
+source SHA-256, stage, category, error code, operation/installation IDs and host
+version/build. Inspection rejections also carry the parser's one-based line and
+column when available. Reports never include source text, HTTP bodies, page
+content, cookies, passwords or credential handles; an unknown error is reduced
+to its type name rather than its localized description.
+
+`SourceDiagnostic` implements this projection in the App target. The report is
+descriptive evidence for the author; it is not a successful contract or runtime
+result and cannot be used to activate a script.
+
 ## Local checks
 
 The [capability matrix](capabilities.md) maps each operation/host method to its declaration and available corpus. App-hosted source tests execute the public author example with loopback fixture origins, the native wire gate, URLSession, SwiftSoup and Keychain. The form decision is injected by the test; this does not verify the product's form UI or installation screens.

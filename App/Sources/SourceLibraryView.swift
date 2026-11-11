@@ -145,6 +145,9 @@ private struct SourceImportReviewView: View {
                     Section {
                         Text(problem.message).accessibilityIdentifier("sources.import.failure")
                         Text("错误编号：\(problem.id.uuidString)").font(.caption).textSelection(.enabled)
+                        if let diagnostic = problem.diagnostic {
+                            SourceDiagnosticDisclosure(diagnostic: diagnostic)
+                        }
                     }
                 }
                 if let review = model.review {

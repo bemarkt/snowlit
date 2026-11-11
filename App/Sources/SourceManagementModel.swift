@@ -4,6 +4,118 @@ import SnowlitCore
 import SnowlitStorage
 import YingxueKit
 
+/// A shareable failure description for source import, management and runtime
+/// operations. It carries identity and classification only: never source text,
+/// HTTP bodies, cookies, passwords or other credential values.
+struct SourceDiagnostic: Identifiable, Equatable, Sendable {
+    enum Category: String, Equatable, Sendable {
+        case cancelled, inspection, script, storage, hostContract, configuration, cleanup, unexpected
+    }
+
+    let id: UUID
+    let occurredAt: Date
+    let stage: String
+    let category: Category
+    let code: String
+    let message: String
+    let operationID: UUID?
+    let installationID: UUID?
+    let scriptSHA256: String?
+    let hostVersion: String
+    let hostBuild: String
+
+    static func capture(_ error: any Error, stage: String, operationID: UUID? = nil,
+                        installationID: UUID? = nil, scriptSHA256: String? = nil,
+                        now: Date = Date(), bundle: Bundle = .main) -> SourceDiagnostic {
+        let description = classify(error)
+        return .init(id: UUID(), occurredAt: now, stage: stage, category: description.category,
+            code: description.code, message: description.message, operationID: operationID,
+            installationID: installationID, scriptSHA256: scriptSHA256,
+            hostVersion: bundle.infoDictionary?["CFBundleShortVersionString"] as? String ?? "unknown",
+            hostBuild: bundle.infoDictionary?["CFBundleVersion"] as? String ?? "unknown")
+    }
+
+    var shareableText: String {
+        var lines = [
+            "stage=\(stage)",
+            "category=\(category.rawValue)",
+            "code=\(code)",
+            "message=\(message)",
+            "source=\(scriptSHA256 ?? "unknown")",
+            "operation=\(operationID?.uuidString.lowercased() ?? "unknown")",
+            "installation=\(installationID?.uuidString.lowercased() ?? "unknown")",
+            "host=\(hostVersion) (\(hostBuild))",
+            "occurred=\(ISO8601DateFormatter().string(from: occurredAt))",
+        ]
+        if lines.contains(where: { $0.contains("\n") }) {
+            lines = lines.map { $0.replacingOccurrences(of: "\n", with: " ") }
+        }
+        return lines.joined(separator: "\n")
+    }
+
+    private static func classify(_ error: any Error) -> (category: Category, code: String, message: String) {
+        if error is CancellationError { return (.cancelled, "cancelled", "操作已取消。") }
+        if let value = error as? SourceModuleInspection.Failure {
+            switch value {
+            case .rejected(let rejected):
+                let whereText: String
+                if let line = rejected.line, let column = rejected.column {
+                    whereText = "第 \(line) 行第 \(column) 列"
+                } else if let line = rejected.line {
+                    whereText = "第 \(line) 行"
+                } else {
+                    whereText = "脚本结构"
+                }
+                return (.inspection, "inspection.\(rejected.reason)",
+                        "\(whereText)：\(rejected.reason)。")
+            case .missingExport:
+                return (.inspection, "inspection.missing-export", "脚本缺少合同要求的导出。")
+            }
+        }
+        if let value = error as? SourceFileHeader.Failure {
+            return (.inspection, "header.\(value)", "书源头部元数据不受支持。")
+        }
+        if let value = error as? SourceScriptFailure {
+            return (.script, "script.\(value)", "书源脚本未通过保存校验。")
+        }
+        if let value = error as? SourceWorkerFailure {
+            return (.script, "worker.\(value)", "书源执行未完成。")
+        }
+        if let value = error as? SourceHostFailure {
+            return (.hostContract, "host.\(value)", "书源请求了不允许的宿主能力或参数。")
+        }
+        if let value = error as? SourceOperationGate.Failure {
+            return (.hostContract, "gate.\(value)", "书源操作已过期或不再有效。")
+        }
+        if let failure = error as? SourceBrowsingFailure, case .source(let operation) = failure {
+            let category: Category = operation.code == .needsAuthentication ? .hostContract : .script
+            return (category, "operation.\(operation.code)", "书源操作未完成（\(operation.stage)）。")
+        }
+        if let value = error as? SourceConfigurationFailure {
+            return (.configuration, "configuration.\(value)", "书源设置不符合当前版本要求。")
+        }
+        if let value = error as? SourceManagementModel.Failure {
+            return (.configuration, "management.\(value)", "需要重新核对确认项后才能继续。")
+        }
+        if let value = error as? SourceCandidateValidator.Failure {
+            return (.cleanup, "validator.\(value)", "候选验证会话未完成或需要清理。")
+        }
+        if let value = error as? SourceInstallationFailure {
+            return (.storage, "installation.\(value)", "书源安装状态不允许此操作。")
+        }
+        if let value = error as? SourceUpdateFailure {
+            return (.storage, "update.\(value)", "书源更新快照已变化或不受支持。")
+        }
+        if let value = error as? LibraryModelError {
+            return (.storage, "library.\(value)", "本地书籍数据不允许此操作。")
+        }
+        if let value = error as? SourceExecutionSession.Failure {
+            return (.cleanup, "session.\(value)", "书源运行会话未完成或需要清理。")
+        }
+        return (.unexpected, String(describing: type(of: error)), "未归类的失败，请重试并保留此报告。")
+    }
+}
+
 /// Owns the native confirmation boundary. Candidate code can prepare values,
 /// but only this model can adopt them after an explicit, current confirmation.
 @MainActor
@@ -29,6 +141,7 @@ final class SourceManagementModel {
     struct Problem: Identifiable {
         let id = UUID()
         let message: String
+        var diagnostic: SourceDiagnostic? = nil
     }
 
     struct ConfigurationChange: Identifiable {
@@ -124,7 +237,8 @@ final class SourceManagementModel {
                 configuration: review.values, configurationChanges: review.changes)
         } catch {
             guard preparationID == attempt, !(error is CancellationError), !Task.isCancelled else { return }
-            problem = .init(message: Self.message(for: error))
+            problem = .init(message: Self.message(for: error),
+                diagnostic: .capture(error, stage: "source-management.prepare"))
         }
     }
 
@@ -196,7 +310,9 @@ final class SourceManagementModel {
             if error as? SourceInstallationFailure == .staleInstallation || error as? SourceUpdateFailure == .staleInventory {
                 self.candidate = nil; preparationID = nil
             }
-            problem = .init(message: Self.message(for: error))
+            problem = .init(message: Self.message(for: error), diagnostic: .capture(error,
+                stage: "source-management.confirm", installationID: candidate.installationID,
+                scriptSHA256: candidate.script.sha256))
         }
     }
 
@@ -237,7 +353,9 @@ final class SourceManagementModel {
             return updated
         } catch {
             guard !(error is CancellationError), !Task.isCancelled else { return nil }
-            problem = .init(message: Self.message(for: error))
+            problem = .init(message: Self.message(for: error), diagnostic: .capture(error,
+                stage: "source-management.\(action)", installationID: expected.id,
+                scriptSHA256: expected.scriptSHA256))
             return nil
         }
     }
