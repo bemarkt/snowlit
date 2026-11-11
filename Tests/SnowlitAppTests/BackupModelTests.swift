@@ -72,10 +72,14 @@ struct BackupModelTests {
             let workspace = BackupWorkspace(openLibrary: { try await bootstrap.open() },
                 adoptDataset: { try await bootstrap.restore($0) })
             let exported = try await workspace.export(includeCache: false)
+            // The UI selects an external file. Keep the exported temp file out
+            // of the workspace's reclaimable directory before importing it.
+            let selected = root.appendingPathComponent("selected.snowlitbackup")
+            try FileManager.default.copyItem(at: exported.file, to: selected)
             _ = try await database.addBook(
                 reference: .init(installationID: .init(), referenceVersion: 1, key: "second"),
                 title: "After", author: nil)
-            let preview = try await workspace.preview(exported.file)
+            let preview = try await workspace.preview(selected)
             #expect(preview.books == 1)
             let adopted = try await workspace.adopt()
             #expect(adopted.books == 1)
