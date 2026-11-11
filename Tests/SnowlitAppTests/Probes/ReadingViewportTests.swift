@@ -21,10 +21,17 @@ struct ReadingViewportTests {
         controller.view.layoutIfNeeded()
         let id = UUID(), initial = try ChapterTextProjection(document: chapters[0].document).position(atUTF16Offset: 0)
         try controller.update(window: .init(chapters: Array(chapters[0...2])), preferences: .defaults, position: initial, navigationID: id)
+        var preferences = ReaderPreferences.defaults
         for (index, range) in [(2, 1...3), (3, 2...4), (2, 1...3), (1, 0...2)] {
             let document = chapters[index].document
             let anchor = try ReadingPosition(chapter: document.content.chapter, documentRevision: document.revision,
                 normalizationVersion: 1, elementID: "p10", utf16Offset: 0)
+            let expectedWindow = try ReadingWindow(chapters: Array(chapters[range]))
+            // Make the target chapter resident in the intended window before
+            // measuring an exact offset; a chapter at a window edge may not have
+            // enough following text to place it 80pt below the top.
+            try controller.update(window: expectedWindow, preferences: preferences,
+                position: anchor, navigationID: id)
             try controller.restore(.init(anchor: anchor, y: 80))
             let restoredY = try controller.visibleY(of: anchor)
             #expect(abs(restoredY - 80) <= 1)
@@ -36,8 +43,8 @@ struct ReadingViewportTests {
                 // would assert against a position the reader no longer shows.
                 let before = try controller.capture()
                 controller.view.frame.size.width = width
-                let expectedWindow = try ReadingWindow(chapters: Array(chapters[range]))
-                try controller.update(window: expectedWindow, preferences: .init(fontSize: size, theme: theme),
+                preferences = .init(fontSize: size, theme: theme)
+                try controller.update(window: expectedWindow, preferences: preferences,
                     position: before.anchor, navigationID: id)
                 let measuredY = try controller.visibleY(of: before.anchor)
                 let captured = try controller.capture()

@@ -46,9 +46,6 @@ public final class ReadingViewportController: UIViewController, UITextViewDelega
     public func update(window next: ReadingWindow, preferences nextPreferences: ReaderPreferences,
                        position: ReadingPosition, navigationID id: UUID) throws {
         loadViewIfNeeded()
-        // Capture the semantic position before the width-change layout pass can
-        // replace it with a fresh hit-test at the new geometry.
-        let priorVisible = lastVisible
         view.layoutIfNeeded()
         if textView.bounds.width <= 0 || textView.bounds.height <= 0 {
             pending = (next, nextPreferences, position, id); return
@@ -59,17 +56,15 @@ public final class ReadingViewportController: UIViewController, UITextViewDelega
         guard navigationID != id || window?.chapters != next.chapters || preferences != nextPreferences else { return }
         pending = nil
         let preserving: VisiblePosition?
-        if navigationID == id, window != nil {
-            // Keep the known semantic anchor across reflow. Re-hit-testing the
-            // top edge after a width change can select a different character and
-            // make the next font change drift by a line or a chapter.
-            let candidate: VisiblePosition
-            if let priorVisible { candidate = priorVisible } else { candidate = try capture() }
-            if (try? next.offset(of: candidate.anchor)) != nil {
-                preserving = candidate
+        if navigationID == id, let old = window {
+            // The caller's position is the semantic reading anchor. Measure its
+            // current screen offset before rebuilding text; re-hit-testing the
+            // top edge can select a different character and drift by a line.
+            if (try? old.offset(of: position)) != nil, let y = try? visibleY(of: position) {
+                preserving = VisiblePosition(anchor: position, y: y)
+            } else if let lastVisible, (try? next.offset(of: lastVisible.anchor)) != nil {
+                preserving = lastVisible
             } else {
-                // A window change may evict the previous chapter; only then use
-                // the caller's position, which belongs to the requested window.
                 preserving = VisiblePosition(anchor: position, y: 24)
             }
         } else { preserving = VisiblePosition(anchor: position, y: 24) }
