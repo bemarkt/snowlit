@@ -10,7 +10,7 @@ on:
       task:
         description: Full verification or a focused experiment
         type: choice
-        options: ['verify', 'integration', 'recovery', 'reader-ui', 'storage', 'ipa', 'runtime-check']
+        options: ['verify', 'integration', 'auth', 'recovery', 'reader-ui', 'storage', 'ipa', 'runtime-check']
         default: 'verify'
       ios_runtime:
         description: iPhone simulator runtime to verify
@@ -81,6 +81,12 @@ jobs:
         env:
           SNOWLIT_PROBE_TOOLS_PREPARED: ${{ steps.probe-tools.conclusion == 'success' }}
         run: bash scripts/probe_ios.sh "${{ matrix.device }}"
+      - name: Run installed source authentication probes
+        if: ${{ !cancelled() && steps.host.conclusion == 'success' && matrix.suite == 'auth' }}
+        timeout-minutes: 20
+        env:
+          SNOWLIT_PROBE_TOOLS_PREPARED: ${{ steps.probe-tools.conclusion == 'success' }}
+        run: bash scripts/probe_ios.sh "${{ matrix.device }}" auth
       - name: Observe recovery from uncooperative JavaScript
         if: ${{ !cancelled() && steps.host.conclusion == 'success' && matrix.suite == 'recovery' }}
         timeout-minutes: 25
