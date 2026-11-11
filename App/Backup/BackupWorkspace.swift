@@ -43,7 +43,9 @@ actor BackupWorkspace {
         guard let prepared else { throw Failure.noPreparedBackup }
         let summary = try await adoptDataset(prepared)
         self.prepared = nil
-        try clear()
+        // The adopted copy no longer needs the temporary preview. Reclaim it on
+        // the next prepare/clear; a cleanup failure must not report a committed
+        // restore as failed.
         return summary
     }
 
