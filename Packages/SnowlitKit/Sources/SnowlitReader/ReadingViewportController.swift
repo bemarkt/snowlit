@@ -63,7 +63,8 @@ public final class ReadingViewportController: UIViewController, UITextViewDelega
             // Keep the known semantic anchor across reflow. Re-hit-testing the
             // top edge after a width change can select a different character and
             // make the next font change drift by a line or a chapter.
-            let candidate = priorVisible ?? (try capture())
+            let candidate: VisiblePosition
+            if let priorVisible { candidate = priorVisible } else { candidate = try capture() }
             if (try? next.offset(of: candidate.anchor)) != nil {
                 preserving = candidate
             } else {
